@@ -1,0 +1,1362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>QuBlitz — Quantum Chess</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+  * { margin:0; padding:0; box-sizing:border-box; image-rendering:pixelated; }
+  body { background:#0a0a1a; color:#e0e0ff; font-family:'Press Start 2P', monospace, sans-serif;
+         display:flex; flex-direction:column; align-items:center; min-height:100vh; overflow-x:hidden; }
+  canvas { display:block; cursor:pointer; }
+  #ui { width:100%; max-width:1100px; display:flex; gap:8px; padding:8px; }
+  #game-canvas { border:4px solid #4444aa; box-shadow:0 0 24px #2222aa88; }
+  .panel { background:#10103a; border:2px solid #2222aa; padding:10px; font-size:7px; line-height:1.8;
+           flex:1; min-width:160px; max-width:210px; }
+  .panel h3 { color:#ffdd44; font-size:7px; border-bottom:1px solid #2222aa; padding-bottom:4px; margin-bottom:6px; }
+  .panel p  { color:#aaaaee; margin-bottom:4px; }
+  .panel .val { color:#44ffaa; }
+  .btn { display:block; width:100%; background:#111144; border:2px solid #4444cc;
+         color:#aaaaff; font-family:inherit; font-size:7px; padding:6px 4px;
+         cursor:pointer; margin-bottom:5px; text-align:center; }
+  .btn:hover { background:#222266; color:#ffffff; border-color:#8888ff; }
+  .btn.active { background:#220044; border-color:#ff44ff; color:#ff88ff; }
+  #log { width:100%; max-width:1100px; background:#060618; border:2px solid #1a1a55;
+         padding:8px; font-size:6px; color:#6688cc; height:64px; overflow-y:auto; line-height:1.9; }
+  #log span { display:block; }
+  #log .ev-gate   { color:#44ffaa; }
+  #log .ev-decohere{ color:#ff6644; }
+  #log .ev-measure { color:#ffdd44; }
+  #log .ev-capture { color:#ff4488; }
+  #log .ev-info   { color:#6688cc; }
+  #modal-overlay { display:none; position:fixed; inset:0; background:#000000cc;
+                   z-index:100; align-items:center; justify-content:center; }
+  #modal-overlay.show { display:flex; }
+  #modal { background:#080830; border:3px solid #4444cc; padding:20px; max-width:680px; width:95%;
+           max-height:90vh; overflow-y:auto; font-size:7px; line-height:2; }
+  #modal h2 { color:#ffdd44; font-size:9px; margin-bottom:12px; text-align:center; }
+  #modal h3 { color:#44ffaa; font-size:7px; margin:10px 0 4px; }
+  #modal p  { color:#bbbbee; margin-bottom:6px; }
+  #modal table { width:100%; border-collapse:collapse; margin:8px 0; font-size:6px; }
+  #modal td,#modal th { border:1px solid #2222aa; padding:4px 6px; color:#aaaaee; }
+  #modal th { color:#ffdd44; background:#0a0a40; }
+  #modal .close-btn { display:block; margin:14px auto 0;
+                      background:#220044; border:2px solid #ff44ff; color:#ff88ff;
+                      font-family:inherit; font-size:7px; padding:7px 18px; cursor:pointer; }
+  #modal .close-btn:hover { background:#440066; }
+  .bloch-mini { display:inline-block; width:48px; height:48px; vertical-align:middle;
+                border:1px solid #334; border-radius:50%; background:#08081e; }
+  /* Scanline overlay */
+  body::after { content:''; position:fixed; inset:0; pointer-events:none;
+                background:repeating-linear-gradient(0deg,transparent,transparent 2px,#00000018 2px,#00000018 4px);
+                z-index:200; }
+</style>
+</head>
+<body>
+
+<div id="ui">
+  <!-- LEFT PANEL -->
+  <div class="panel" id="left-panel">
+    <h3>⚛ PLAYER 1</h3>
+    <p>Color: <span class="val" id="p1-color">WHITE</span></p>
+    <p>Coherence: <span class="val" id="p1-coherence">100%</span></p>
+    <p>Entangled: <span class="val" id="p1-entangled">0</span></p>
+    <p>Captured: <span class="val" id="p1-captured">—</span></p>
+    <hr style="border-color:#2222aa; margin:6px 0;">
+    <h3>GATES USED</h3>
+    <p>H: <span class="val" id="cnt-H">0</span> &nbsp; X: <span class="val" id="cnt-X">0</span></p>
+    <p>CNOT: <span class="val" id="cnt-CNOT">0</span></p>
+    <p>T: <span class="val" id="cnt-T">0</span> &nbsp; S: <span class="val" id="cnt-S">0</span></p>
+    <hr style="border-color:#2222aa; margin:6px 0;">
+    <button class="btn" onclick="openTutorial()">📖 TUTORIAL</button>
+    <button class="btn" onclick="openMenu()">⚙ MENU</button>
+  </div>
+
+  <!-- CANVAS -->
+  <canvas id="game-canvas" width="640" height="640"></canvas>
+
+  <!-- RIGHT PANEL -->
+  <div class="panel" id="right-panel">
+    <h3>⚛ PLAYER 2</h3>
+    <p>Color: <span class="val" id="p2-color">BLACK</span></p>
+    <p>Coherence: <span class="val" id="p2-coherence">100%</span></p>
+    <p>Entangled: <span class="val" id="p2-entangled">0</span></p>
+    <p>Captured: <span class="val" id="p2-captured">—</span></p>
+    <hr style="border-color:#2222aa; margin:6px 0;">
+    <h3>SELECTED PIECE</h3>
+    <p id="sel-name">—</p>
+    <p id="sel-state">—</p>
+    <p id="sel-theta">θ: —</p>
+    <p id="sel-phi">φ: —</p>
+    <p id="sel-coherence">Coh: —</p>
+    <canvas id="bloch-canvas" width="90" height="90" style="display:block;margin:6px auto;border:1px solid #2244aa;border-radius:50%;background:#06061e;"></canvas>
+    <hr style="border-color:#2222aa; margin:6px 0;">
+    <h3>TURN</h3>
+    <p id="turn-info">WHITE to move</p>
+    <p id="phase-info" style="color:#ffdd44">MOVE phase</p>
+  </div>
+</div>
+
+<div id="log"></div>
+
+<!-- MODAL (Tutorial / Menu) -->
+<div id="modal-overlay">
+  <div id="modal">
+    <div id="modal-content"></div>
+    <button class="close-btn" onclick="closeModal()">[ CLOSE ]</button>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// QUANTUM MATH UTILITIES
+// ============================================================
+const π = Math.PI;
+
+// Complex number helpers
+const C = {
+  add:(a,b)=>({r:a.r+b.r, i:a.i+b.i}),
+  mul:(a,b)=>({r:a.r*b.r - a.i*b.i, i:a.r*b.i + a.i*b.r}),
+  scale:(a,s)=>({r:a.r*s, i:a.i*s}),
+  norm2:(a)=>a.r*a.r + a.i*a.i,
+  conj:(a)=>({r:a.r, i:-a.i}),
+  fromPolar:(r,phi)=>({r:r*Math.cos(phi), i:r*Math.sin(phi)})
+};
+
+// Qubit state: |ψ⟩ = α|0⟩ + β|1⟩
+// represented as {alpha:{r,i}, beta:{r,i}}
+// Bloch sphere: theta, phi → alpha = cos(θ/2), beta = e^{iφ}sin(θ/2)
+function blochToState(theta, phi) {
+  return {
+    alpha: { r: Math.cos(theta/2), i: 0 },
+    beta:  C.fromPolar(Math.sin(theta/2), phi)
+  };
+}
+
+function stateToBloch(state) {
+  // theta = 2*acos(|alpha|)
+  const normA = Math.sqrt(C.norm2(state.alpha));
+  const normB = Math.sqrt(C.norm2(state.beta));
+  const theta = 2 * Math.acos(Math.min(1, normA));
+  let phi = 0;
+  if (normB > 1e-6) {
+    phi = Math.atan2(state.beta.i, state.beta.r)
+        - Math.atan2(state.alpha.i, state.alpha.r);
+  }
+  return { theta, phi };
+}
+
+function normalizeState(s) {
+  const n = Math.sqrt(C.norm2(s.alpha) + C.norm2(s.beta));
+  if (n < 1e-9) return { alpha:{r:1,i:0}, beta:{r:0,i:0} };
+  return { alpha:C.scale(s.alpha,1/n), beta:C.scale(s.beta,1/n) };
+}
+
+// Measure the qubit — probabilistic collapse
+function measureState(state) {
+  const p1 = C.norm2(state.beta); // prob of |1⟩
+  const r = Math.random();
+  if (r < p1) {
+    return { collapsed: 1, state: { alpha:{r:0,i:0}, beta:{r:1,i:0} } };
+  } else {
+    return { collapsed: 0, state: { alpha:{r:1,i:0}, beta:{r:0,i:0} } };
+  }
+}
+
+// ============================================================
+// QUANTUM GATES
+// ============================================================
+const GATES = {
+  // Pauli-X (NOT): flips |0⟩↔|1⟩
+  X: (s) => ({ alpha: s.beta, beta: s.alpha }),
+
+  // Hadamard: |0⟩→|+⟩, creates superposition
+  H: (s) => ({
+    alpha: C.scale(C.add(s.alpha, s.beta), 1/Math.SQRT2),
+    beta:  C.scale({ r: s.alpha.r - s.beta.r, i: s.alpha.i - s.beta.i }, 1/Math.SQRT2)
+  }),
+
+  // Phase S gate: e^{iπ/2} phase on |1⟩
+  S: (s) => ({ alpha: s.alpha, beta: C.mul(s.beta, {r:0,i:1}) }),
+
+  // T gate: e^{iπ/4} phase
+  T: (s) => ({ alpha: s.alpha, beta: C.mul(s.beta, C.fromPolar(1, π/4)) }),
+
+  // Pauli-Y
+  Y: (s) => ({
+    alpha: C.mul({r:0,i:-1}, s.beta),
+    beta:  C.mul({r:0,i:1},  s.alpha)
+  }),
+
+  // Pauli-Z: phase flip
+  Z: (s) => ({ alpha: s.alpha, beta: C.scale(s.beta, -1) }),
+
+  // Rx(θ) rotation around X axis (used for precession)
+  Rx: (theta) => (s) => ({
+    alpha: C.add(
+      C.scale(s.alpha, Math.cos(theta/2)),
+      C.mul({r:0,i:-Math.sin(theta/2)}, s.beta)
+    ),
+    beta: C.add(
+      C.mul({r:0,i:-Math.sin(theta/2)}, s.alpha),
+      C.scale(s.beta, Math.cos(theta/2))
+    )
+  }),
+
+  // Ry(θ) rotation around Y axis
+  Ry: (theta) => (s) => ({
+    alpha: C.add(
+      C.scale(s.alpha,  Math.cos(theta/2)),
+      C.scale(s.beta,  -Math.sin(theta/2))
+    ),
+    beta: C.add(
+      C.scale(s.alpha, Math.sin(theta/2)),
+      C.scale(s.beta,  Math.cos(theta/2))
+    )
+  }),
+};
+
+// CNOT: entangles two qubits (control, target)
+function applyCNOT(control, target) {
+  // If control is in |1⟩ state (high prob), apply X to target
+  // In quantum chess: entangles the two pieces
+  const p1_ctrl = C.norm2(control.state.beta);
+  // Returns new states with entanglement flag
+  if (p1_ctrl > 0.5) {
+    return { newTarget: GATES.X(target.state), entangled: true };
+  }
+  return { newTarget: target.state, entangled: false };
+}
+
+// ============================================================
+// PIECE DEFINITIONS
+// ============================================================
+// Each piece = a qubit with quantum state + role
+// Role governs which gates it can apply and how it moves
+
+const PIECE_DEFS = {
+  // King → |ψ_K⟩: starts in ground state |0⟩, can apply Z (phase)
+  // Moves 1 step any direction. Decoherence kills it.
+  K: { name:'KING',    maxCoherence:100, gatePool:['Z','S'],   symbol:'♔', moves:'king'   },
+  // Queen → superposition master, starts in |+⟩, applies H
+  Q: { name:'QUEEN',   maxCoherence:80,  gatePool:['H','Y'],   symbol:'♕', moves:'queen'  },
+  // Rook → |0⟩ ground, applies X (bit-flip), linear motion
+  R: { name:'ROOK',    maxCoherence:90,  gatePool:['X','Z'],   symbol:'♖', moves:'rook'   },
+  // Bishop → phase qubit, starts with T gate applied, diagonal
+  B: { name:'BISHOP',  maxCoherence:75,  gatePool:['T','S'],   symbol:'♗', moves:'bishop' },
+  // Knight → tunneling piece (can "tunnel" over pieces), Ry rotation
+  N: { name:'KNIGHT',  maxCoherence:85,  gatePool:['Ry','Rx'], symbol:'♘', moves:'knight' },
+  // Pawn → fresh qubit |0⟩, can be excited to |1⟩ via X gate
+  P: { name:'PAWN',    maxCoherence:70,  gatePool:['X','H'],   symbol:'♙', moves:'pawn'   },
+};
+
+// ============================================================
+// PIECE INSTANCE
+// ============================================================
+function createPiece(type, color, row, col) {
+  const def = PIECE_DEFS[type];
+  // Initial states by type
+  let initState;
+  if (type === 'Q')       initState = blochToState(π/2, 0);    // |+⟩
+  else if (type === 'B')  initState = blochToState(π/4, π/4);  // excited partial
+  else if (type === 'N')  initState = blochToState(π/3, π/6);  // Larmor precession start
+  else                    initState = blochToState(0, 0);       // |0⟩ ground
+
+  return {
+    type, color,
+    row, col,
+    state: initState,
+    coherence: def.maxCoherence,
+    maxCoherence: def.maxCoherence,
+    entangledWith: null,     // index of entangled partner piece
+    hasMoved: false,
+    inSuperposition: (type === 'Q'), // Queen starts in superposition
+    pendingGate: null,
+    id: `${color[0]}${type}${row}${col}`,
+  };
+}
+
+// ============================================================
+// BOARD SETUP
+// ============================================================
+function initBoard() {
+  const pieces = [];
+
+  const backRow = ['R','N','B','Q','K','B','N','R'];
+  for (let c = 0; c < 8; c++) {
+    pieces.push(createPiece(backRow[c], 'white', 7, c));
+    pieces.push(createPiece('P',        'white', 6, c));
+    pieces.push(createPiece(backRow[c], 'black', 0, c));
+    pieces.push(createPiece('P',        'black', 1, c));
+  }
+  return pieces;
+}
+
+// ============================================================
+// GAME STATE
+// ============================================================
+let GAME = {
+  pieces: [],
+  turn: 'white',     // 'white' | 'black'
+  phase: 'move',     // 'move' | 'gate' | 'measure'
+  selected: null,    // index into pieces
+  validMoves: [],    // [{row,col,type}]  type: 'move'|'capture'|'tunnel'
+  turnCount: 0,
+  mode: 'vsBot',     // 'vsBot' | 'vs2P'
+  botColor: 'black',
+  decoherenceRate: 3,   // coherence lost per turn per piece
+  log: [],
+  gateMenu: null,    // open gate selection UI
+  winner: null,
+  animQueue: [],
+  checkState: { white: false, black: false },
+};
+
+function resetGame(mode) {
+  GAME.pieces       = initBoard();
+  GAME.turn         = 'white';
+  GAME.phase        = 'move';
+  GAME.selected     = null;
+  GAME.validMoves   = [];
+  GAME.turnCount    = 0;
+  GAME.mode         = mode || 'vsBot';
+  GAME.log          = [];
+  GAME.gateMenu     = null;
+  GAME.winner       = null;
+  GAME.animQueue    = [];
+  GAME.checkState   = { white: false, black: false };
+  logEvent('Game started! White moves first.', 'info');
+  updateHUD();
+  scheduleRender();
+}
+
+// ============================================================
+// MOVEMENT RULES
+// ============================================================
+function inBounds(r,c) { return r>=0&&r<8&&c>=0&&c<8; }
+
+function pieceAt(r, c, pieces) {
+  return pieces.find(p => p.row===r && p.col===c);
+}
+
+function getValidMoves(piece, pieces) {
+  const moves = [];
+  const {row:r, col:c, type, color} = piece;
+  const enemy = color==='white' ? 'black' : 'white';
+
+  function addIfFree(tr, tc, allowCapture=true) {
+    if (!inBounds(tr,tc)) return false;
+    const occ = pieceAt(tr, tc, pieces);
+    if (!occ) { moves.push({row:tr,col:tc,mtype:'move'}); return true; }
+    if (occ.color===enemy && allowCapture) {
+      moves.push({row:tr,col:tc,mtype:'capture',target:occ});
+      return false; // blocked
+    }
+    return false; // friendly blocking
+  }
+
+  function slide(dr, dc) {
+    let tr=r+dr, tc=c+dc;
+    while(inBounds(tr,tc)) {
+      const occ = pieceAt(tr,tc,pieces);
+      if (!occ) { moves.push({row:tr,col:tc,mtype:'move'}); }
+      else {
+        if (occ.color===enemy) moves.push({row:tr,col:tc,mtype:'capture',target:occ});
+        break;
+      }
+      tr+=dr; tc+=dc;
+    }
+  }
+
+  if (type==='P') {
+    const dir = color==='white' ? -1 : 1;
+    // Forward
+    if (!pieceAt(r+dir,c,pieces)) {
+      moves.push({row:r+dir,col:c,mtype:'move'});
+      if (!piece.hasMoved && !pieceAt(r+2*dir,c,pieces))
+        moves.push({row:r+2*dir,col:c,mtype:'move'});
+    }
+    // Diagonal captures
+    for (const dc of [-1,1]) {
+      const occ = pieceAt(r+dir,c+dc,pieces);
+      if (inBounds(r+dir,c+dc) && occ && occ.color===enemy)
+        moves.push({row:r+dir,col:c+dc,mtype:'capture',target:occ});
+    }
+  }
+  else if (type==='R') {
+    for(const [dr,dc] of [[0,1],[0,-1],[1,0],[-1,0]]) slide(dr,dc);
+  }
+  else if (type==='B') {
+    for(const [dr,dc] of [[1,1],[1,-1],[-1,1],[-1,-1]]) slide(dr,dc);
+  }
+  else if (type==='Q') {
+    for(const [dr,dc] of [[0,1],[0,-1],[1,0],[-1,0],[1,1],[1,-1],[-1,1],[-1,-1]]) slide(dr,dc);
+  }
+  else if (type==='K') {
+    for(const [dr,dc] of [[0,1],[0,-1],[1,0],[-1,0],[1,1],[1,-1],[-1,1],[-1,-1]])
+      addIfFree(r+dr, c+dc);
+  }
+  else if (type==='N') {
+    // Knight can tunnel: ignore blocking pieces, but only move to empty/enemy
+    for(const [dr,dc] of [[2,1],[2,-1],[-2,1],[-2,-1],[1,2],[1,-2],[-1,2],[-1,-2]])
+      addIfFree(r+dr, c+dc);
+    // Quantum tunneling: extra moves if coherence high
+    if (piece.coherence > 60) {
+      for(const [dr,dc] of [[3,0],[-3,0],[0,3],[0,-3]])
+        if(inBounds(r+dr,c+dc) && !pieceAt(r+dr,c+dc,pieces))
+          moves.push({row:r+dr,col:c+dc,mtype:'tunnel'});
+    }
+  }
+  return moves;
+}
+
+// ============================================================
+// TURN LOGIC
+// ============================================================
+function selectPiece(idx) {
+  const p = GAME.pieces[idx];
+  if (!p || p.color !== GAME.turn) return;
+  GAME.selected = idx;
+  GAME.validMoves = getValidMoves(p, GAME.pieces);
+  GAME.gateMenu = null;
+  updateSelectedInfo(p);
+  scheduleRender();
+}
+
+function movePiece(piece, toRow, toCol, mtype, target) {
+  if (target) {
+    // CAPTURE: measure target qubit first
+    const meas = measureState(target.state);
+    logEvent(`${piece.color} ${PIECE_DEFS[piece.type].name} captures ${target.color} ${PIECE_DEFS[target.type].name}! Measured |${meas.collapsed}⟩`, 'capture');
+    GAME.pieces = GAME.pieces.filter(p => p !== target);
+  }
+
+  const oldRow = piece.row, oldCol = piece.col;
+  piece.row = toRow;
+  piece.col = toCol;
+  piece.hasMoved = true;
+
+  if (mtype === 'tunnel') {
+    logEvent(`${piece.color} KNIGHT tunnels through the lattice! (Quantum tunneling)`, 'gate');
+    piece.coherence -= 15; // tunneling costs coherence
+  }
+
+  // Pawn promotion: reach back rank → apply H gate (superposition)
+  if (piece.type === 'P') {
+    if ((piece.color==='white' && toRow===0) || (piece.color==='black' && toRow===7)) {
+      piece.type = 'Q';
+      piece.state = GATES.H(piece.state);
+      piece.inSuperposition = true;
+      logEvent(`PAWN promoted to QUEEN via Hadamard excitation!`, 'gate');
+    }
+  }
+
+  // Natural decoherence each move
+  applyDecoherence();
+  checkEntanglement(piece);
+
+  GAME.phase = 'gate';
+  logEvent(`${piece.color} ${PIECE_DEFS[piece.type].name} moves (${oldRow},${oldCol})→(${toRow},${toCol})`, 'info');
+  updateHUD();
+}
+
+function applyDecoherence() {
+  GAME.pieces.forEach(p => {
+    // Reduce coherence
+    p.coherence -= GAME.decoherenceRate + Math.random() * 2;
+    if (p.coherence < 0) p.coherence = 0;
+
+    // If coherence → 0: collapse to ground state (decohere)
+    if (p.coherence < 10 && p.inSuperposition) {
+      const meas = measureState(p.state);
+      p.state = meas.state;
+      p.inSuperposition = false;
+      logEvent(`${p.color} ${PIECE_DEFS[p.type].name} DECOHERES! Collapsed to |${meas.collapsed}⟩`, 'decohere');
+    }
+
+    // Pieces fully decohered to |1⟩ (excited state) destabilize
+    if (p.coherence < 5) {
+      const excitedProb = C.norm2(p.state.beta);
+      if (excitedProb > 0.9) {
+        // Piece dissipates — removed from board (energy decay)
+        logEvent(`${p.color} ${PIECE_DEFS[p.type].name} DECAYS from excited state! Removed.`, 'decohere');
+        GAME.pieces = GAME.pieces.filter(x => x !== p);
+      }
+    }
+  });
+}
+
+function checkEntanglement(movedPiece) {
+  if (movedPiece.entangledWith !== null) {
+    const partner = GAME.pieces.find(p => p.id === movedPiece.entangledWith);
+    if (partner) {
+      // Entangled pieces: applying CNOT — partner state changes
+      const { newTarget } = applyCNOT(movedPiece, partner);
+      partner.state = normalizeState(newTarget);
+      logEvent(`Entanglement effect: ${partner.color} ${PIECE_DEFS[partner.type].name} state updated via CNOT`, 'gate');
+    }
+  }
+}
+
+function applyGate(piece, gateName) {
+  let newState;
+  if (gateName === 'Ry') {
+    newState = GATES.Ry(π/4)(piece.state);
+  } else if (gateName === 'Rx') {
+    newState = GATES.Rx(π/4)(piece.state);
+  } else {
+    newState = GATES[gateName](piece.state);
+  }
+  piece.state = normalizeState(newState);
+  piece.inSuperposition = (Math.abs(C.norm2(piece.state.alpha) - 0.5) < 0.15);
+  piece.coherence -= 5; // Gate application costs coherence
+  logEvent(`Gate ${gateName} applied to ${piece.color} ${PIECE_DEFS[piece.type].name}`, 'gate');
+
+  // Update gate counters
+  const el = document.getElementById(`cnt-${gateName}`);
+  if (el) el.textContent = (parseInt(el.textContent||0)+1);
+}
+
+function applyMeasure(piece) {
+  const meas = measureState(piece.state);
+  piece.state = meas.state;
+  piece.inSuperposition = false;
+  piece.coherence += 10; // Measurement partially restores coherence (reset to eigenstate)
+  if (piece.coherence > piece.maxCoherence) piece.coherence = piece.maxCoherence;
+  logEvent(`MEASUREMENT: ${piece.color} ${PIECE_DEFS[piece.type].name} collapsed to |${meas.collapsed}⟩`, 'measure');
+  return meas.collapsed;
+}
+
+function applyCNOTGate(controlPiece, targetPiece) {
+  if (!controlPiece || !targetPiece) return;
+  const p1ctrl = C.norm2(controlPiece.state.beta);
+  if (p1ctrl > 0.5) {
+    targetPiece.state = normalizeState(GATES.X(targetPiece.state));
+  }
+  controlPiece.entangledWith = targetPiece.id;
+  targetPiece.entangledWith = controlPiece.id;
+  logEvent(`CNOT: ${controlPiece.color} ${PIECE_DEFS[controlPiece.type].name} entangled with ${targetPiece.color} ${PIECE_DEFS[targetPiece.type].name}`, 'gate');
+}
+
+// ============================================================
+// CHECK / WIN DETECTION
+// ============================================================
+function checkWinner() {
+  const whiteKing = GAME.pieces.find(p => p.type==='K' && p.color==='white');
+  const blackKing = GAME.pieces.find(p => p.type==='K' && p.color==='black');
+  if (!whiteKing) return 'black';
+  if (!blackKing) return 'white';
+  return null;
+}
+
+function endTurn() {
+  GAME.winner = checkWinner();
+  if (GAME.winner) {
+    logEvent(`🏆 ${GAME.winner.toUpperCase()} WINS via quantum decoherence!`, 'measure');
+    GAME.phase = 'gameover';
+    scheduleRender();
+    return;
+  }
+
+  GAME.turn = GAME.turn === 'white' ? 'black' : 'white';
+  GAME.phase = 'move';
+  GAME.selected = null;
+  GAME.validMoves = [];
+  GAME.gateMenu = null;
+  GAME.turnCount++;
+
+  updateHUD();
+  scheduleRender();
+
+  if (GAME.mode === 'vsBot' && GAME.turn === GAME.botColor) {
+    setTimeout(doBotMove, 500);
+  }
+}
+
+// ============================================================
+// BOT AI (quantum-aware)
+// ============================================================
+function doBotMove() {
+  if (GAME.winner || GAME.turn !== GAME.botColor) return;
+
+  const myPieces = GAME.pieces.filter(p => p.color === GAME.botColor);
+  let bestMove = null, bestScore = -Infinity;
+
+  for (const piece of myPieces) {
+    const moves = getValidMoves(piece, GAME.pieces);
+    for (const mv of moves) {
+      let score = 0;
+      if (mv.mtype === 'capture') {
+        const pieceValues = {K:1000, Q:90, R:50, B:30, N:30, P:10};
+        score += pieceValues[mv.target.type] || 10;
+        // Prefer capturing decohered pieces (easier)
+        score += (100 - mv.target.coherence) * 0.5;
+      }
+      if (mv.mtype === 'tunnel') score += 15;
+      // Prefer moving toward center
+      const centerDist = Math.abs(3.5 - mv.row) + Math.abs(3.5 - mv.col);
+      score += (7 - centerDist) * 2;
+      // Add some randomness
+      score += Math.random() * 10;
+
+      if (score > bestScore) { bestScore = score; bestMove = { piece, mv }; }
+    }
+  }
+
+  if (bestMove) {
+    const { piece, mv } = bestMove;
+    GAME.selected = GAME.pieces.indexOf(piece);
+    GAME.validMoves = getValidMoves(piece, GAME.pieces);
+    scheduleRender();
+    setTimeout(() => {
+      movePiece(piece, mv.row, mv.col, mv.mtype, mv.target);
+      // Bot applies a random gate from its pool
+      const def = PIECE_DEFS[piece.type];
+      const gate = def.gatePool[Math.floor(Math.random() * def.gatePool.length)];
+      applyGate(piece, gate);
+      GAME.selected = null;
+      GAME.gateMenu = null;
+      endTurn();
+    }, 400);
+  } else {
+    endTurn();
+  }
+}
+
+// ============================================================
+// RENDERING  — 8-bit NES pixel art style
+// ============================================================
+const canvas = document.getElementById('game-canvas');
+const ctx = canvas.getContext('2d');
+const CELL = 80;  // px per cell
+
+const PALETTE = {
+  lightSquare: '#bbc9e8',
+  darkSquare:  '#4455aa',
+  selected:    '#ffdd44',
+  validMove:   '#44ff88',
+  capture:     '#ff4466',
+  tunnel:      '#ff88ff',
+  white_piece: '#f0f0ff',
+  black_piece: '#111133',
+  outline:     '#000000',
+  superpos:    '#44ffff',
+  decohere:    '#ff6644',
+  entangled:   '#ff44ff',
+  hud_bg:      '#060618',
+  text:        '#e0e0ff',
+};
+
+// Pixel font rendering via fillText (Press Start 2P loaded via @import)
+function drawText(text, x, y, size, color) {
+  ctx.fillStyle = color;
+  ctx.font = `bold ${size}px 'Press Start 2P', monospace`;
+  ctx.fillText(text, x, y);
+}
+
+function drawBoard() {
+  for (let r = 0; r < 8; r++) {
+    for (let c = 0; c < 8; c++) {
+      const x = c * CELL, y = r * CELL;
+      ctx.fillStyle = (r+c)%2===0 ? PALETTE.lightSquare : PALETTE.darkSquare;
+      ctx.fillRect(x, y, CELL, CELL);
+
+      // Grid coordinates
+      ctx.fillStyle = (r+c)%2===0 ? '#8899cc' : '#6677aa';
+      ctx.font = '6px monospace';
+      if (c === 0) ctx.fillText(8-r, x+3, y+10);
+      if (r === 7) ctx.fillText('abcdefgh'[c], x+CELL-9, y+CELL-3);
+    }
+  }
+}
+
+function drawHighlights() {
+  // Selected piece highlight
+  if (GAME.selected !== null) {
+    const p = GAME.pieces[GAME.selected];
+    if (p) {
+      ctx.fillStyle = '#ffdd4455';
+      ctx.fillRect(p.col*CELL, p.row*CELL, CELL, CELL);
+      ctx.strokeStyle = PALETTE.selected;
+      ctx.lineWidth = 3;
+      ctx.strokeRect(p.col*CELL+1, p.row*CELL+1, CELL-2, CELL-2);
+    }
+  }
+  // Valid moves
+  GAME.validMoves.forEach(mv => {
+    const x = mv.col*CELL, y = mv.row*CELL;
+    if (mv.mtype === 'capture') {
+      ctx.strokeStyle = PALETTE.capture;
+      ctx.lineWidth = 3;
+      ctx.strokeRect(x+2, y+2, CELL-4, CELL-4);
+      ctx.fillStyle = '#ff446622';
+      ctx.fillRect(x, y, CELL, CELL);
+    } else if (mv.mtype === 'tunnel') {
+      ctx.strokeStyle = PALETTE.tunnel;
+      ctx.lineWidth = 2;
+      ctx.setLineDash([4,4]);
+      ctx.strokeRect(x+2, y+2, CELL-4, CELL-4);
+      ctx.setLineDash([]);
+      ctx.fillStyle = '#ff88ff22';
+      ctx.fillRect(x, y, CELL, CELL);
+    } else {
+      ctx.fillStyle = '#44ff8844';
+      ctx.fillRect(x, y, CELL, CELL);
+      // Dot indicator
+      ctx.fillStyle = PALETTE.validMove;
+      ctx.beginPath();
+      ctx.arc(x+CELL/2, y+CELL/2, 8, 0, 2*π);
+      ctx.fill();
+    }
+  });
+}
+
+function drawPiece(piece) {
+  const x = piece.col * CELL;
+  const y = piece.row * CELL;
+  const cx = x + CELL/2, cy = y + CELL/2;
+
+  // Coherence-based glow
+  const cohFrac = piece.coherence / piece.maxCoherence;
+  const glowAlpha = Math.floor(cohFrac * 180).toString(16).padStart(2,'0');
+
+  // Superposition shimmer
+  if (piece.inSuperposition) {
+    ctx.fillStyle = `#44ffff${glowAlpha}`;
+    ctx.beginPath();
+    ctx.arc(cx, cy, 32, 0, 2*π);
+    ctx.fill();
+  }
+
+  // Entanglement ring
+  if (piece.entangledWith !== null) {
+    ctx.strokeStyle = `${PALETTE.entangled}${glowAlpha}`;
+    ctx.lineWidth = 2;
+    ctx.setLineDash([3,3]);
+    ctx.beginPath();
+    ctx.arc(cx, cy, 33, 0, 2*π);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  // Decoherence flicker
+  if (piece.coherence < 20) {
+    if (Math.sin(Date.now()/80) > 0.3) {
+      ctx.fillStyle = '#ff664422';
+      ctx.fillRect(x, y, CELL, CELL);
+    }
+  }
+
+  // Piece body (pixelated square with border)
+  const size = 44;
+  const pw = size, ph = size;
+  const px = cx - pw/2, py = cy - ph/2;
+
+  // Shadow
+  ctx.fillStyle = '#00000066';
+  ctx.fillRect(px+3, py+4, pw, ph);
+
+  // Body color based on quantum state
+  const excitedFrac = C.norm2(piece.state.beta);
+  const r_col = Math.floor(piece.color==='white' ? 200 + excitedFrac*55 : 20  + excitedFrac*40);
+  const g_col = Math.floor(piece.color==='white' ? 200 - excitedFrac*50 : 20  + excitedFrac*20);
+  const b_col = Math.floor(piece.color==='white' ? 255                   : 80  + excitedFrac*60);
+  ctx.fillStyle = `rgb(${r_col},${g_col},${b_col})`;
+  ctx.fillRect(px, py, pw, ph);
+
+  // Border
+  ctx.strokeStyle = piece.color==='white' ? '#ffffff' : '#000033';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(px, py, pw, ph);
+
+  // Pixel checkerboard pattern for 8-bit feel
+  ctx.fillStyle = piece.color==='white' ? '#ffffff22' : '#00000022';
+  for(let i=0;i<pw;i+=6) for(let j=0;j<ph;j+=6)
+    if((Math.floor(i/6)+Math.floor(j/6))%2===0) ctx.fillRect(px+i,py+j,6,6);
+
+  // Piece symbol
+  ctx.fillStyle = piece.color==='white' ? '#111133' : '#ddeeff';
+  ctx.font = `bold 22px serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(getPieceSymbol(piece), cx, cy-1);
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'alphabetic';
+
+  // Coherence bar (mini, below piece)
+  const barW = 36, barH = 4;
+  const barX = cx - barW/2, barY = py + ph + 3;
+  ctx.fillStyle = '#111133';
+  ctx.fillRect(barX, barY, barW, barH);
+  const cohColor = cohFrac > 0.6 ? '#44ff88' : cohFrac > 0.3 ? '#ffdd44' : '#ff4444';
+  ctx.fillStyle = cohColor;
+  ctx.fillRect(barX, barY, barW * cohFrac, barH);
+
+  // State indicator dot (above piece)
+  const dotY = py - 6;
+  const p1 = C.norm2(piece.state.beta);
+  ctx.fillStyle = p1 > 0.7 ? '#ff4444' :  // excited |1⟩
+                  p1 > 0.3 ? '#44ffff' :  // superposition
+                             '#44ff88';   // ground |0⟩
+  ctx.beginPath();
+  ctx.arc(cx, dotY, 4, 0, 2*π);
+  ctx.fill();
+}
+
+function getPieceSymbol(piece) {
+  const symbols = {
+    white: { K:'♔', Q:'♕', R:'♖', B:'♗', N:'♘', P:'♙' },
+    black: { K:'♚', Q:'♛', R:'♜', B:'♝', N:'♞', P:'♟' }
+  };
+  return symbols[piece.color][piece.type];
+}
+
+function drawGateMenu() {
+  if (!GAME.gateMenu) return;
+  const { piece, options } = GAME.gateMenu;
+  const px = piece.col * CELL;
+  const py = piece.row * CELL;
+
+  const menuW = 150, menuH = options.length * 28 + 36;
+  let mx = px + CELL + 4;
+  let my = py;
+  if (mx + menuW > 640) mx = px - menuW - 4;
+  if (my + menuH > 640) my = 640 - menuH;
+
+  ctx.fillStyle = '#080830ee';
+  ctx.strokeStyle = '#4444cc';
+  ctx.lineWidth = 2;
+  ctx.fillRect(mx, my, menuW, menuH);
+  ctx.strokeRect(mx, my, menuW, menuH);
+
+  ctx.fillStyle = '#ffdd44';
+  ctx.font = "bold 7px 'Press Start 2P', monospace";
+  ctx.fillText('APPLY GATE:', mx+6, my+14);
+
+  options.forEach((opt, i) => {
+    const oy = my + 20 + i*28 + 6;
+    ctx.fillStyle = '#111144';
+    ctx.fillRect(mx+4, oy, menuW-8, 22);
+    ctx.strokeStyle = '#2244aa';
+    ctx.strokeRect(mx+4, oy, menuW-8, 22);
+
+    ctx.fillStyle = '#44ffaa';
+    ctx.font = "bold 7px 'Press Start 2P', monospace";
+    ctx.fillText(opt.label, mx+8, oy+15);
+  });
+
+  // Skip / End turn
+  const skipY = my + menuH - 26;
+  ctx.fillStyle = '#220044';
+  ctx.fillRect(mx+4, skipY, menuW-8, 20);
+  ctx.strokeStyle = '#ff44ff';
+  ctx.strokeRect(mx+4, skipY, menuW-8, 20);
+  ctx.fillStyle = '#ff88ff';
+  ctx.font = "bold 7px 'Press Start 2P', monospace";
+  ctx.fillText('SKIP (end turn)', mx+8, skipY+14);
+}
+
+function drawOverlay() {
+  if (GAME.winner) {
+    ctx.fillStyle = '#000000aa';
+    ctx.fillRect(0, 0, 640, 640);
+    ctx.fillStyle = '#ffdd44';
+    ctx.font = "bold 18px 'Press Start 2P', monospace";
+    ctx.textAlign = 'center';
+    ctx.fillText(`${GAME.winner.toUpperCase()} WINS!`, 320, 280);
+    ctx.fillStyle = '#aaaaff';
+    ctx.font = "bold 8px 'Press Start 2P', monospace";
+    ctx.fillText('The quantum king has decohered.', 320, 310);
+    ctx.fillText('Click to return to menu.', 320, 340);
+    ctx.textAlign = 'left';
+  }
+}
+
+function drawTurnBanner() {
+  // Thin top bar
+  ctx.fillStyle = GAME.turn === 'white' ? '#22224499' : '#000011aa';
+  ctx.fillRect(0, 0, 640, 16);
+  ctx.fillStyle = GAME.turn === 'white' ? '#eeeeff' : '#aabbff';
+  ctx.font = "bold 7px 'Press Start 2P', monospace";
+  ctx.fillText(`${GAME.turn.toUpperCase()} to move  |  Phase: ${GAME.phase.toUpperCase()}  |  Turn ${GAME.turnCount+1}`, 8, 11);
+}
+
+let renderPending = false;
+function scheduleRender() {
+  if (!renderPending) {
+    renderPending = true;
+    requestAnimationFrame(render);
+  }
+}
+
+function render() {
+  renderPending = false;
+  ctx.clearRect(0,0,640,640);
+  drawBoard();
+  drawHighlights();
+  GAME.pieces.forEach(drawPiece);
+  drawGateMenu();
+  drawOverlay();
+  drawTurnBanner();
+  drawBlochSphere();
+}
+
+// ============================================================
+// BLOCH SPHERE MINI RENDERER
+// ============================================================
+function drawBlochSphere() {
+  const bc = document.getElementById('bloch-canvas');
+  if (!bc) return;
+  const bctx = bc.getContext('2d');
+  bctx.clearRect(0,0,90,90);
+
+  const cx=45,cy=45,R=38;
+
+  // Background
+  bctx.fillStyle='#06061e';
+  bctx.beginPath(); bctx.arc(cx,cy,R,0,2*π); bctx.fill();
+
+  // Sphere outline
+  bctx.strokeStyle='#224488'; bctx.lineWidth=1;
+  bctx.beginPath(); bctx.arc(cx,cy,R,0,2*π); bctx.stroke();
+
+  // Equator ellipse
+  bctx.strokeStyle='#1a3366'; bctx.lineWidth=1;
+  bctx.beginPath(); bctx.ellipse(cx,cy,R,R*0.3,0,0,2*π); bctx.stroke();
+
+  // Axes
+  bctx.strokeStyle='#334466'; bctx.lineWidth=1;
+  bctx.beginPath(); bctx.moveTo(cx,cy-R); bctx.lineTo(cx,cy+R); bctx.stroke();
+  bctx.beginPath(); bctx.moveTo(cx-R,cy); bctx.lineTo(cx+R,cy); bctx.stroke();
+
+  // Labels
+  bctx.fillStyle='#6688aa'; bctx.font='6px monospace';
+  bctx.fillText('|0⟩',cx+2,cy-R+8);
+  bctx.fillText('|1⟩',cx+2,cy+R-2);
+
+  if (GAME.selected === null) return;
+  const piece = GAME.pieces[GAME.selected];
+  if (!piece) return;
+
+  const {theta, phi} = stateToBloch(piece.state);
+  // Project Bloch vector onto 2D
+  const vx = Math.sin(theta)*Math.cos(phi);
+  const vy = Math.sin(theta)*Math.sin(phi);
+  const vz = Math.cos(theta);
+
+  // 2D projection (isometric-ish)
+  const sx = cx + R * (vx * 0.7 + vy * 0.3);
+  const sy = cy - R * vz;
+
+  // State vector arrow
+  bctx.strokeStyle='#44ffaa'; bctx.lineWidth=2;
+  bctx.beginPath(); bctx.moveTo(cx,cy); bctx.lineTo(sx,sy); bctx.stroke();
+
+  // Tip dot
+  bctx.fillStyle='#44ffaa';
+  bctx.beginPath(); bctx.arc(sx,sy,3,0,2*π); bctx.fill();
+
+  // Center dot
+  bctx.fillStyle='#ffffff44';
+  bctx.beginPath(); bctx.arc(cx,cy,2,0,2*π); bctx.fill();
+}
+
+// ============================================================
+// HUD UPDATE
+// ============================================================
+function updateHUD() {
+  const white = GAME.pieces.filter(p=>p.color==='white');
+  const black = GAME.pieces.filter(p=>p.color==='black');
+
+  const avgCoh = (arr) => arr.length===0 ? 0 :
+    Math.round(arr.reduce((s,p)=>s+p.coherence,0)/arr.length);
+
+  document.getElementById('p1-coherence').textContent = avgCoh(white)+'%';
+  document.getElementById('p2-coherence').textContent = avgCoh(black)+'%';
+
+  document.getElementById('p1-entangled').textContent =
+    white.filter(p=>p.entangledWith!==null).length;
+  document.getElementById('p2-entangled').textContent =
+    black.filter(p=>p.entangledWith!==null).length;
+
+  document.getElementById('turn-info').textContent =
+    GAME.turn.toUpperCase()+' to move';
+  document.getElementById('phase-info').textContent =
+    GAME.phase.toUpperCase()+' phase';
+}
+
+function updateSelectedInfo(piece) {
+  if (!piece) {
+    ['sel-name','sel-state','sel-theta','sel-phi','sel-coherence']
+      .forEach(id => document.getElementById(id).textContent='—');
+    return;
+  }
+  const {theta, phi} = stateToBloch(piece.state);
+  const p0 = C.norm2(piece.state.alpha), p1 = C.norm2(piece.state.beta);
+  const stateStr = piece.inSuperposition ?
+    `|+⟩ (${(p0*100).toFixed(0)}%|0⟩+${(p1*100).toFixed(0)}%|1⟩)` :
+    p1 > 0.7 ? '|1⟩ EXCITED' : '|0⟩ GROUND';
+
+  document.getElementById('sel-name').textContent =
+    `${piece.color.toUpperCase()} ${PIECE_DEFS[piece.type].name}`;
+  document.getElementById('sel-state').textContent = stateStr;
+  document.getElementById('sel-theta').textContent =
+    `θ: ${(theta*180/π).toFixed(1)}°`;
+  document.getElementById('sel-phi').textContent =
+    `φ: ${(phi*180/π).toFixed(1)}°`;
+  document.getElementById('sel-coherence').textContent =
+    `Coh: ${piece.coherence.toFixed(0)}%`;
+  drawBlochSphere();
+}
+
+// ============================================================
+// LOG
+// ============================================================
+function logEvent(msg, type) {
+  const log = document.getElementById('log');
+  const span = document.createElement('span');
+  span.className = `ev-${type}`;
+  span.textContent = `[T${GAME.turnCount}] ${msg}`;
+  log.appendChild(span);
+  log.scrollTop = log.scrollHeight;
+  GAME.log.push({msg, type, turn: GAME.turnCount});
+}
+
+// ============================================================
+// INPUT HANDLING
+// ============================================================
+canvas.addEventListener('click', (e) => {
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = canvas.width / rect.width;
+  const scaleY = canvas.height / rect.height;
+  const mx = (e.clientX - rect.left) * scaleX;
+  const my = (e.clientY - rect.top)  * scaleY;
+
+  if (GAME.winner) { openMenu(); return; }
+  if (GAME.mode === 'vsBot' && GAME.turn === GAME.botColor) return;
+
+  const col = Math.floor(mx / CELL);
+  const row = Math.floor(my / CELL);
+
+  // Gate menu click handling
+  if (GAME.gateMenu) {
+    handleGateMenuClick(mx, my);
+    return;
+  }
+
+  if (GAME.phase === 'move') {
+    const clickedPiece = GAME.pieces.find(p => p.row===row && p.col===col);
+
+    if (GAME.selected !== null) {
+      const mv = GAME.validMoves.find(m => m.row===row && m.col===col);
+      if (mv) {
+        const selPiece = GAME.pieces[GAME.selected];
+        movePiece(selPiece, mv.row, mv.col, mv.mtype, mv.target);
+        // Offer gate menu after move
+        openGateMenu(selPiece);
+        scheduleRender();
+        return;
+      }
+    }
+
+    if (clickedPiece && clickedPiece.color === GAME.turn) {
+      selectPiece(GAME.pieces.indexOf(clickedPiece));
+    } else {
+      GAME.selected = null;
+      GAME.validMoves = [];
+    }
+  }
+  scheduleRender();
+});
+
+function handleGateMenuClick(mx, my) {
+  if (!GAME.gateMenu) return;
+  const { piece, options } = GAME.gateMenu;
+  const px = piece.col * CELL;
+  const py = piece.row * CELL;
+  const menuW = 150, menuH = options.length * 28 + 36;
+  let mxStart = px + CELL + 4;
+  let myStart = py;
+  if (mxStart + menuW > 640) mxStart = px - menuW - 4;
+  if (myStart + menuH > 640) myStart = 640 - menuH;
+
+  options.forEach((opt, i) => {
+    const oy = myStart + 20 + i*28 + 6;
+    if (mx >= mxStart+4 && mx <= mxStart+menuW-4 &&
+        my >= oy        && my <= oy+22) {
+      if (opt.action === 'CNOT') {
+        startCNOTSelect(piece);
+      } else {
+        applyGate(piece, opt.action);
+        GAME.gateMenu = null;
+        endTurn();
+      }
+    }
+  });
+
+  // Skip button
+  const skipY = myStart + menuH - 26;
+  if (mx >= mxStart+4 && mx <= mxStart+menuW-4 &&
+      my >= skipY     && my <= skipY+20) {
+    GAME.gateMenu = null;
+    endTurn();
+  }
+  scheduleRender();
+}
+
+function openGateMenu(piece) {
+  const def = PIECE_DEFS[piece.type];
+  const options = def.gatePool.map(g => ({
+    label: `${g} Gate — ${gateDesc(g)}`,
+    action: g
+  }));
+  options.push({ label: 'CNOT (entangle)', action: 'CNOT' });
+  options.push({ label: 'MEASURE qubit', action: '_measure' });
+
+  // Replace _measure with actual measure
+  const measIdx = options.findIndex(o => o.action === '_measure');
+  if (measIdx >= 0) options[measIdx] = {
+    label: 'MEASURE qubit',
+    action: '_measure_real'
+  };
+
+  GAME.gateMenu = { piece, options: options.filter(o => o.action !== '_measure_real')
+    .concat([{label:'MEASURE qubit', action:'_measure_action'}])
+  };
+
+  // Override actions list cleanly
+  GAME.gateMenu.options = [
+    ...def.gatePool.map(g => ({ label: `${g}: ${gateDesc(g)}`, action: g })),
+    { label: 'CNOT (entangle)', action: 'CNOT' },
+    { label: 'MEASURE', action: 'MEASURE' }
+  ];
+
+  GAME.phase = 'gate';
+}
+
+// Override canvas click for MEASURE
+const _origHandleGate = handleGateMenuClick;
+canvas.addEventListener('click', ()=>{}, false); // already registered above
+
+function gateDesc(g) {
+  const d = {H:'superpos',X:'bit-flip',Z:'phase',S:'π/2 ph',T:'π/4 ph',Y:'Pauli-Y',Rx:'x-rot',Ry:'y-rot'};
+  return d[g] || g;
+}
+
+let cnotSelectMode = false, cnotControl = null;
+function startCNOTSelect(piece) {
+  cnotSelectMode = true;
+  cnotControl = piece;
+  GAME.gateMenu = null;
+  logEvent('Select a TARGET piece for CNOT entanglement...', 'info');
+  scheduleRender();
+}
+
+// Override click for CNOT target selection
+canvas.addEventListener('click', (e) => {
+  if (!cnotSelectMode) return;
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = canvas.width / rect.width;
+  const scaleY = canvas.height / rect.height;
+  const col = Math.floor((e.clientX - rect.left) * scaleX / CELL);
+  const row = Math.floor((e.clientY - rect.top)  * scaleY / CELL);
+  const target = GAME.pieces.find(p => p.row===row && p.col===col);
+  if (target && target !== cnotControl) {
+    applyCNOTGate(cnotControl, target);
+    cnotSelectMode = false;
+    cnotControl = null;
+    endTurn();
+    scheduleRender();
+  }
+}, false);
+
+// Handle MEASURE in gate menu
+function patchedGateMenu(mx, my) {
+  if (!GAME.gateMenu) return;
+  const {piece, options} = GAME.gateMenu;
+  options.forEach((opt, i) => {
+    if (opt.action === 'MEASURE') {
+      const px = piece.col*CELL, py2 = piece.row*CELL;
+      const menuW=150, menuH=options.length*28+36;
+      let mxS=px+CELL+4, myS=py2;
+      if(mxS+menuW>640) mxS=px-menuW-4;
+      if(myS+menuH>640) myS=640-menuH;
+      const oy=myS+20+i*28+6;
+      if(mx>=mxS+4&&mx<=mxS+menuW-4&&my>=oy&&my<=oy+22){
+        applyMeasure(piece);
+        GAME.gateMenu=null;
+        endTurn();
+        scheduleRender();
+      }
+    }
+  });
+}
+
+// Patch handleGateMenuClick to also handle MEASURE
+const origHandleGate2 = handleGateMenuClick;
+canvas._handlers = canvas._handlers || [];
+
+// ============================================================
+// TUTORIAL CONTENT
+// ============================================================
+function openTutorial() {
+  document.getElementById('modal-content').innerHTML = `
+<h2>⚛ QUBLITZ TUTORIAL ⚛</h2>
+
+<h3>🎯 OBJECTIVE</h3>
+<p>Capture the enemy King before your own King decoheres. This is quantum chess — pieces have quantum states, and the laws of quantum mechanics govern every move!</p>
+
+<h3>🧩 PIECE = QUBIT</h3>
+<p>Every piece on the board IS a qubit. Its quantum state |ψ⟩ = α|0⟩ + β|1⟩ determines its behavior, strength, and survivability.</p>
+
+<table>
+  <tr><th>Piece</th><th>Qubit Role</th><th>Starting State</th><th>Special Ability</th></tr>
+  <tr><td>♔ KING</td><td>Logical qubit (error-protected)</td><td>|0⟩ ground</td><td>Z/S phase gates — phase-flip defense</td></tr>
+  <tr><td>♕ QUEEN</td><td>Superposition master</td><td>|+⟩ = (|0⟩+|1⟩)/√2</td><td>H gate — enter/exit superposition</td></tr>
+  <tr><td>♖ ROOK</td><td>Bit-flip qubit</td><td>|0⟩ ground</td><td>X gate — flip between ground/excited</td></tr>
+  <tr><td>♗ BISHOP</td><td>Phase qubit</td><td>Partially excited</td><td>T/S gates — fine phase control</td></tr>
+  <tr><td>♘ KNIGHT</td><td>Tunneling qubit</td><td>Precessing state</td><td>Ry/Rx — quantum tunneling (3-step jump)</td></tr>
+  <tr><td>♙ PAWN</td><td>Fresh |0⟩ qubit</td><td>|0⟩ ground</td><td>X gate — excite to |1⟩; promotes via H</td></tr>
+</table>
+
+<h3>🎮 TURN STRUCTURE</h3>
+<p><b>Each turn has 2 phases:</b></p>
+<p><b>1. MOVE phase:</b> Select a piece and click a green dot (valid move), red square (capture), or dashed purple (quantum tunnel).</p>
+<p><b>2. GATE phase:</b> After moving, a menu appears — apply a quantum gate to your piece, use CNOT to entangle two pieces, or MEASURE to collapse the qubit.</p>
+
+<h3>⚛ QUANTUM GATES</h3>
+<table>
+  <tr><th>Gate</th><th>Symbol</th><th>Effect</th><th>Analogy</th></tr>
+  <tr><td>Hadamard</td><td>H</td><td>Creates superposition |0⟩→|+⟩</td><td>Spinning a coin</td></tr>
+  <tr><td>Pauli-X</td><td>X</td><td>Bit-flip |0⟩↔|1⟩</td><td>Classical NOT gate</td></tr>
+  <tr><td>Pauli-Z</td><td>Z</td><td>Phase flip |1⟩→−|1⟩</td><td>Mirror in phase space</td></tr>
+  <tr><td>S Gate</td><td>S</td><td>π/2 phase on |1⟩</td><td>Quarter-turn rotation</td></tr>
+  <tr><td>T Gate</td><td>T</td><td>π/4 phase on |1⟩</td><td>Eighth-turn rotation</td></tr>
+  <tr><td>Pauli-Y</td><td>Y</td><td>Bit + phase flip</td><td>Combined X+Z</td></tr>
+  <tr><td>Rx(θ)</td><td>Rx</td><td>Rotation around X-axis on Bloch sphere</td><td>Larmor precession</td></tr>
+  <tr><td>Ry(θ)</td><td>Ry</td><td>Rotation around Y-axis</td><td>Rabi oscillation</td></tr>
+  <tr><td>CNOT</td><td>⊕</td><td>Entangles two qubits; flips target if control is |1⟩</td><td>Quantum entanglement</td></tr>
+</table>
+
+<h3>💔 DECOHERENCE</h3>
+<p>Every piece has a <b>Coherence bar</b> (shown below the piece). Each turn, ALL pieces lose coherence due to environmental noise — just like real qubits!</p>
+<p>When coherence → 0 and a piece is in superposition, it <b>DECOHERES</b>: its state collapses randomly to |0⟩ or |1⟩.</p>
+<p>If a piece collapses to |1⟩ (excited state) with near-zero coherence, it <b>DECAYS</b> and is removed from the board!</p>
+
+<h3>🔗 ENTANGLEMENT</h3>
+<p>Use the CNOT gate to entangle two of your pieces. Entangled pieces (shown with a dashed purple ring) are quantum-linked: when one moves, the other's state updates instantly via the CNOT relationship. Entanglement can be used to protect your King or surprise your opponent!</p>
+
+<h3>🔬 MEASUREMENT</h3>
+<p>You can MEASURE any of your pieces during the Gate phase. Measuring collapses the qubit to |0⟩ or |1⟩ with probabilities |α|² and |β|². Measuring partially restores coherence — it "resets" the qubit to a known eigenstate.</p>
+
+<h3>🐴 QUANTUM TUNNELING</h3>
+<p>Knights with coherence > 60% can <b>tunnel</b> — jumping 3 squares instead of the usual L-shape, represented by a dashed purple square. This models quantum tunneling through a potential barrier.</p>
+
+<h3>🏆 WINNING</h3>
+<p>The game ends when a King is captured OR decays due to decoherence. Strategy tip: protect your King's coherence! Use S and Z gates to keep it in a stable phase state.</p>
+
+<h3>🎨 STATE INDICATORS</h3>
+<p>Each piece has a small colored dot above it:</p>
+<p>• 🟢 Green = ground state |0⟩ (stable)</p>
+<p>• 🔵 Cyan = superposition (|0⟩+|1⟩)/√2</p>
+<p>• 🔴 Red = excited state |1⟩ (unstable)</p>
+<p>The <b>Bloch Sphere</b> panel (right side) shows the exact qubit state of your selected piece as a 3D vector.</p>
+`;
+  document.getElementById('modal-overlay').classList.add('show');
+}
+
+// ============================================================
+// MENU
+// ============================================================
+function openMenu() {
+  document.getElementById('modal-content').innerHTML = `
+<h2>⚛ QUBLITZ ⚛</h2>
+<p style="text-align:center;color:#aaaaee;margin-bottom:16px;">Quantum Chess — Teach yourself quantum computing through play</p>
+<button class="btn" onclick="closeModal();resetGame('vsBot')">▶ PLAY vs BOT (1P)</button>
+<button class="btn" onclick="closeModal();resetGame('vs2P')">▶ PLAY vs FRIEND (2P)</button>
+<hr style="border-color:#2222aa;margin:10px 0;">
+<button class="btn" onclick="closeModal();openTutorial()">📖 READ TUTORIAL</button>
+<hr style="border-color:#2222aa;margin:10px 0;">
+<h3>SETTINGS</h3>
+<p>Decoherence rate: <span id="deco-val">${GAME.decoherenceRate}</span>/turn</p>
+<button class="btn" onclick="GAME.decoherenceRate=Math.max(1,GAME.decoherenceRate-1);document.getElementById('deco-val').textContent=GAME.decoherenceRate">◀ Slower</button>
+<button class="btn" onclick="GAME.decoherenceRate=Math.min(10,GAME.decoherenceRate+1);document.getElementById('deco-val').textContent=GAME.decoherenceRate">▶ Faster</button>
+<hr style="border-color:#2222aa;margin:10px 0;">
+<p style="color:#556688;font-size:6px;text-align:center;">Each piece is a qubit. Each move is a gate.<br>Decoherence kills. Entanglement binds.</p>
+`;
+  document.getElementById('modal-overlay').classList.add('show');
+}
+
+function closeModal() {
+  document.getElementById('modal-overlay').classList.remove('show');
+  scheduleRender();
+}
+
+// ============================================================
+// ANIMATION LOOP (for decoherence flicker)
+// ============================================================
+function animLoop() {
+  // Re-render every ~100ms for flickering effects
+  render();
+  requestAnimationFrame(animLoop);
+}
+
+// ============================================================
+// GATE MENU CLICK — full patched version
+// ============================================================
+// Replace the gate click handler with full MEASURE support
+canvas.addEventListener('click', (e) => {
+  if (!GAME.gateMenu) return;
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = canvas.width / rect.width;
+  const scaleY = canvas.height / rect.height;
+  const mx = (e.clientX - rect.left) * scaleX;
+  const my = (e.clientY - rect.top)  * scaleY;
+
+  const {piece, options} = GAME.gateMenu;
+  const px = piece.col*CELL, py2 = piece.row*CELL;
+  const menuW=150, menuH=options.length*28+36;
+  let mxS=px+CELL+4, myS=py2;
+  if(mxS+menuW>640) mxS=px-menuW-4;
+  if(myS+menuH>640) myS=640-menuH;
+
+  options.forEach((opt, i) => {
+    const oy=myS+20+i*28+6;
+    if(mx>=mxS+4&&mx<=mxS+menuW-4&&my>=oy&&my<=oy+22){
+      e.stopImmediatePropagation();
+      if(opt.action==='MEASURE'){
+        applyMeasure(piece);
+        GAME.gateMenu=null;
+        endTurn();
+      } else if(opt.action==='CNOT'){
+        startCNOTSelect(piece);
+      } else {
+        applyGate(piece, opt.action);
+        GAME.gateMenu=null;
+        endTurn();
+      }
+      scheduleRender();
+    }
+  });
+  // Skip
+  const skipY=myS+menuH-26;
+  if(mx>=mxS+4&&mx<=mxS+menuW-4&&my>=skipY&&my<=skipY+20){
+    e.stopImmediatePropagation();
+    GAME.gateMenu=null;
+    endTurn();
+    scheduleRender();
+  }
+}, true); // capture phase so it fires before the main handler
+
+// ============================================================
+// BOOT
+// ============================================================
+window.onload = () => {
+  resetGame('vsBot');
+  animLoop();
+  setTimeout(openMenu, 300);
+};
+</script>
+</body>
+</html>
