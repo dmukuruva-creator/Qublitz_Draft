@@ -1,0 +1,1996 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>QuBlitz — Quantum Chess</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Share+Tech+Mono&display=swap');
+
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --bg:       #050510;
+  --panel:    #0a0a20;
+  --border:   #1a1e58;
+  --border-hi:#343898;
+  --cyan:     #00e5ff;
+  --purple:   #7c4dff;
+  --yellow:   #ffeb3b;
+  --green:    #00e676;
+  --red:      #ff1744;
+  --pink:     #ff4081;
+  --orange:   #ff6d00;
+  --text:     #c0c8e8;
+  --dim:      #484e78;
+  --mono:     'Share Tech Mono', monospace;
+  --pixel:    'Press Start 2P', monospace;
+}
+
+html, body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--mono);
+  width: 100%;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* ── Boot Screen ───────────────────────────────────── */
+#boot {
+  position: fixed; inset: 0; z-index: 9000;
+  background: #000010;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 20px;
+  transition: opacity 0.7s ease;
+}
+#boot.fade-out { opacity: 0; pointer-events: none; }
+#boot-logo {
+  font-family: var(--pixel); font-size: 30px;
+  color: var(--cyan);
+  text-shadow: 0 0 24px var(--cyan), 0 0 60px var(--purple), 0 0 100px #0040ff66;
+  letter-spacing: 10px;
+  min-height: 40px;
+}
+#boot-sub {
+  font-family: var(--mono); font-size: 10px;
+  color: #4050a0; letter-spacing: 4px;
+  min-height: 16px;
+}
+#boot-lines {
+  font-family: var(--mono); font-size: 9px;
+  color: #2a3060; text-align: left; width: 340px;
+  line-height: 1.9; white-space: pre;
+  min-height: 96px;
+}
+#boot-start {
+  font-family: var(--pixel); font-size: 9px;
+  color: var(--yellow);
+  letter-spacing: 1px;
+  animation: blink 0.7s step-end infinite;
+  min-height: 14px;
+}
+@keyframes blink { 0%,49%{opacity:1} 50%,100%{opacity:0} }
+
+/* ── Background canvas ─────────────────────────────── */
+#bg-canvas {
+  position: fixed; inset: 0; z-index: 0;
+  pointer-events: none;
+  opacity: 0.7;
+}
+
+/* ── Root container ────────────────────────────────── */
+#root {
+  position: relative; z-index: 1;
+  width: 100%;
+  display: flex; flex-direction: column;
+  align-items: center;
+}
+
+/* ── Title bar ─────────────────────────────────────── */
+#title-bar {
+  width: 100%; max-width: 1100px;
+  padding: 8px 14px 6px;
+  display: flex; align-items: center; justify-content: space-between;
+  border-bottom: 2px solid var(--border);
+  background: linear-gradient(90deg, #050510, #0a0a20 30%, #0a0a20 70%, #050510);
+}
+#title-bar h1 {
+  font-family: var(--pixel); font-size: 13px;
+  color: var(--cyan);
+  text-shadow: 0 0 14px var(--cyan), 0 0 30px var(--purple);
+  letter-spacing: 3px;
+}
+#title-bar .sub { font-size: 9px; color: var(--dim); letter-spacing: 1px; }
+#check-warn {
+  font-family: var(--pixel); font-size: 7px;
+  color: var(--red);
+  text-shadow: 0 0 10px var(--red);
+  animation: blink 0.45s step-end infinite;
+  display: none;
+}
+#attract-badge {
+  font-family: var(--pixel); font-size: 6px;
+  color: var(--purple); letter-spacing: 1px;
+  display: none;
+}
+
+/* ── Layout ────────────────────────────────────────── */
+#ui {
+  width: 100%; max-width: 1100px;
+  display: flex; gap: 10px; padding: 10px;
+  align-items: flex-start;
+}
+
+canvas { display: block; cursor: pointer; }
+
+#game-canvas {
+  border: 2px solid var(--border-hi);
+  box-shadow: 0 0 32px #1a1aff44, 0 0 64px #0000ff18;
+  flex-shrink: 0;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+
+/* ── Panels ────────────────────────────────────────── */
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  padding: 10px 9px;
+  flex: 1; min-width: 162px; max-width: 210px;
+  display: flex; flex-direction: column; gap: 7px;
+}
+.psec {
+  border: 1px solid var(--border);
+  padding: 7px 8px 9px;
+}
+.panel h3 {
+  font-family: var(--pixel); font-size: 6px;
+  color: var(--yellow);
+  letter-spacing: 1px; margin-bottom: 5px;
+  padding-bottom: 4px; border-bottom: 1px solid var(--border);
+  text-shadow: 0 0 8px var(--yellow);
+}
+.srow {
+  display: flex; justify-content: space-between; align-items: center;
+  font-size: 9px; color: var(--dim); margin-bottom: 2px;
+}
+.srow .val { font-family: var(--pixel); font-size: 6px; color: var(--green); }
+
+/* Pixel-art coherence bar */
+.cbar {
+  height: 6px; margin: 3px 0 5px;
+  background: #030318;
+  border: 1px solid #0d0d30;
+  padding: 1px;
+  overflow: hidden;
+}
+.cbar-fill { height: 100%; transition: width .3s, background .3s; }
+
+.gcnt {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 2px 6px;
+  font-size: 8px; color: var(--dim);
+}
+.gcnt span { color: var(--cyan); }
+
+.btn {
+  display: block; width: 100%;
+  background: transparent;
+  border: 1px solid var(--border-hi);
+  color: var(--text);
+  font-family: var(--pixel); font-size: 6px;
+  padding: 7px 4px; cursor: pointer;
+  text-align: center; letter-spacing: 1px;
+  transition: all .15s;
+}
+.btn:hover {
+  background: var(--border); color: var(--cyan);
+  border-color: var(--cyan); box-shadow: 0 0 8px #00e5ff44;
+}
+
+#sel-eq {
+  font-size: 9px; color: var(--cyan);
+  word-break: break-all; min-height: 14px; margin-bottom: 2px;
+}
+#sel-hint {
+  font-size: 7px; color: var(--dim);
+  min-height: 24px; line-height: 1.5;
+}
+
+/* ── Log ───────────────────────────────────────────── */
+#log {
+  width: 100%; max-width: 1100px;
+  background: #030310;
+  border: 1px solid var(--border);
+  border-top: 1px solid var(--border-hi);
+  padding: 6px 12px;
+  font-size: 9px; color: var(--dim);
+  height: 80px; overflow-y: auto;
+  font-family: var(--mono); line-height: 1.85;
+}
+#log span { display: block; }
+#log .ev-gate    { color: var(--green);  }
+#log .ev-decohere{ color: var(--red);    }
+#log .ev-measure { color: var(--yellow); }
+#log .ev-capture { color: var(--pink);   }
+#log .ev-info    { color: #3a4268;       }
+#log .ev-quantum { color: var(--cyan); font-style: italic; }
+#log .ev-check   { color: var(--orange); }
+#log .ev-system  { color: #1e2450;       }
+
+#kb-hint {
+  width: 100%; max-width: 1100px;
+  font-size: 7px; color: #1e2450; text-align: center;
+  font-family: var(--mono); letter-spacing: 1px;
+  padding: 4px 0 2px;
+}
+
+/* ── Modal ─────────────────────────────────────────── */
+#modal-overlay {
+  display: none; position: fixed; inset: 0;
+  background: #000000cc; z-index: 100;
+  align-items: center; justify-content: center;
+  backdrop-filter: blur(4px);
+}
+#modal-overlay.show { display: flex; }
+#modal {
+  background: #07071e;
+  border: 1px solid var(--border-hi);
+  box-shadow: 0 0 48px #0000ff33, 0 0 96px #0000ff0d;
+  padding: 24px; max-width: 740px; width: 95%;
+  max-height: 88vh; overflow-y: auto;
+  font-size: 10px; line-height: 1.9; font-family: var(--mono);
+}
+#modal h2 {
+  font-family: var(--pixel); color: var(--cyan); font-size: 11px;
+  margin-bottom: 18px; text-align: center; letter-spacing: 2px;
+  text-shadow: 0 0 16px var(--cyan);
+}
+#modal h3 {
+  font-family: var(--pixel); color: var(--green); font-size: 7px;
+  margin: 14px 0 6px; letter-spacing: 1px;
+}
+#modal p  { color: #aab0d8; margin-bottom: 8px; }
+#modal table { width:100%; border-collapse:collapse; margin:10px 0; font-size:9px; }
+#modal td, #modal th { border:1px solid var(--border); padding:5px 7px; color:var(--text); }
+#modal th { color:var(--yellow); background:#080828; font-family:var(--pixel); font-size:6px; }
+#modal .close-btn {
+  display:block; margin:16px auto 0;
+  background:transparent; border:1px solid var(--purple);
+  color:var(--purple); font-family:var(--pixel); font-size:7px;
+  padding:8px 24px; cursor:pointer; letter-spacing:1px; transition:all .15s;
+}
+#modal .close-btn:hover { background:var(--purple); color:#fff; box-shadow:0 0 12px var(--purple); }
+
+/* ── CRT effects ───────────────────────────────────── */
+body::after {
+  content:''; position:fixed; inset:0; pointer-events:none; z-index:999;
+  background: repeating-linear-gradient(
+    0deg, transparent, transparent 2px, #00000015 2px, #00000015 4px
+  );
+}
+body::before {
+  content:''; position:fixed; inset:0; pointer-events:none; z-index:998;
+  background: radial-gradient(ellipse at center, transparent 48%, #000000aa 100%);
+}
+</style>
+</head>
+<body>
+
+<!-- Boot screen -->
+<div id="boot">
+  <div id="boot-logo"></div>
+  <div id="boot-sub"></div>
+  <div id="boot-lines"></div>
+  <div id="boot-start"></div>
+</div>
+
+<!-- Background particle canvas -->
+<canvas id="bg-canvas"></canvas>
+
+<div id="root">
+  <!-- Title bar -->
+  <div id="title-bar">
+    <h1>⚛ QUBLITZ</h1>
+    <div id="check-warn">⚠ CHECK ⚠</div>
+    <div id="attract-badge">◈ DEMO MODE — CLICK TO PLAY ◈</div>
+    <span class="sub">QUANTUM CHESS v2.0 // EACH PIECE IS A QUBIT</span>
+  </div>
+
+  <div id="ui">
+    <!-- LEFT PANEL -->
+    <div class="panel">
+      <div class="psec">
+        <h3>▸ PLAYER 1 — WHITE</h3>
+        <div class="srow">Coherence <span class="val" id="p1-coh">100%</span></div>
+        <div class="cbar"><div class="cbar-fill" id="p1-cbar" style="width:100%;background:var(--green)"></div></div>
+        <div class="srow">Entangled <span class="val" id="p1-ent">0</span></div>
+        <div class="srow">Pieces <span class="val" id="p1-cnt">16</span></div>
+      </div>
+      <div class="psec">
+        <h3>▸ GATE LOG</h3>
+        <div class="gcnt">
+          <div>H: <span id="cnt-H">0</span></div>
+          <div>X: <span id="cnt-X">0</span></div>
+          <div>Y: <span id="cnt-Y">0</span></div>
+          <div>Z: <span id="cnt-Z">0</span></div>
+          <div>S: <span id="cnt-S">0</span></div>
+          <div>T: <span id="cnt-T">0</span></div>
+          <div>Rx: <span id="cnt-Rx">0</span></div>
+          <div>Ry: <span id="cnt-Ry">0</span></div>
+          <div>CNOT: <span id="cnt-CNOT">0</span></div>
+          <div>M: <span id="cnt-MEASURE">0</span></div>
+        </div>
+      </div>
+      <button class="btn" onclick="openTutorial()">📖 TUTORIAL</button>
+      <button class="btn" onclick="openMenu()">⚙ MENU</button>
+    </div>
+
+    <!-- CANVAS -->
+    <canvas id="game-canvas" width="640" height="640"></canvas>
+
+    <!-- RIGHT PANEL -->
+    <div class="panel">
+      <div class="psec">
+        <h3>▸ PLAYER 2 — BLACK</h3>
+        <div class="srow">Coherence <span class="val" id="p2-coh">100%</span></div>
+        <div class="cbar"><div class="cbar-fill" id="p2-cbar" style="width:100%;background:var(--green)"></div></div>
+        <div class="srow">Entangled <span class="val" id="p2-ent">0</span></div>
+        <div class="srow">Pieces <span class="val" id="p2-cnt">16</span></div>
+      </div>
+      <div class="psec">
+        <h3>▸ SELECTED QUBIT</h3>
+        <div class="srow" style="color:var(--cyan)" id="sel-name">—</div>
+        <div id="sel-eq">|ψ⟩ = —</div>
+        <div class="srow">θ <span class="val" id="sel-theta">—</span></div>
+        <div class="srow">φ <span class="val" id="sel-phi">—</span></div>
+        <div class="srow">Coherence <span class="val" id="sel-coh">—</span></div>
+        <canvas id="bloch-canvas" width="100" height="100"
+          style="display:block;margin:7px auto;border:1px solid var(--border-hi);border-radius:50%;background:#04041a;"></canvas>
+        <div id="sel-hint"></div>
+      </div>
+      <div class="psec">
+        <h3>▸ TURN</h3>
+        <div class="srow" id="turn-info" style="color:var(--yellow)">WHITE to move</div>
+        <div class="srow" id="phase-info" style="color:var(--purple)">MOVE phase</div>
+        <div class="srow">Turn <span class="val" id="turn-cnt">1</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="log"></div>
+  <div id="kb-hint">[H/X/Y/Z/S/T] apply gate &nbsp;|&nbsp; [M] measure &nbsp;|&nbsp; [SPACE] skip &nbsp;|&nbsp; [ESC] cancel</div>
+</div>
+
+<!-- Modal overlay -->
+<div id="modal-overlay">
+  <div id="modal">
+    <div id="modal-content"></div>
+    <button class="close-btn" onclick="closeModal()">[ CLOSE ]</button>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+// ═══════════════════════════════════════════════════════
+// AUDIO ENGINE  (Web Audio API, lazy-init on first click)
+// ═══════════════════════════════════════════════════════
+let _ac = null;
+function ac() {
+  if (!_ac) {
+    try { _ac = new (window.AudioContext || window.webkitAudioContext)(); }
+    catch(e) { return null; }
+  }
+  if (_ac.state === 'suspended') _ac.resume();
+  return _ac;
+}
+
+function beep(freq, type='square', dur=0.09, vol=0.18) {
+  const c = ac(); if (!c) return;
+  const o = c.createOscillator(), g = c.createGain();
+  o.connect(g); g.connect(c.destination);
+  o.type = type; o.frequency.value = freq;
+  g.gain.setValueAtTime(vol, c.currentTime);
+  g.gain.exponentialRampToValueAtTime(0.0001, c.currentTime + dur);
+  o.start(); o.stop(c.currentTime + dur);
+}
+
+function sfxMove()    { beep(349, 'square', 0.06, 0.12); }
+function sfxSelect()  { beep(523, 'square', 0.04, 0.10); }
+function sfxCapture() {
+  beep(220, 'sawtooth', 0.09, 0.25);
+  setTimeout(()=>beep(110,'sawtooth',0.13,0.18), 55);
+}
+function sfxDecohere() {
+  const c = ac(); if (!c) return;
+  const buf = c.createBuffer(1, c.sampleRate * 0.25, c.sampleRate);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < d.length; i++) d[i] = (Math.random()*2-1)*0.4;
+  const s = c.createBufferSource(), g = c.createGain();
+  s.buffer = buf; s.connect(g); g.connect(c.destination);
+  g.gain.setValueAtTime(0.12, c.currentTime);
+  g.gain.exponentialRampToValueAtTime(0.0001, c.currentTime + 0.25);
+  s.start(); s.stop(c.currentTime + 0.25);
+}
+function sfxTunnel() {
+  [880,660,440,330].forEach((f,i) => setTimeout(()=>beep(f,'triangle',0.07,0.14), i*38));
+}
+function sfxCheck() {
+  beep(880,'square',0.05,0.28); setTimeout(()=>beep(1760,'square',0.07,0.20), 75);
+}
+function sfxGate(name) {
+  const f = {H:659,X:523,Y:587,Z:494,S:698,T:784,Rx:440,Ry:466,CNOT:880,MEASURE:330};
+  beep(f[name]||440,'square',0.11,0.17);
+}
+function sfxWin() {
+  [523,659,784,1047].forEach((f,i)=>setTimeout(()=>beep(f,'square',0.16,0.30),i*115));
+}
+function sfxPromotion() {
+  [523,659,784,1047,1319].forEach((f,i)=>setTimeout(()=>beep(f,'triangle',0.14,0.25),i*90));
+}
+function sfxBootBeep(f) { beep(f,'square',0.04,0.08); }
+
+// ═══════════════════════════════════════════════════════
+// CONSTANTS
+// ═══════════════════════════════════════════════════════
+const π    = Math.PI;
+const CELL = 80;
+
+// ═══════════════════════════════════════════════════════
+// COMPLEX NUMBER HELPERS
+// ═══════════════════════════════════════════════════════
+const C = {
+  add:      (a,b) => ({ r:a.r+b.r, i:a.i+b.i }),
+  sub:      (a,b) => ({ r:a.r-b.r, i:a.i-b.i }),
+  mul:      (a,b) => ({ r:a.r*b.r-a.i*b.i, i:a.r*b.i+a.i*b.r }),
+  scale:    (a,s) => ({ r:a.r*s, i:a.i*s }),
+  norm2:    (a)   => a.r*a.r+a.i*a.i,
+  norm:     (a)   => Math.sqrt(a.r*a.r+a.i*a.i),
+  fromPolar:(r,φ) => ({ r:r*Math.cos(φ), i:r*Math.sin(φ) }),
+};
+
+function blochToState(theta, phi) {
+  return { alpha:{r:Math.cos(theta/2),i:0}, beta:C.fromPolar(Math.sin(theta/2),phi) };
+}
+function stateToBloch(s) {
+  const nA = C.norm(s.alpha);
+  const theta = 2*Math.acos(Math.min(1,nA));
+  let phi = 0;
+  if (C.norm(s.beta)>1e-6) phi = Math.atan2(s.beta.i,s.beta.r)-Math.atan2(s.alpha.i,s.alpha.r);
+  return {theta,phi};
+}
+function normalizeState(s) {
+  const n = Math.sqrt(C.norm2(s.alpha)+C.norm2(s.beta));
+  if (n<1e-9) return {alpha:{r:1,i:0},beta:{r:0,i:0}};
+  return {alpha:C.scale(s.alpha,1/n), beta:C.scale(s.beta,1/n)};
+}
+function measureState(s) {
+  if (Math.random()<C.norm2(s.beta))
+    return {collapsed:1, state:{alpha:{r:0,i:0},beta:{r:1,i:0}}};
+  return {collapsed:0, state:{alpha:{r:1,i:0},beta:{r:0,i:0}}};
+}
+function fmtState(s) {
+  const p0=C.norm2(s.alpha), p1=C.norm2(s.beta);
+  if (p1<0.02) return '|ψ⟩ = |0⟩  [ground]';
+  if (p0<0.02) return '|ψ⟩ = |1⟩  [excited]';
+  return `|ψ⟩ = ${Math.sqrt(p0).toFixed(2)}|0⟩ + ${Math.sqrt(p1).toFixed(2)}|1⟩`;
+}
+
+// ═══════════════════════════════════════════════════════
+// QUANTUM GATES
+// ═══════════════════════════════════════════════════════
+const GATES = {
+  X: s => ({alpha:s.beta, beta:s.alpha}),
+  H: s => ({
+    alpha:C.scale(C.add(s.alpha,s.beta),1/Math.SQRT2),
+    beta: C.scale(C.sub(s.alpha,s.beta),1/Math.SQRT2),
+  }),
+  Y: s => ({alpha:C.mul({r:0,i:-1},s.beta), beta:C.mul({r:0,i:1},s.alpha)}),
+  Z: s => ({alpha:s.alpha, beta:C.scale(s.beta,-1)}),
+  S: s => ({alpha:s.alpha, beta:C.mul(s.beta,{r:0,i:1})}),
+  T: s => ({alpha:s.alpha, beta:C.mul(s.beta,C.fromPolar(1,π/4))}),
+  Rx: s => {
+    const [c,si]=[Math.cos(π/8),Math.sin(π/8)];
+    return {
+      alpha:C.add(C.scale(s.alpha,c),C.mul({r:0,i:-si},s.beta)),
+      beta: C.add(C.mul({r:0,i:-si},s.alpha),C.scale(s.beta,c)),
+    };
+  },
+  Ry: s => {
+    const [c,si]=[Math.cos(π/8),Math.sin(π/8)];
+    return {
+      alpha:C.add(C.scale(s.alpha,c),C.scale(s.beta,-si)),
+      beta: C.add(C.scale(s.alpha,si),C.scale(s.beta,c)),
+    };
+  },
+};
+
+const GATE_INFO = {
+  H: {label:'Hadamard',short:'|0⟩↔|+⟩ superposition',ctrl:'π rotation around (X+Z)/√2. Creates maximum superposition — equal |0⟩/|1⟩ amplitude. Drives qubit to Bloch equator.'},
+  X: {label:'Pauli-X',short:'|0⟩↔|1⟩ bit-flip NOT',ctrl:'π rotation around X-axis. Full population inversion. The quantum NOT gate — foundational to error correction.'},
+  Y: {label:'Pauli-Y',short:'bit-flip + phase flip',ctrl:'π rotation around Y-axis. Applies both bit-flip and phase-flip: α↦−iβ, β↦iα.'},
+  Z: {label:'Pauli-Z',short:'|1⟩→−|1⟩ phase flip',ctrl:'π rotation around Z-axis. Flips the sign of |1⟩ amplitude. The King\'s defensive anchor.'},
+  S: {label:'S Phase',short:'π/2 phase on |1⟩',ctrl:'90° Z-axis rotation. Multiplies |1⟩ by i. Chain two S gates to get Z.'},
+  T: {label:'T Gate',short:'π/4 phase on |1⟩',ctrl:'45° Z-axis rotation. Non-Clifford — essential for universal quantum computation.'},
+  Rx:{label:'Rx(π/4)',short:'Larmor precession',ctrl:'π/4 X-axis rotation, modelling Larmor spin precession. Enables quantum tunneling at high coherence.'},
+  Ry:{label:'Ry(π/4)',short:'Rabi oscillation',ctrl:'π/4 Y-axis rotation, modelling Rabi oscillation — the cleanest coherent qubit drive.'},
+  CNOT:   {label:'CNOT',short:'entangle two qubits',ctrl:'Conditional X: flips target if control |1⟩. Creates Bell-state entanglement when control is in superposition.'},
+  MEASURE:{label:'Measure',short:'collapse to eigenstate',ctrl:'Projective Z-basis measurement. Collapses |ψ⟩ to |0⟩ or |1⟩. Partially restores coherence (+10).'},
+};
+
+// ═══════════════════════════════════════════════════════
+// PIXEL ART SPRITES  (7 cols × 9 rows bitmaps)
+// ═══════════════════════════════════════════════════════
+const SPRITES = {
+  K:[[0,1,0,1,0,1,0],[0,1,1,1,1,1,0],[0,0,0,1,0,0,0],[0,1,1,1,1,1,0],[0,0,0,1,0,0,0],[1,1,1,1,1,1,1],[0,1,1,1,1,1,0],[0,0,1,1,1,0,0],[0,1,1,1,1,1,0]],
+  Q:[[1,0,1,0,1,0,1],[1,1,1,1,1,1,1],[0,1,1,1,1,1,0],[0,0,1,1,1,0,0],[0,1,1,1,1,1,0],[1,1,1,1,1,1,1],[0,1,1,1,1,1,0],[0,0,1,1,1,0,0],[1,1,1,1,1,1,1]],
+  R:[[1,0,1,0,1,0,1],[1,1,1,1,1,1,1],[0,1,0,0,0,1,0],[0,1,0,1,0,1,0],[0,1,1,1,1,1,0],[0,1,1,1,1,1,0],[1,1,1,1,1,1,1],[1,1,1,1,1,1,1],[0,1,1,1,1,1,0]],
+  B:[[0,0,0,1,0,0,0],[0,0,1,1,1,0,0],[0,1,1,0,1,1,0],[0,0,1,1,1,0,0],[0,0,0,1,0,0,0],[0,1,1,1,1,1,0],[1,1,1,1,1,1,1],[0,1,1,1,1,1,0],[0,1,1,1,1,1,0]],
+  N:[[0,0,1,1,1,0,0],[0,1,1,1,1,1,0],[1,1,0,1,1,1,0],[1,1,1,1,1,0,0],[0,1,1,1,1,0,0],[0,0,1,1,1,1,0],[0,0,0,1,1,1,1],[0,0,1,1,1,1,0],[0,1,0,0,1,0,0]],
+  P:[[0,0,0,1,0,0,0],[0,0,1,1,1,0,0],[0,0,1,1,1,0,0],[0,0,0,1,0,0,0],[0,0,1,1,1,0,0],[0,1,1,1,1,1,0],[0,0,1,1,1,0,0],[0,0,1,1,1,0,0],[0,1,1,1,1,1,0]],
+};
+
+function drawSprite(cx2, cy2, sz, type, baseCol, hlCol, sdCol) {
+  const spr = SPRITES[type];
+  const rows = spr.length, cols = spr[0].length;
+  const sc = Math.floor(sz * 0.40 / cols); // pixels per sprite-pixel
+  const w = cols*sc, h = rows*sc;
+  const ox = cx2 - w/2, oy = cy2 - h/2 - 2;
+  for (let r=0; r<rows; r++) {
+    for (let c=0; c<cols; c++) {
+      if (!spr[r][c]) continue;
+      const px = ox+c*sc, py = oy+r*sc;
+      ctx.fillStyle = baseCol;
+      ctx.fillRect(px, py, sc, sc);
+      // highlight: top + left edges
+      ctx.fillStyle = hlCol;
+      ctx.fillRect(px, py, sc, 1);
+      ctx.fillRect(px, py, 1, sc);
+      // shadow: bottom + right edges
+      ctx.fillStyle = sdCol;
+      ctx.fillRect(px, py+sc-1, sc, 1);
+      ctx.fillRect(px+sc-1, py, 1, sc);
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+// PIECE DEFINITIONS
+// ═══════════════════════════════════════════════════════
+const PIECE_DEFS = {
+  K:{name:'KING',  sym:{white:'♔',black:'♚'},maxCoh:100,gates:['Z','S'],moves:'king',
+     role:'Logical qubit — stabilized by phase gates',
+     hint:'Z and S gates rotate the Bloch vector around Z without disturbing |0⟩ ground population. Pure phase accumulation — your King\'s shield.'},
+  Q:{name:'QUEEN', sym:{white:'♕',black:'♛'},maxCoh:80, gates:['H','Y'],moves:'queen',
+     role:'Superposition qubit — |+⟩=(|0⟩+|1⟩)/√2',
+     hint:'H drives the Queen to the Bloch equator — maximum quantum uncertainty. Y adds imaginary cross-amplitudes for interference.'},
+  R:{name:'ROOK',  sym:{white:'♖',black:'♜'},maxCoh:90, gates:['X','Z'],moves:'rook',
+     role:'Computational qubit — classical bit-flip control',
+     hint:'X performs full population inversion (π around X). Z flips the |1⟩ phase. Complete Z-basis control.'},
+  B:{name:'BISHOP',sym:{white:'♗',black:'♝'},maxCoh:75, gates:['T','S'],moves:'bishop',
+     role:'Phase qubit — precision phase accumulation',
+     hint:'T and S rotate the Bloch vector around Z by π/4 and π/2. Chain T⁴=Z, S²=Z. Non-Clifford T enables universal control.'},
+  N:{name:'KNIGHT',sym:{white:'♘',black:'♞'},maxCoh:85, gates:['Ry','Rx'],moves:'knight',
+     role:'Tunneling qubit — Rabi/Larmor oscillation',
+     hint:'Ry/Rx model Rabi oscillation and Larmor precession. When coherence > 60%, the qubit tunnels through classically forbidden squares.'},
+  P:{name:'PAWN',  sym:{white:'♙',black:'♟'},maxCoh:70, gates:['X','H'],moves:'pawn',
+     role:'Ground-state qubit |0⟩ — awaiting excitation',
+     hint:'X excites |0⟩→|1⟩, increasing capture power. At promotion, H drives |0⟩→|+⟩ — the pawn becomes a superposition controller.'},
+};
+
+// ═══════════════════════════════════════════════════════
+// PIECE FACTORY + BOARD SETUP
+// ═══════════════════════════════════════════════════════
+let _uid = 0;
+function createPiece(type, color, row, col) {
+  const def = PIECE_DEFS[type];
+  const initState = ({
+    Q: blochToState(π/2, 0),
+    B: blochToState(π/4, π/4),
+    N: blochToState(π/3, π/6),
+  })[type] || blochToState(0,0);
+  return {
+    type, color, row, col,
+    state:       initState,
+    coherence:   def.maxCoh,
+    maxCoh:      def.maxCoh,
+    entangledWith: null,
+    hasMoved:    false,
+    inSuperpos:  type==='Q',
+    id:          `${color[0]}${type}${_uid++}`,
+  };
+}
+
+function initBoard() {
+  _uid = 0;
+  const back = ['R','N','B','Q','K','B','N','R'];
+  const out  = [];
+  for (let c=0; c<8; c++) {
+    out.push(createPiece(back[c],'white',7,c));
+    out.push(createPiece('P',   'white',6,c));
+    out.push(createPiece(back[c],'black',0,c));
+    out.push(createPiece('P',   'black',1,c));
+  }
+  return out;
+}
+
+// ═══════════════════════════════════════════════════════
+// GAME STATE
+// ═══════════════════════════════════════════════════════
+const GAME = {
+  pieces:[],
+  turn:'white', phase:'move',
+  selected:null,     // piece reference, NOT index
+  validMoves:[],
+  turnCount:0,
+  mode:'vsBot', botColor:'black',
+  decoRate:3,
+  log:[], gateMenu:null, winner:null,
+  cnotMode:false, cnotControl:null,
+  particles:[],
+  inCheck:null,     // color of player in check
+  difficulty:1,     // 0=easy, 1=medium, 2=hard
+  attractMode:false,
+};
+
+let _attractTimer = null;
+
+const ALL_GATE_IDS = ['H','X','Y','Z','S','T','Rx','Ry','CNOT','MEASURE'];
+
+function resetGame(mode) {
+  Object.assign(GAME, {
+    pieces:initBoard(), turn:'white', phase:'move',
+    selected:null, validMoves:[], turnCount:0,
+    mode:mode||'vsBot', log:[], gateMenu:null, winner:null,
+    cnotMode:false, cnotControl:null, particles:[],
+    inCheck:null,
+    attractMode: mode === 'attract',
+  });
+  ALL_GATE_IDS.forEach(g => {
+    const el = document.getElementById(`cnt-${g}`);
+    if (el) el.textContent = '0';
+  });
+  document.getElementById('check-warn').style.display = 'none';
+  document.getElementById('attract-badge').style.display =
+    mode === 'attract' ? 'block' : 'none';
+  logEv('Game started — WHITE moves first. Each piece is a qubit; each move applies a gate.','system');
+  updateHUD();
+}
+
+// ═══════════════════════════════════════════════════════
+// MOVEMENT RULES
+// ═══════════════════════════════════════════════════════
+const inBounds = (r,c) => r>=0&&r<8&&c>=0&&c<8;
+const pieceAt  = (r,c) => GAME.pieces.find(p=>p.row===r&&p.col===c);
+
+function getRawMoves(piece) {
+  const {row:r, col:c, type, color} = piece;
+  const enemy = color==='white'?'black':'white';
+  const mvs = [];
+
+  const tryAdd = (tr,tc) => {
+    if (!inBounds(tr,tc)) return;
+    const occ = pieceAt(tr,tc);
+    if (!occ)                    mvs.push({row:tr,col:tc,mtype:'move'});
+    else if (occ.color===enemy)  mvs.push({row:tr,col:tc,mtype:'capture',target:occ});
+  };
+
+  const slide = (dr,dc) => {
+    let [tr,tc]=[r+dr,c+dc];
+    while (inBounds(tr,tc)) {
+      const occ = pieceAt(tr,tc);
+      if (!occ) { mvs.push({row:tr,col:tc,mtype:'move'}); tr+=dr; tc+=dc; continue; }
+      if (occ.color===enemy) mvs.push({row:tr,col:tc,mtype:'capture',target:occ});
+      break;
+    }
+  };
+
+  switch (type) {
+    case 'P': {
+      const dir = color==='white'?-1:1;
+      if (inBounds(r+dir,c) && !pieceAt(r+dir,c)) {
+        mvs.push({row:r+dir,col:c,mtype:'move'});
+        if (!piece.hasMoved && inBounds(r+2*dir,c) && !pieceAt(r+2*dir,c))
+          mvs.push({row:r+2*dir,col:c,mtype:'move'});
+      }
+      for (const dc of [-1,1]) {
+        const occ = pieceAt(r+dir,c+dc);
+        if (inBounds(r+dir,c+dc) && occ && occ.color===enemy)
+          mvs.push({row:r+dir,col:c+dc,mtype:'capture',target:occ});
+      }
+      break;
+    }
+    case 'R': [[0,1],[0,-1],[1,0],[-1,0]].forEach(([dr,dc])=>slide(dr,dc)); break;
+    case 'B': [[1,1],[1,-1],[-1,1],[-1,-1]].forEach(([dr,dc])=>slide(dr,dc)); break;
+    case 'Q': [[0,1],[0,-1],[1,0],[-1,0],[1,1],[1,-1],[-1,1],[-1,-1]].forEach(([dr,dc])=>slide(dr,dc)); break;
+    case 'K': [[0,1],[0,-1],[1,0],[-1,0],[1,1],[1,-1],[-1,1],[-1,-1]].forEach(([dr,dc])=>tryAdd(r+dr,c+dc)); break;
+    case 'N':
+      [[2,1],[2,-1],[-2,1],[-2,-1],[1,2],[1,-2],[-1,2],[-1,-2]].forEach(([dr,dc])=>tryAdd(r+dr,c+dc));
+      if (piece.coherence>60) {
+        [[3,0],[-3,0],[0,3],[0,-3]].forEach(([dr,dc])=>{
+          if (inBounds(r+dr,c+dc) && !pieceAt(r+dr,c+dc))
+            mvs.push({row:r+dr,col:c+dc,mtype:'tunnel'});
+        });
+      }
+      break;
+  }
+  return mvs;
+}
+
+// ═══════════════════════════════════════════════════════
+// CHECK DETECTION + LEGAL MOVES
+// ═══════════════════════════════════════════════════════
+function isSquareAttacked(row, col, byColor) {
+  return GAME.pieces.some(p => {
+    if (p.color !== byColor) return false;
+    return getRawMoves(p).some(m => m.row===row && m.col===col);
+  });
+}
+
+function isInCheck(color) {
+  const king = GAME.pieces.find(p => p.type==='K' && p.color===color);
+  if (!king) return false;
+  const enemy = color==='white'?'black':'white';
+  return isSquareAttacked(king.row, king.col, enemy);
+}
+
+function getValidMoves(piece) {
+  const raw = getRawMoves(piece);
+  return raw.filter(mv => {
+    const savedRow = piece.row, savedCol = piece.col;
+    const tgt = mv.target;
+    const tIdx = tgt ? GAME.pieces.indexOf(tgt) : -1;
+    piece.row = mv.row; piece.col = mv.col;
+    if (tgt && tIdx>=0) GAME.pieces.splice(tIdx,1);
+    const inCk = isInCheck(piece.color);
+    piece.row = savedRow; piece.col = savedCol;
+    if (tgt && tIdx>=0) GAME.pieces.splice(tIdx,0,tgt);
+    return !inCk;
+  });
+}
+
+// ═══════════════════════════════════════════════════════
+// PARTICLES
+// ═══════════════════════════════════════════════════════
+function spawn(cx, cy, color, n=8) {
+  for (let i=0; i<n; i++) {
+    const a=Math.random()*2*π, spd=1+Math.random()*3;
+    GAME.particles.push({
+      x:cx,y:cy,vx:Math.cos(a)*spd,vy:Math.sin(a)*spd,
+      life:1,decay:0.026+Math.random()*0.03,r:2+Math.random()*2.5,color,
+    });
+  }
+}
+function tickParticles() {
+  GAME.particles = GAME.particles.filter(p=>{
+    p.x+=p.vx; p.y+=p.vy; p.vy+=0.07; p.life-=p.decay;
+    return p.life>0;
+  });
+}
+
+// ═══════════════════════════════════════════════════════
+// TURN LOGIC
+// ═══════════════════════════════════════════════════════
+function selectPiece(piece) {
+  if (!piece || piece.color!==GAME.turn) return;
+  GAME.selected   = piece;
+  GAME.validMoves = getValidMoves(piece);
+  GAME.gateMenu   = null;
+  sfxSelect();
+  updateSelInfo(piece);
+}
+
+const coord = (r,c) => `${String.fromCharCode(97+c)}${8-r}`;
+
+function movePiece(piece, toRow, toCol, mtype, target) {
+  if (target) {
+    const meas = measureState(target.state);
+    const xp   = (C.norm2(target.state.beta)*100).toFixed(0);
+    logEv(
+      `CAPTURE: ${piece.color} ${PIECE_DEFS[piece.type].name} captures ${target.color} `+
+      `${PIECE_DEFS[target.type].name} at ${coord(target.row,target.col)}. `+
+      `Target collapses to |${meas.collapsed}⟩ (was ${xp}% P(|1⟩)).`,'capture');
+    spawn(target.col*CELL+CELL/2, target.row*CELL+CELL/2,'#ff4081',16);
+    GAME.pieces = GAME.pieces.filter(p=>p!==target);
+    GAME.pieces.forEach(p=>{ if(p.entangledWith===target.id) p.entangledWith=null; });
+    sfxCapture();
+  } else {
+    sfxMove();
+  }
+
+  const [oldR,oldC] = [piece.row, piece.col];
+  piece.row=toRow; piece.col=toCol; piece.hasMoved=true;
+  spawn(toCol*CELL+CELL/2, toRow*CELL+CELL/2,'#00e5ff',6);
+
+  if (mtype==='tunnel') {
+    logEv(
+      `TUNNEL: ${piece.color} KNIGHT quantum-tunnels `+
+      `${coord(oldR,oldC)}→${coord(toRow,toCol)}. `+
+      `Wavefunction penetrates classically forbidden barrier. Coherence cost: −15.`,'gate');
+    piece.coherence = Math.max(0, piece.coherence-15);
+    spawn(toCol*CELL+CELL/2, toRow*CELL+CELL/2,'#ce93d8',14);
+    sfxTunnel();
+  }
+
+  // Pawn promotion
+  if (piece.type==='P') {
+    if ((piece.color==='white'&&toRow===0)||(piece.color==='black'&&toRow===7)) {
+      piece.type='Q';
+      piece.state=GATES.H(piece.state);
+      piece.inSuperpos=true;
+      piece.maxCoh=80;
+      logEv(
+        `PROMOTION: Pawn promoted to QUEEN via Hadamard! `+
+        `H drives |0⟩ into maximal superposition |+⟩=(|0⟩+|1⟩)/√2.`,'gate');
+      spawn(toCol*CELL+CELL/2, toRow*CELL+CELL/2,'#ffeb3b',22);
+      sfxPromotion();
+    }
+  }
+
+  logEv(`MOVE: ${piece.color} ${PIECE_DEFS[piece.type].name} `+
+    `${coord(oldR,oldC)}→${coord(toRow,toCol)}`,'info');
+
+  applyDecoherence(piece);
+  handleEntanglement(piece);
+  GAME.phase='gate';
+  updateHUD();
+}
+
+function applyDecoherence(movedPiece) {
+  const dead=[];
+
+  GAME.pieces.forEach(p => {
+    // Full decoherence only on the moved piece; environmental on others
+    const loss = (p===movedPiece)
+      ? GAME.decoRate + Math.random()*2
+      : Math.random() < 0.35 ? 1 : 0;  // 35% chance of -1 for idle pieces
+
+    p.coherence = Math.max(0, p.coherence - loss);
+
+    // T2 — superposition collapse
+    if (p.coherence<10 && p.inSuperpos) {
+      const meas=measureState(p.state);
+      p.state=meas.state; p.inSuperpos=false;
+      logEv(
+        `DECOHERENCE [T2]: ${p.color} ${PIECE_DEFS[p.type].name} loses phase coherence. `+
+        `Collapses to |${meas.collapsed}⟩. Quantum control lost.`,'decohere');
+      spawn(p.col*CELL+CELL/2, p.row*CELL+CELL/2,'#ff1744',12);
+      sfxDecohere();
+    }
+
+    // T1 — energy relaxation / spontaneous emission
+    if (p.coherence<5 && C.norm2(p.state.beta)>0.9) {
+      logEv(
+        `DECAY [T1]: ${p.color} ${PIECE_DEFS[p.type].name} lost to spontaneous emission. `+
+        `Excited |1⟩ with zero coherence — qubit dissipates energy and is removed.`,'decohere');
+      spawn(p.col*CELL+CELL/2, p.row*CELL+CELL/2,'#ff1744',20);
+      dead.push(p);
+      sfxDecohere();
+    }
+  });
+
+  if (dead.length) {
+    const deadIds = new Set(dead.map(p=>p.id));
+    GAME.pieces = GAME.pieces.filter(p=>!deadIds.has(p.id));
+    GAME.pieces.forEach(p=>{ if(deadIds.has(p.entangledWith)) p.entangledWith=null; });
+    if (GAME.selected && deadIds.has(GAME.selected.id)) {
+      GAME.selected=null; updateSelInfo(null);
+    }
+  }
+}
+
+function handleEntanglement(movedPiece) {
+  if (!movedPiece.entangledWith) return;
+  const partner = GAME.pieces.find(p=>p.id===movedPiece.entangledWith);
+  if (!partner) { movedPiece.entangledWith=null; return; }
+  const p1c = C.norm2(movedPiece.state.beta);
+  if (p1c>0.5) partner.state=normalizeState(GATES.X(partner.state));
+  logEv(
+    `ENTANGLEMENT: ${partner.color} ${PIECE_DEFS[partner.type].name} updated via CNOT `+
+    `(P(|1⟩)=${(p1c*100).toFixed(0)}%). Non-local quantum correlation.`,'quantum');
+}
+
+function applyGate(piece, gateName) {
+  const gate = GATES[gateName]; if (!gate) return;
+  piece.state      = normalizeState(gate(piece.state));
+  piece.inSuperpos = Math.abs(C.norm2(piece.state.alpha)-0.5)<0.2;
+  piece.coherence  = Math.max(0, piece.coherence-5);
+  logEv(`GATE [${gateName}] on ${piece.color} ${PIECE_DEFS[piece.type].name}: ${GATE_INFO[gateName]?.ctrl||gateName}`,'gate');
+  spawn(piece.col*CELL+CELL/2, piece.row*CELL+CELL/2,'#00e676',9);
+  sfxGate(gateName);
+  const el=document.getElementById(`cnt-${gateName}`);
+  if (el) el.textContent = parseInt(el.textContent||0)+1;
+}
+
+function applyMeasure(piece) {
+  const oldP1=(C.norm2(piece.state.beta)*100).toFixed(0);
+  const meas=measureState(piece.state);
+  piece.state=meas.state; piece.inSuperpos=false;
+  piece.coherence=Math.min(piece.maxCoh, piece.coherence+10);
+  logEv(
+    `MEASURE: ${piece.color} ${PIECE_DEFS[piece.type].name} → |${meas.collapsed}⟩. `+
+    `Collapsed from ${oldP1}% excited. Coherence restored (+10).`,'measure');
+  spawn(piece.col*CELL+CELL/2, piece.row*CELL+CELL/2,'#ffeb3b',14);
+  sfxGate('MEASURE');
+  const el=document.getElementById('cnt-MEASURE');
+  if (el) el.textContent = parseInt(el.textContent||0)+1;
+}
+
+function applyCNOT(ctrl, tgt) {
+  const p1c=C.norm2(ctrl.state.beta);
+  if (p1c>0.5) tgt.state=normalizeState(GATES.X(tgt.state));
+  ctrl.entangledWith=tgt.id; tgt.entangledWith=ctrl.id;
+  logEv(
+    `CNOT: ${ctrl.color} ${PIECE_DEFS[ctrl.type].name} (P(|1⟩)=${(p1c*100).toFixed(0)}%) ⊗ `+
+    `${tgt.color} ${PIECE_DEFS[tgt.type].name}. Bell-state entanglement created.`,'gate');
+  spawn(ctrl.col*CELL+CELL/2, ctrl.row*CELL+CELL/2,'#ff4081',10);
+  spawn(tgt.col*CELL+CELL/2,  tgt.row*CELL+CELL/2, '#ff4081',10);
+  sfxGate('CNOT');
+  const el=document.getElementById('cnt-CNOT');
+  if (el) el.textContent = parseInt(el.textContent||0)+1;
+}
+
+// ═══════════════════════════════════════════════════════
+// WIN / CHECKMATE / STALEMATE
+// ═══════════════════════════════════════════════════════
+function checkWinner() {
+  const wK = GAME.pieces.find(p=>p.type==='K'&&p.color==='white');
+  const bK = GAME.pieces.find(p=>p.type==='K'&&p.color==='black');
+  if (!wK) return 'black';
+  if (!bK) return 'white';
+  return null;
+}
+
+function endTurn() {
+  GAME.winner = checkWinner();
+  if (GAME.winner) {
+    logEv(`🏆 ${GAME.winner.toUpperCase()} WINS — the enemy King's qubit has fully decohered.`,'measure');
+    GAME.phase='gameover';
+    sfxWin();
+    return;
+  }
+
+  GAME.turn   = GAME.turn==='white'?'black':'white';
+  GAME.phase  = 'move';
+  GAME.selected = null;
+  GAME.validMoves = [];
+  GAME.gateMenu = null;
+  GAME.turnCount++;
+
+  // Check detection
+  if (isInCheck(GAME.turn)) {
+    GAME.inCheck = GAME.turn;
+    // Checkmate test
+    const hasMoves = GAME.pieces
+      .filter(p=>p.color===GAME.turn)
+      .some(p=>getValidMoves(p).length>0);
+    if (!hasMoves) {
+      const winner = GAME.turn==='white'?'black':'white';
+      logEv(`CHECKMATE! ${winner.toUpperCase()} wins! ${GAME.turn.toUpperCase()} has no legal moves.`,'measure');
+      GAME.winner = winner; GAME.phase='gameover';
+      sfxWin(); return;
+    }
+    logEv(`⚠ CHECK! ${GAME.turn.toUpperCase()} King is in check — must escape!`,'check');
+    document.getElementById('check-warn').style.display = 'block';
+    sfxCheck();
+  } else {
+    GAME.inCheck = null;
+    document.getElementById('check-warn').style.display = 'none';
+    // Stalemate test
+    const hasMoves = GAME.pieces
+      .filter(p=>p.color===GAME.turn)
+      .some(p=>getValidMoves(p).length>0);
+    if (!hasMoves) {
+      logEv('STALEMATE! No legal moves available — the game is a draw.','measure');
+      GAME.winner='draw'; GAME.phase='gameover'; return;
+    }
+  }
+
+  updateHUD();
+  updateSelInfo(null);
+
+  const isBotTurn = (GAME.mode==='vsBot' && GAME.turn===GAME.botColor) || GAME.mode==='attract';
+  if (isBotTurn) setTimeout(doBotMove, GAME.mode==='attract'?900:650);
+}
+
+// ═══════════════════════════════════════════════════════
+// BOT AI
+// ═══════════════════════════════════════════════════════
+function doBotMove() {
+  if (GAME.winner) return;
+  const playFor = GAME.mode==='attract' ? GAME.turn : GAME.botColor;
+  if (GAME.turn !== playFor) return;
+
+  const VALUES = {K:1000,Q:90,R:50,B:30,N:30,P:10};
+  let best=null, bestScore=-Infinity;
+
+  GAME.pieces.filter(p=>p.color===playFor).forEach(piece=>{
+    getValidMoves(piece).forEach(mv=>{
+      let score=0;
+
+      // Captures
+      if (mv.mtype==='capture') {
+        score += (VALUES[mv.target.type]||10)*2;
+        score += (100-mv.target.coherence)*0.25;
+      }
+
+      // Quantum tunnel bonus
+      if (mv.mtype==='tunnel') score+=18;
+
+      // Center gravity
+      score += (3.5-Math.abs(3.5-mv.row)) + (3.5-Math.abs(3.5-mv.col));
+
+      // Medium+: simulate and check if we can put enemy in check
+      if (GAME.difficulty>=1) {
+        const enemy = playFor==='white'?'black':'white';
+        const savedRow=piece.row, savedCol=piece.col;
+        const tIdx = mv.target ? GAME.pieces.indexOf(mv.target) : -1;
+        piece.row=mv.row; piece.col=mv.col;
+        if (mv.target && tIdx>=0) GAME.pieces.splice(tIdx,1);
+        if (isInCheck(enemy)) score+=35;
+        piece.row=savedRow; piece.col=savedCol;
+        if (mv.target && tIdx>=0) GAME.pieces.splice(tIdx,0,mv.target);
+      }
+
+      // Hard: coherence awareness
+      if (GAME.difficulty>=2 && piece.coherence<25) score-=20;
+
+      // Randomness inversely proportional to difficulty
+      score += Math.random() * [20, 8, 4][GAME.difficulty];
+
+      if (score>bestScore) { bestScore=score; best={piece,mv}; }
+    });
+  });
+
+  if (!best) { endTurn(); return; }
+
+  const {piece, mv} = best;
+  GAME.selected   = piece;
+  GAME.validMoves = getValidMoves(piece);
+
+  setTimeout(()=>{
+    movePiece(piece, mv.row, mv.col, mv.mtype, mv.target);
+
+    // Smart gate choice
+    const def = PIECE_DEFS[piece.type];
+    if (GAME.difficulty>=1 && piece.coherence<30) {
+      applyMeasure(piece);
+    } else if (GAME.difficulty>=2 && piece.entangledWith===null) {
+      // Hard bot occasionally entangles pieces
+      const teammate = GAME.pieces.find(p=>p!==piece&&p.color===playFor&&!p.entangledWith);
+      if (teammate && Math.random()<0.15) {
+        applyCNOT(piece, teammate);
+        GAME.selected=null; GAME.gateMenu=null;
+        endTurn(); return;
+      } else {
+        applyGate(piece, def.gates[Math.floor(Math.random()*def.gates.length)]);
+      }
+    } else {
+      applyGate(piece, def.gates[Math.floor(Math.random()*def.gates.length)]);
+    }
+
+    GAME.selected=null; GAME.gateMenu=null;
+    endTurn();
+  }, 420);
+}
+
+// ═══════════════════════════════════════════════════════
+// RENDERING
+// ═══════════════════════════════════════════════════════
+const canvas = document.getElementById('game-canvas');
+const ctx    = canvas.getContext('2d');
+let   _t     = 0;
+
+// ── Board ──────────────────────────────────────────────
+function drawBoard() {
+  for (let r=0; r<8; r++) {
+    for (let c=0; c<8; c++) {
+      const x=c*CELL, y=r*CELL;
+      const light = (r+c)%2===0;
+
+      ctx.fillStyle = light ? '#1c2252' : '#0e1236';
+      ctx.fillRect(x,y,CELL,CELL);
+
+      // Subtle inner highlight on light squares
+      if (light) {
+        ctx.fillStyle = '#ffffff07';
+        ctx.fillRect(x+1,y+1,CELL-2,CELL-2);
+        // Corner rivets (pixel art detail)
+        ctx.fillStyle = '#2a3268';
+        ctx.fillRect(x+2,y+2,2,2);
+        ctx.fillRect(x+CELL-4,y+2,2,2);
+        ctx.fillRect(x+2,y+CELL-4,2,2);
+        ctx.fillRect(x+CELL-4,y+CELL-4,2,2);
+      } else {
+        // Subtle crosshatch on dark squares
+        ctx.fillStyle = '#0c1030';
+        ctx.fillRect(x,y,1,CELL);
+        ctx.fillRect(x,y,CELL,1);
+      }
+
+      // Coordinates
+      ctx.font = "8px 'Share Tech Mono',monospace";
+      ctx.fillStyle = light ? '#303870' : '#1c2250';
+      ctx.textAlign='left'; ctx.textBaseline='top';
+      if (c===0) ctx.fillText(8-r, x+3, y+3);
+      if (r===7) {
+        ctx.textAlign='right'; ctx.textBaseline='bottom';
+        ctx.fillText('abcdefgh'[c], x+CELL-3, y+CELL-2);
+      }
+    }
+  }
+  ctx.textAlign='left'; ctx.textBaseline='alphabetic';
+
+  // Check highlight — pulsing red on king square
+  if (GAME.inCheck) {
+    const king = GAME.pieces.find(p=>p.type==='K'&&p.color===GAME.inCheck);
+    if (king) {
+      const kx=king.col*CELL, ky=king.row*CELL;
+      const pulse = 0.5+0.5*Math.sin(_t*0.18);
+      ctx.fillStyle = `rgba(255,23,68,${0.22*pulse})`;
+      ctx.fillRect(kx,ky,CELL,CELL);
+      ctx.strokeStyle = `rgba(255,23,68,${0.9*pulse})`;
+      ctx.lineWidth=2;
+      ctx.shadowColor='#ff1744'; ctx.shadowBlur=14*pulse;
+      ctx.strokeRect(kx+1,ky+1,CELL-2,CELL-2);
+      ctx.shadowBlur=0;
+    }
+  }
+}
+
+// ── Highlights ─────────────────────────────────────────
+function drawHighlights() {
+  // Selected piece highlight
+  const p = GAME.selected;
+  if (p) {
+    ctx.fillStyle='#ffeb3b10';
+    ctx.fillRect(p.col*CELL,p.row*CELL,CELL,CELL);
+    ctx.strokeStyle='#ffeb3b'; ctx.lineWidth=2;
+    ctx.shadowColor='#ffeb3b'; ctx.shadowBlur=12;
+    ctx.strokeRect(p.col*CELL+1,p.row*CELL+1,CELL-2,CELL-2);
+    ctx.shadowBlur=0;
+  }
+
+  // Valid move indicators
+  GAME.validMoves.forEach(mv=>{
+    const [x,y]=[mv.col*CELL, mv.row*CELL];
+    if (mv.mtype==='capture') {
+      ctx.fillStyle='#ff174420'; ctx.fillRect(x,y,CELL,CELL);
+      ctx.strokeStyle='#ff1744'; ctx.lineWidth=2;
+      ctx.shadowColor='#ff1744'; ctx.shadowBlur=8;
+      ctx.strokeRect(x+2,y+2,CELL-4,CELL-4);
+      ctx.shadowBlur=0;
+    } else if (mv.mtype==='tunnel') {
+      ctx.fillStyle='#ce93d818'; ctx.fillRect(x,y,CELL,CELL);
+      ctx.strokeStyle='#ce93d8'; ctx.lineWidth=1.5;
+      ctx.shadowColor='#ce93d8'; ctx.shadowBlur=7;
+      ctx.setLineDash([5,5]);
+      ctx.strokeRect(x+2,y+2,CELL-4,CELL-4);
+      ctx.setLineDash([]); ctx.shadowBlur=0;
+    } else {
+      const pulse = 0.55+0.45*Math.sin(_t*0.09);
+      ctx.fillStyle=`rgba(0,230,118,${0.11*pulse})`;
+      ctx.fillRect(x,y,CELL,CELL);
+      ctx.fillStyle='#00e676';
+      ctx.shadowColor='#00e676'; ctx.shadowBlur=7*pulse;
+      ctx.beginPath(); ctx.arc(x+CELL/2,y+CELL/2,6*pulse,0,2*π); ctx.fill();
+      ctx.shadowBlur=0;
+    }
+  });
+
+  // CNOT target flash
+  if (GAME.cnotMode) {
+    const pulse=0.6+0.4*Math.sin(_t*0.13);
+    GAME.pieces.forEach(p2=>{
+      if (p2===GAME.cnotControl) return;
+      const [x,y]=[p2.col*CELL, p2.row*CELL];
+      ctx.strokeStyle=`rgba(255,64,129,${pulse})`;
+      ctx.lineWidth=1.5; ctx.setLineDash([4,4]);
+      ctx.strokeRect(x+3,y+3,CELL-6,CELL-6);
+      ctx.setLineDash([]);
+    });
+  }
+}
+
+// ── Entanglement beams ─────────────────────────────────
+function drawEntanglementBeams() {
+  const drawn=new Set();
+  GAME.pieces.forEach(p=>{
+    if (!p.entangledWith) return;
+    const key=[p.id,p.entangledWith].sort().join('|');
+    if (drawn.has(key)) return;
+    drawn.add(key);
+    const partner=GAME.pieces.find(q=>q.id===p.entangledWith);
+    if (!partner) return;
+    const x1=p.col*CELL+CELL/2, y1=p.row*CELL+CELL/2;
+    const x2=partner.col*CELL+CELL/2, y2=partner.row*CELL+CELL/2;
+    const pulse=0.4+0.6*Math.sin(_t*0.06);
+    ctx.save();
+    ctx.strokeStyle=`rgba(255,64,129,${0.65*pulse})`;
+    ctx.lineWidth=1.5;
+    ctx.shadowColor='#ff4081'; ctx.shadowBlur=10*pulse;
+    ctx.setLineDash([4,4]);
+    ctx.lineDashOffset=-(_t*0.5);
+    ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
+    ctx.restore();
+    ctx.setLineDash([]);
+  });
+}
+
+// ── Pieces ─────────────────────────────────────────────
+function drawPiece(piece) {
+  const x=piece.col*CELL, y=piece.row*CELL;
+  const cx=x+CELL/2, cy=y+CELL/2;
+  const excP=C.norm2(piece.state.beta);
+  const cohF=piece.coherence/piece.maxCoh;
+  const isW=piece.color==='white';
+
+  // Superposition shimmer halo
+  if (piece.inSuperpos) {
+    const shimmer=0.4+0.6*Math.sin(_t*0.07+piece.col*0.9+piece.row*1.3);
+    const g=ctx.createRadialGradient(cx,cy,8,cx,cy,37);
+    g.addColorStop(0,`rgba(0,229,255,${0.22*shimmer})`);
+    g.addColorStop(1,'transparent');
+    ctx.fillStyle=g;
+    ctx.beginPath(); ctx.arc(cx,cy,37,0,2*π); ctx.fill();
+  }
+
+  // Entanglement ring
+  if (piece.entangledWith) {
+    const pulse=0.45+0.55*Math.sin(_t*0.055);
+    ctx.strokeStyle=`rgba(255,64,129,${0.6*pulse})`;
+    ctx.lineWidth=1.5; ctx.setLineDash([4,4]);
+    ctx.shadowColor='#ff4081'; ctx.shadowBlur=9*pulse;
+    ctx.beginPath(); ctx.arc(cx,cy,36,0,2*π); ctx.stroke();
+    ctx.setLineDash([]); ctx.shadowBlur=0;
+  }
+
+  // Decoherence flicker
+  if (piece.coherence<20) {
+    if (Math.sin(_t*0.28+piece.col*5.3)>0.15) {
+      ctx.fillStyle='rgba(255,109,0,0.12)';
+      ctx.fillRect(x,y,CELL,CELL);
+    }
+  }
+
+  // Compute pixel colors based on excitation
+  let bR,bG,bB;
+  if (isW) {
+    bR=Math.round(175+excP*80); bG=Math.round(200-excP*100); bB=245;
+  } else {
+    bR=Math.round(28+excP*210); bG=Math.round(14+excP*16); bB=Math.round(82-excP*65);
+  }
+  const baseCol=`rgb(${bR},${bG},${bB})`;
+  const hlCol  =`rgb(${Math.min(255,bR+55)},${Math.min(255,bG+55)},${Math.min(255,bB+45)})`;
+  const sdCol  =`rgb(${Math.max(0,bR-55)},${Math.max(0,bG-55)},${Math.max(0,bB-65)})`;
+
+  // Glow based on quantum state
+  const glowCol = piece.inSuperpos ? '#00e5ff'
+    : excP>0.7 ? '#ff1744'
+    : cohF<0.25 ? '#ff6d00'
+    : (isW ? '#b0c4ff' : '#8050d0');
+  const glowBlur = piece.inSuperpos ? 14 : excP>0.7 ? 11 : cohF<0.25 ? 8 : 4;
+  ctx.shadowColor=glowCol; ctx.shadowBlur=glowBlur;
+
+  drawSprite(cx, cy-2, CELL, piece.type, baseCol, hlCol, sdCol);
+
+  ctx.shadowBlur=0;
+
+  // Coherence bar — pixel art style
+  const bW=40, bH=4, bX=cx-bW/2, bY=cy+24;
+  ctx.fillStyle='#020210';
+  ctx.fillRect(bX-1,bY-1,bW+2,bH+2);
+  ctx.fillStyle='#080822';
+  ctx.fillRect(bX,bY,bW,bH);
+  const cc=cohF>0.6?'#00e676':cohF>0.3?'#ffeb3b':'#ff1744';
+  ctx.fillStyle=cc;
+  if (cohF>0.4) { ctx.shadowColor=cc; ctx.shadowBlur=4; }
+  ctx.fillRect(bX,bY,Math.floor(bW*cohF),bH);
+  ctx.shadowBlur=0;
+
+  // State dot
+  const dotCol = excP>0.7?'#ff1744': excP>0.22?'#00e5ff':'#00e676';
+  ctx.fillStyle=dotCol; ctx.shadowColor=dotCol; ctx.shadowBlur=9;
+  ctx.beginPath(); ctx.arc(cx, cy-29, 3.5, 0, 2*π); ctx.fill();
+  ctx.shadowBlur=0;
+}
+
+// ── Particles ──────────────────────────────────────────
+function drawParticles() {
+  GAME.particles.forEach(p=>{
+    ctx.globalAlpha=p.life;
+    ctx.fillStyle=p.color;
+    ctx.beginPath(); ctx.arc(p.x,p.y,p.r*p.life,0,2*π); ctx.fill();
+  });
+  ctx.globalAlpha=1;
+}
+
+// ── Gate menu ──────────────────────────────────────────
+const MENU_W=192, MENU_IH=33;
+
+function menuPos(piece) {
+  const MH = GAME.gateMenu ? GAME.gateMenu.options.length*MENU_IH+48 : 0;
+  let mx=piece.col*CELL+CELL+6, my=piece.row*CELL;
+  if (mx+MENU_W>640) mx=piece.col*CELL-MENU_W-6;
+  if (my+MH>640)     my=640-MH;
+  return {mx,my,MH};
+}
+
+function drawGateMenu() {
+  if (!GAME.gateMenu) return;
+  const {piece, options} = GAME.gateMenu;
+  const {mx,my,MH} = menuPos(piece);
+
+  // Menu background
+  ctx.fillStyle='#040418f8';
+  ctx.strokeStyle='#343898';
+  ctx.lineWidth=1.5;
+  ctx.shadowColor='#1010ff'; ctx.shadowBlur=20;
+  ctx.fillRect(mx,my,MENU_W,MH);
+  ctx.strokeRect(mx,my,MENU_W,MH);
+  ctx.shadowBlur=0;
+
+  // Pixel-art corner accents
+  ctx.fillStyle='#343898';
+  [[mx,my],[mx+MENU_W-4,my],[mx,my+MH-4],[mx+MENU_W-4,my+MH-4]].forEach(([ax,ay])=>{
+    ctx.fillRect(ax,ay,4,4);
+  });
+
+  ctx.fillStyle='#ffeb3b';
+  ctx.font="bold 7px 'Press Start 2P',monospace";
+  ctx.fillText('APPLY GATE', mx+9,my+14);
+  ctx.fillStyle='#1a1e58'; ctx.fillRect(mx+5,my+20,MENU_W-10,1);
+
+  const hovered=GAME._menuHover;
+  options.forEach((opt,i)=>{
+    const oy=my+24+i*MENU_IH;
+    const isHov=(hovered===i);
+    ctx.fillStyle=isHov?'#0e0e38':'#08082a';
+    ctx.strokeStyle=isHov?'#343898':'#12163a';
+    ctx.lineWidth=1;
+    ctx.fillRect(mx+4,oy+2,MENU_W-8,MENU_IH-4);
+    ctx.strokeRect(mx+4,oy+2,MENU_W-8,MENU_IH-4);
+
+    ctx.fillStyle = opt.action==='SKIP' ? '#7c4dff'
+      : isHov ? '#00e5ff' : '#00c4dd';
+    ctx.font="bold 6px 'Press Start 2P',monospace";
+    ctx.fillText(opt.label, mx+10, oy+14);
+
+    ctx.fillStyle='#484e78';
+    ctx.font="8px 'Share Tech Mono',monospace";
+    ctx.fillText(opt.short||'', mx+10, oy+26);
+  });
+}
+
+// ── Turn banner ────────────────────────────────────────
+function drawTurnBanner() {
+  const isW=GAME.turn==='white';
+  const g=ctx.createLinearGradient(0,0,640,0);
+  g.addColorStop(0,'transparent');
+  g.addColorStop(0.5, isW?'#1c2248bb':'#0a0a2abb');
+  g.addColorStop(1,'transparent');
+  ctx.fillStyle=g; ctx.fillRect(0,0,640,18);
+  ctx.textAlign='center';
+  ctx.fillStyle=isW?'#c0c8f0':'#8888cc';
+  ctx.font="bold 6px 'Press Start 2P',monospace";
+  ctx.fillText(
+    `${GAME.turn.toUpperCase()} ▸ ${GAME.phase.toUpperCase()} PHASE  |  TURN ${GAME.turnCount+1}`,
+    320,12
+  );
+  ctx.textAlign='left';
+}
+
+// ── Overlays ───────────────────────────────────────────
+function drawOverlay() {
+  if (GAME.phase==='gameover' && GAME.winner) {
+    ctx.fillStyle='rgba(0,0,0,0.85)';
+    ctx.fillRect(0,0,640,640);
+    ctx.textAlign='center';
+
+    if (GAME.winner==='draw') {
+      ctx.font="bold 18px 'Press Start 2P',monospace";
+      ctx.fillStyle='#7c4dff'; ctx.shadowColor='#7c4dff'; ctx.shadowBlur=22;
+      ctx.fillText('STALEMATE', 320,268);
+      ctx.shadowBlur=0;
+      ctx.font="10px 'Share Tech Mono',monospace"; ctx.fillStyle='#c0c8e8';
+      ctx.fillText('No legal moves remain — quantum deadlock.', 320,304);
+    } else {
+      ctx.font="bold 20px 'Press Start 2P',monospace";
+      ctx.fillStyle='#ffeb3b'; ctx.shadowColor='#ffeb3b'; ctx.shadowBlur=24;
+      ctx.fillText(`${GAME.winner.toUpperCase()} WINS`, 320,268);
+      ctx.shadowBlur=0;
+      ctx.font="10px 'Share Tech Mono',monospace"; ctx.fillStyle='#c0c8e8';
+      ctx.fillText("The enemy King's qubit has decohered.", 320,304);
+    }
+    ctx.fillStyle='#484e78';
+    ctx.font="8px 'Share Tech Mono',monospace";
+    ctx.fillText('Click anywhere to return to menu.', 320,330);
+    ctx.textAlign='left';
+  }
+
+  if (GAME.cnotMode) {
+    ctx.fillStyle='rgba(255,64,129,0.07)'; ctx.fillRect(0,0,640,640);
+    ctx.textAlign='center';
+    ctx.font="bold 7px 'Press Start 2P',monospace";
+    ctx.fillStyle='#ff4081'; ctx.shadowColor='#ff4081'; ctx.shadowBlur=10;
+    ctx.fillText('SELECT CNOT TARGET — CLICK ANY PIECE  [ESC to cancel]',320,630);
+    ctx.shadowBlur=0; ctx.textAlign='left';
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+// BLOCH SPHERE
+// ═══════════════════════════════════════════════════════
+function drawBloch() {
+  const bc=document.getElementById('bloch-canvas');
+  const bx=bc.getContext('2d');
+  const [W,H,R,cx,cy]=[100,100,44,50,50];
+  bx.clearRect(0,0,W,H);
+
+  const bg=bx.createRadialGradient(cx,cy,0,cx,cy,R);
+  bg.addColorStop(0,'#0c0c2c'); bg.addColorStop(1,'#04041a');
+  bx.fillStyle=bg; bx.beginPath(); bx.arc(cx,cy,R,0,2*π); bx.fill();
+
+  bx.strokeStyle='#1e2878'; bx.lineWidth=1;
+  bx.beginPath(); bx.arc(cx,cy,R,0,2*π); bx.stroke();
+  bx.strokeStyle='#142060'; bx.lineWidth=0.7;
+  bx.beginPath(); bx.ellipse(cx,cy,R,R*0.27,0,0,2*π); bx.stroke();
+  bx.beginPath(); bx.ellipse(cx,cy,R*0.27,R,0,0,2*π); bx.stroke();
+  bx.strokeStyle='#1a2860'; bx.lineWidth=0.6;
+  bx.beginPath(); bx.moveTo(cx,cy-R+2); bx.lineTo(cx,cy+R-2); bx.stroke();
+  bx.beginPath(); bx.moveTo(cx-R+2,cy); bx.lineTo(cx+R-2,cy); bx.stroke();
+
+  bx.fillStyle='#384880'; bx.font="7px 'Share Tech Mono',monospace";
+  bx.fillText('|0⟩',cx+3,cy-R+10); bx.fillText('|1⟩',cx+3,cy+R-2);
+
+  const piece=GAME.selected; if (!piece) return;
+  const {theta,phi}=stateToBloch(piece.state);
+  const vx=Math.sin(theta)*Math.cos(phi);
+  const vy=Math.sin(theta)*Math.sin(phi);
+  const vz=Math.cos(theta);
+  const sx=cx+R*(vx*0.7+vy*0.3);
+  const sy=cy-R*vz;
+
+  const excP=C.norm2(piece.state.beta);
+  const vecCol = excP>0.7?'#ff1744': piece.inSuperpos?'#00e5ff':'#00e676';
+  bx.strokeStyle=vecCol; bx.lineWidth=2;
+  bx.shadowColor=vecCol; bx.shadowBlur=12;
+  bx.beginPath(); bx.moveTo(cx,cy); bx.lineTo(sx,sy); bx.stroke();
+  bx.fillStyle=vecCol;
+  bx.beginPath(); bx.arc(sx,sy,3.5,0,2*π); bx.fill();
+  bx.shadowBlur=0;
+  bx.fillStyle='rgba(255,255,255,0.25)';
+  bx.beginPath(); bx.arc(cx,cy,2,0,2*π); bx.fill();
+}
+
+// ═══════════════════════════════════════════════════════
+// HUD
+// ═══════════════════════════════════════════════════════
+function updateHUD() {
+  const white=GAME.pieces.filter(p=>p.color==='white');
+  const black=GAME.pieces.filter(p=>p.color==='black');
+  const avg=arr=>arr.length?Math.round(arr.reduce((s,p)=>s+p.coherence,0)/arr.length):0;
+  const cohClr=v=>v>60?'#00e676':v>30?'#ffeb3b':'#ff1744';
+
+  const wc=avg(white), bc=avg(black);
+  document.getElementById('p1-coh').textContent=wc+'%';
+  document.getElementById('p2-coh').textContent=bc+'%';
+  const wf=document.getElementById('p1-cbar'), bf=document.getElementById('p2-cbar');
+  if (wf){wf.style.width=wc+'%'; wf.style.background=cohClr(wc);}
+  if (bf){bf.style.width=bc+'%'; bf.style.background=cohClr(bc);}
+  document.getElementById('p1-ent').textContent=white.filter(p=>p.entangledWith).length;
+  document.getElementById('p2-ent').textContent=black.filter(p=>p.entangledWith).length;
+  document.getElementById('p1-cnt').textContent=white.length;
+  document.getElementById('p2-cnt').textContent=black.length;
+  document.getElementById('turn-info').textContent=GAME.turn.toUpperCase()+' to move';
+  document.getElementById('phase-info').textContent=GAME.phase.toUpperCase()+' phase';
+  document.getElementById('turn-cnt').textContent=GAME.turnCount+1;
+}
+
+function updateSelInfo(piece) {
+  if (!piece) {
+    document.getElementById('sel-name').textContent='—';
+    document.getElementById('sel-eq').textContent='|ψ⟩ = —';
+    document.getElementById('sel-theta').textContent='—';
+    document.getElementById('sel-phi').textContent='—';
+    document.getElementById('sel-coh').textContent='—';
+    document.getElementById('sel-hint').textContent='';
+    drawBloch(); return;
+  }
+  const {theta,phi}=stateToBloch(piece.state);
+  const def=PIECE_DEFS[piece.type];
+  document.getElementById('sel-name').textContent=`${piece.color.toUpperCase()} ${def.name}`;
+  document.getElementById('sel-eq').textContent=fmtState(piece.state);
+  document.getElementById('sel-theta').textContent=(theta*180/π).toFixed(1)+'°';
+  document.getElementById('sel-phi').textContent=(phi*180/π).toFixed(1)+'°';
+  document.getElementById('sel-coh').textContent=piece.coherence.toFixed(0)+'%';
+  document.getElementById('sel-hint').textContent=def.hint;
+  drawBloch();
+}
+
+// ═══════════════════════════════════════════════════════
+// LOG
+// ═══════════════════════════════════════════════════════
+function logEv(msg, type) {
+  const log=document.getElementById('log');
+  const span=document.createElement('span');
+  span.className=`ev-${type}`;
+  span.textContent=`[T${GAME.turnCount+1}] ${msg}`;
+  log.appendChild(span);
+  log.scrollTop=log.scrollHeight;
+  while (log.children.length>90) log.removeChild(log.firstChild);
+}
+
+// ═══════════════════════════════════════════════════════
+// GATE MENU LOGIC
+// ═══════════════════════════════════════════════════════
+GAME._menuHover = -1;
+
+function openGateMenu(piece) {
+  const def=PIECE_DEFS[piece.type];
+  GAME.gateMenu={
+    piece,
+    options:[
+      ...def.gates.map(g=>({
+        label:`[${g}] ${GATE_INFO[g]?.label||g}`,
+        short:GATE_INFO[g]?.short||'',
+        action:g,
+      })),
+      {label:'[⊕] Entangle (CNOT)', short:GATE_INFO.CNOT.short,    action:'CNOT'},
+      {label:'[M] Measure',          short:GATE_INFO.MEASURE.short,  action:'MEASURE'},
+      {label:'[·] Skip turn',         short:'',                       action:'SKIP'},
+    ],
+  };
+  GAME._menuHover=-1;
+  GAME.phase='gate';
+}
+
+function handleGateClick(mx,my) {
+  const {piece,options}=GAME.gateMenu;
+  const {mx:gx,my:gy}=menuPos(piece);
+  options.forEach((opt,i)=>{
+    const oy=gy+24+i*MENU_IH;
+    if (mx>=gx+4&&mx<=gx+MENU_W-4&&my>=oy+2&&my<=oy+MENU_IH-2) {
+      GAME.gateMenu=null;
+      switch (opt.action) {
+        case 'SKIP':    endTurn(); break;
+        case 'MEASURE': applyMeasure(piece); endTurn(); break;
+        case 'CNOT':
+          GAME.cnotMode=true; GAME.cnotControl=piece;
+          logEv('CNOT mode: click any piece to entangle. [ESC] to cancel.','quantum'); break;
+        default:
+          applyGate(piece, opt.action); endTurn();
+      }
+      if (GAME.pieces.includes(piece)) updateSelInfo(piece);
+    }
+  });
+}
+
+function getMenuHoverIndex(mx,my) {
+  if (!GAME.gateMenu) return -1;
+  const {piece,options}=GAME.gateMenu;
+  const {mx:gx,my:gy}=menuPos(piece);
+  for (let i=0;i<options.length;i++) {
+    const oy=gy+24+i*MENU_IH;
+    if (mx>=gx+4&&mx<=gx+MENU_W-4&&my>=oy+2&&my<=oy+MENU_IH-2) return i;
+  }
+  return -1;
+}
+
+// Keyboard shortcut gate lookup
+const KB_GATES = {h:'H',x:'X',y:'Y',z:'Z',s:'S',t:'T',m:'MEASURE'};
+
+// ═══════════════════════════════════════════════════════
+// INPUT — CLICK
+// ═══════════════════════════════════════════════════════
+canvas.addEventListener('click', e => {
+  ac(); // init audio on first interaction
+  cancelAttractSchedule();
+
+  const rect=canvas.getBoundingClientRect();
+  const scaleX=canvas.width/rect.width, scaleY=canvas.height/rect.height;
+  const mx=(e.clientX-rect.left)*scaleX;
+  const my=(e.clientY-rect.top)*scaleY;
+  const col=Math.floor(mx/CELL), row=Math.floor(my/CELL);
+
+  // Attract mode: any click stops demo
+  if (GAME.attractMode) {
+    stopAttractMode(); return;
+  }
+
+  // Game over → menu
+  if (GAME.phase==='gameover') { openMenu(); return; }
+
+  // CNOT target selection
+  if (GAME.cnotMode) {
+    const tgt=GAME.pieces.find(p=>p.row===row&&p.col===col);
+    if (tgt && tgt!==GAME.cnotControl) {
+      applyCNOT(GAME.cnotControl, tgt);
+      GAME.cnotMode=false; GAME.cnotControl=null;
+      endTurn();
+    } else if (!tgt) {
+      // Click empty → cancel CNOT
+      GAME.cnotMode=false; GAME.cnotControl=null;
+      logEv('CNOT cancelled.','system');
+    }
+    return;
+  }
+
+  // Gate menu click
+  if (GAME.gateMenu) { handleGateClick(mx,my); return; }
+
+  // Block during bot turn
+  if (GAME.mode==='vsBot' && GAME.turn===GAME.botColor) return;
+
+  // Move phase
+  if (GAME.phase==='move') {
+    if (GAME.selected) {
+      const mv=GAME.validMoves.find(m=>m.row===row&&m.col===col);
+      if (mv) {
+        const sp=GAME.selected;
+        movePiece(sp, mv.row, mv.col, mv.mtype, mv.target);
+        openGateMenu(sp);
+        updateSelInfo(sp);
+        return;
+      }
+    }
+    const clicked=GAME.pieces.find(p=>p.row===row&&p.col===col);
+    if (clicked && clicked.color===GAME.turn) {
+      selectPiece(clicked);
+    } else {
+      GAME.selected=null; GAME.validMoves=[];
+      updateSelInfo(null);
+    }
+  }
+});
+
+// Hover for menu highlight
+canvas.addEventListener('mousemove', e => {
+  if (!GAME.gateMenu) { GAME._menuHover=-1; return; }
+  const rect=canvas.getBoundingClientRect();
+  const mx=(e.clientX-rect.left)*(canvas.width/rect.width);
+  const my=(e.clientY-rect.top)*(canvas.height/rect.height);
+  GAME._menuHover=getMenuHoverIndex(mx,my);
+});
+
+// ═══════════════════════════════════════════════════════
+// INPUT — KEYBOARD
+// ═══════════════════════════════════════════════════════
+document.addEventListener('keydown', e => {
+  const key=e.key.toLowerCase();
+
+  // ESC: cancel everything
+  if (e.key==='Escape') {
+    if (GAME.cnotMode) {
+      GAME.cnotMode=false; GAME.cnotControl=null;
+      logEv('CNOT cancelled.','system');
+    } else if (GAME.gateMenu) {
+      GAME.gateMenu=null;
+    } else {
+      GAME.selected=null; GAME.validMoves=[];
+      updateSelInfo(null);
+    }
+    closeModal();
+    return;
+  }
+
+  // Only keyboard gates in gate phase
+  if (GAME.phase!=='gate' || !GAME.gateMenu) return;
+  const piece=GAME.gateMenu.piece;
+
+  // Gate keys (restricted to piece's allowed gates)
+  if (KB_GATES[key]) {
+    const gateName=KB_GATES[key];
+    const def=PIECE_DEFS[piece.type];
+    if (gateName!=='MEASURE' && !def.gates.includes(gateName)) return;
+    GAME.gateMenu=null;
+    if (gateName==='MEASURE') { applyMeasure(piece); }
+    else { applyGate(piece, gateName); }
+    endTurn();
+    if (GAME.pieces.includes(piece)) updateSelInfo(piece);
+    return;
+  }
+
+  // Rx/Ry (restricted to piece's allowed gates)
+  if (e.key==='r' || e.key==='R') {
+    const gName=e.shiftKey?'Rx':'Ry';
+    const def=PIECE_DEFS[piece.type];
+    if (!def.gates.includes(gName)) return;
+    GAME.gateMenu=null;
+    applyGate(piece, gName);
+    endTurn();
+    if (GAME.pieces.includes(piece)) updateSelInfo(piece);
+    return;
+  }
+
+  // Space/Enter = skip
+  if (e.key===' ' || e.key==='Enter') {
+    e.preventDefault();
+    GAME.gateMenu=null; endTurn(); return;
+  }
+
+  // C = CNOT
+  if (key==='c') {
+    GAME.gateMenu=null;
+    GAME.cnotMode=true; GAME.cnotControl=piece;
+    logEv('CNOT mode: click any piece to entangle. [ESC] to cancel.','quantum');
+    return;
+  }
+
+  // Number keys: select gate by index
+  const idx=parseInt(e.key)-1;
+  if (!isNaN(idx) && idx>=0 && idx<GAME.gateMenu.options.length) {
+    const opt=GAME.gateMenu.options[idx];
+    GAME.gateMenu=null;
+    switch(opt.action) {
+      case 'SKIP':    endTurn(); break;
+      case 'MEASURE': applyMeasure(piece); endTurn(); break;
+      case 'CNOT':
+        GAME.cnotMode=true; GAME.cnotControl=piece;
+        logEv('CNOT mode active.','quantum'); break;
+      default: applyGate(piece,opt.action); endTurn();
+    }
+    if (GAME.pieces.includes(piece)) updateSelInfo(piece);
+  }
+});
+
+// ═══════════════════════════════════════════════════════
+// MAIN GAME LOOP
+// ═══════════════════════════════════════════════════════
+function loop() {
+  _t++;
+  tickParticles();
+  ctx.clearRect(0,0,640,640);
+  drawBoard();
+  drawHighlights();
+  drawEntanglementBeams();
+  GAME.pieces.forEach(drawPiece);
+  drawParticles();
+  drawGateMenu();
+  drawTurnBanner();
+  drawOverlay();
+  if (GAME.selected) drawBloch();
+  requestAnimationFrame(loop);
+}
+
+// ═══════════════════════════════════════════════════════
+// BACKGROUND PARTICLE SYSTEM
+// ═══════════════════════════════════════════════════════
+const bgCanvas=document.getElementById('bg-canvas');
+const bgCtx=bgCanvas.getContext('2d');
+let bgParts=[];
+
+function initBg() {
+  bgCanvas.width=window.innerWidth;
+  bgCanvas.height=window.innerHeight;
+  bgParts=Array.from({length:38},()=>({
+    x:Math.random()*bgCanvas.width,
+    y:Math.random()*bgCanvas.height,
+    r:0.8+Math.random()*2,
+    vx:(Math.random()-0.5)*0.25,
+    vy:(Math.random()-0.5)*0.25,
+    phase:Math.random()*π*2,
+    freq:0.003+Math.random()*0.005,
+    col:['#00e5ff','#7c4dff','#ff4081','#00e676'][Math.floor(Math.random()*4)],
+    op:0.1+Math.random()*0.28,
+  }));
+}
+
+function animateBg() {
+  bgCtx.clearRect(0,0,bgCanvas.width,bgCanvas.height);
+  const t=Date.now()*0.001;
+  bgParts.forEach(p=>{
+    p.x+=p.vx+Math.sin(t*p.freq*2+p.phase)*0.18;
+    p.y+=p.vy+Math.cos(t*p.freq*1.7+p.phase)*0.18;
+    if (p.x<0) p.x=bgCanvas.width;  if (p.x>bgCanvas.width) p.x=0;
+    if (p.y<0) p.y=bgCanvas.height; if (p.y>bgCanvas.height) p.y=0;
+    bgCtx.beginPath(); bgCtx.arc(p.x,p.y,p.r,0,π*2);
+    bgCtx.fillStyle=p.col;
+    bgCtx.globalAlpha=p.op*(0.65+0.35*Math.sin(t*p.freq*3+p.phase));
+    bgCtx.fill();
+  });
+  bgCtx.globalAlpha=1;
+  requestAnimationFrame(animateBg);
+}
+
+window.addEventListener('resize',()=>{ bgCanvas.width=window.innerWidth; bgCanvas.height=window.innerHeight; });
+
+// ═══════════════════════════════════════════════════════
+// ATTRACT MODE
+// ═══════════════════════════════════════════════════════
+function scheduleAttract() {
+  clearTimeout(_attractTimer);
+  _attractTimer=setTimeout(()=>{
+    if (document.getElementById('modal-overlay').classList.contains('show')) {
+      closeModal();
+    }
+    startAttractMode();
+  }, 35000);
+}
+
+function cancelAttractSchedule() {
+  clearTimeout(_attractTimer); _attractTimer=null;
+}
+
+let _savedDifficulty=1, _savedDecoRate=3;
+
+function startAttractMode() {
+  _savedDifficulty=GAME.difficulty;
+  _savedDecoRate=GAME.decoRate;
+  closeModal();
+  resetGame('attract');
+  GAME.difficulty=0;
+  GAME.decoRate=1;
+  logEv('◈ DEMO MODE: Bot vs Bot showcase. Click anywhere to take control.','system');
+  doBotMove();
+}
+
+function stopAttractMode() {
+  GAME.attractMode=false;
+  GAME.difficulty=_savedDifficulty;
+  GAME.decoRate=_savedDecoRate;
+  document.getElementById('attract-badge').style.display='none';
+  openMenu();
+}
+
+// ═══════════════════════════════════════════════════════
+// BOOT SEQUENCE
+// ═══════════════════════════════════════════════════════
+let _bootTimeout=null;
+let _bootFinished=false;
+
+function finishBoot() {
+  if (_bootFinished) return;
+  _bootFinished=true;
+  clearTimeout(_bootTimeout);
+  const boot=document.getElementById('boot');
+  boot.classList.add('fade-out');
+  setTimeout(()=>{ boot.style.display='none'; },700);
+  resetGame('vsBot');
+  loop();
+  setTimeout(openMenu, 200);
+}
+
+function runBoot() {
+  const logo =document.getElementById('boot-logo');
+  const sub  =document.getElementById('boot-sub');
+  const lines=document.getElementById('boot-lines');
+  const start=document.getElementById('boot-start');
+
+  const title='QUBLITZ';
+  let i=0;
+
+  const typeTimer=setInterval(()=>{
+    logo.textContent+=title[i];
+    sfxBootBeep(750+i*55);
+    i++;
+    if (i>=title.length) {
+      clearInterval(typeTimer);
+      setTimeout(()=>{
+        sub.textContent='⚛  QUANTUM CHESS ENGINE  ⚛';
+        const bootLines=[
+          '> INIT QUBIT REGISTER......[OK]',
+          '> LOAD GATE LIBRARY........[OK]',
+          '> CALIBRATE BLOCH SPHERE...[OK]',
+          '> DECOHERENCE MODULE.......[OK]',
+          '> ENTANGLEMENT ENGINE......[OK]',
+          '> READY.',
+        ];
+        let li=0;
+        const lt=setInterval(()=>{
+          if (li<bootLines.length) {
+            lines.textContent+=bootLines[li]+'\n';
+            sfxBootBeep(li===bootLines.length-1?660:280);
+            li++;
+          } else {
+            clearInterval(lt);
+            start.textContent='▶ PRESS ANY KEY TO START ◀';
+            _bootTimeout=setTimeout(finishBoot,2200);
+          }
+        },170);
+      },350);
+    }
+  },110);
+
+  // Skip on any key or click
+  const skip=()=>{ finishBoot(); };
+  document.getElementById('boot').addEventListener('click',skip,{once:true});
+  document.addEventListener('keydown',skip,{once:true});
+}
+
+// ═══════════════════════════════════════════════════════
+// MENU + TUTORIAL MODALS
+// ═══════════════════════════════════════════════════════
+function openMenu() {
+  scheduleAttract();
+  const diffs=['EASY','MEDIUM','HARD'];
+  document.getElementById('modal-content').innerHTML=`
+<h2>⚛ QUBLITZ ⚛</h2>
+<p style="text-align:center;color:var(--dim);margin:-10px 0 18px;font-size:9px;">Quantum Chess — Master qubit control through play</p>
+<button class="btn" onclick="closeModal();resetGame('vsBot');GAME.difficulty=parseInt(document.getElementById('diff-sel').value)||1">▶ PLAY vs BOT (1P)</button>
+<button class="btn" onclick="closeModal();resetGame('vs2P')">▶ LOCAL vs FRIEND (2P)</button>
+<hr style="border-color:var(--border);margin:12px 0">
+<button class="btn" onclick="closeModal();openTutorial()">📖 QUANTUM TUTORIAL</button>
+<hr style="border-color:var(--border);margin:12px 0">
+<h3>SETTINGS</h3>
+<p style="color:var(--dim);font-size:9px;margin-bottom:6px;">
+  Bot Difficulty:
+  <select id="diff-sel" onchange="GAME.difficulty=parseInt(this.value)"
+    style="background:#0a0a20;border:1px solid var(--border-hi);color:var(--cyan);
+           font-family:var(--mono);font-size:9px;margin-left:8px;padding:2px 6px;">
+    <option value="0"${GAME.difficulty===0?' selected':''}>EASY</option>
+    <option value="1"${GAME.difficulty===1?' selected':''}>MEDIUM</option>
+    <option value="2"${GAME.difficulty===2?' selected':''}>HARD</option>
+  </select>
+</p>
+<p style="color:var(--dim);font-size:9px;margin-bottom:6px;">
+  Decoherence rate: <span id="dv" style="color:var(--green)">${GAME.decoRate}</span>/turn<br>
+  <span style="color:#2a3260;font-size:8px;">Higher = faster T1/T2 relaxation, more chaotic quantum dynamics.</span>
+</p>
+<button class="btn" onclick="GAME.decoRate=Math.max(1,GAME.decoRate-1);document.getElementById('dv').textContent=GAME.decoRate">◀ SLOWER DECO</button>
+<button class="btn" onclick="GAME.decoRate=Math.min(12,GAME.decoRate+1);document.getElementById('dv').textContent=GAME.decoRate">▶ FASTER DECO</button>
+<hr style="border-color:var(--border);margin:12px 0">
+<p style="color:#1e2450;font-size:8px;text-align:center;font-family:var(--mono);">
+  Each piece is a qubit.<br>Each move is a gate operation.<br>Decoherence kills. Entanglement binds.
+</p>`;
+  document.getElementById('modal-overlay').classList.add('show');
+}
+
+function closeModal() {
+  document.getElementById('modal-overlay').classList.remove('show');
+}
+
+function openTutorial() {
+  document.getElementById('modal-content').innerHTML=`
+<h2>⚛ QUBLITZ — QUANTUM CHESS ⚛</h2>
+
+<h3>🎯 OBJECTIVE</h3>
+<p>Capture or decohere the enemy King before yours falls. Every piece IS a qubit — a two-level quantum system with state |ψ⟩ = α|0⟩ + β|1⟩ where |α|²+|β|² = 1. You control it using real quantum gates.</p>
+
+<h3>🎮 TURN STRUCTURE</h3>
+<p><b>Phase 1 — MOVE:</b> Click your piece, then a destination. <b style="color:#00e676">Green dot</b> = free square. <b style="color:#ff1744">Red border</b> = capture (target measured/collapsed). <b style="color:#ce93d8">Dashed purple</b> = quantum tunnel (Knight, coherence &gt; 60%).</p>
+<p><b>Phase 2 — GATE:</b> A menu appears after every move. Apply a gate, use CNOT to entangle, Measure to collapse, or Skip. Keyboard: [H/X/Y/Z/S/T/M] apply gates, [Space] skip, [ESC] cancel.</p>
+
+<h3>🧩 PIECE → QUBIT ARCHETYPES</h3>
+<table>
+  <tr><th>Piece</th><th>Role</th><th>Gates</th><th>Strategy</th></tr>
+  <tr><td>♔ KING</td><td>Logical qubit |0⟩</td><td>Z, S</td><td>Phase-only gates — never pop the king into |1⟩. Z/S add phase without excitation, stabilizing the king against T1 decay.</td></tr>
+  <tr><td>♕ QUEEN</td><td>Superposition |+⟩</td><td>H, Y</td><td>H keeps the queen in maximum superposition — hard to predict. Y adds imaginary cross-amplitudes for interference.</td></tr>
+  <tr><td>♖ ROOK</td><td>Computational qubit</td><td>X, Z</td><td>X flips between |0⟩↔|1⟩. In |1⟩, the Rook is powerful but at T1 decay risk if coherence falls.</td></tr>
+  <tr><td>♗ BISHOP</td><td>Phase qubit</td><td>T, S</td><td>Accumulate phase precisely. Four T-gates = Z. Non-Clifford T is a hallmark of universal quantum computation.</td></tr>
+  <tr><td>♘ KNIGHT</td><td>Tunneling qubit</td><td>Ry, Rx</td><td>Ry/Rx model Rabi/Larmor oscillation. Knight coherence &gt; 60% enables 3-square quantum tunnel jumps.</td></tr>
+  <tr><td>♙ PAWN</td><td>Ground qubit |0⟩</td><td>X, H</td><td>X excites |0⟩→|1⟩ for power but risks T1 decay. Promotion: H fires the pawn into full superposition.</td></tr>
+</table>
+
+<h3>⚛ DECOHERENCE — T1 AND T2</h3>
+<p><b>T2 (dephasing):</b> When coherence &lt; 10 and a piece is in superposition, environmental noise collapses the phase relationship. The qubit falls to |0⟩ or |1⟩ randomly — quantum advantage lost.</p>
+<p><b>T1 (energy relaxation):</b> When coherence → 0 and the piece is in excited state |1⟩, it undergoes spontaneous emission and is <b>removed from the board</b>. This models qubit dissipation in real quantum hardware.</p>
+<p><b>Strategy:</b> Use Z/S on your King. Apply Measure on critical low-coherence pieces to stabilize them (+10 coherence). Avoid exciting the King into |1⟩.</p>
+
+<h3>🔗 ENTANGLEMENT & CNOT</h3>
+<p>CNOT creates a Bell state between two pieces. The entangled pair is shown connected by an animated pink beam. When the control moves, the target's state updates via the CNOT relationship — non-local quantum correlation. Use CNOT to bind a Rook to your King as a defensive network.</p>
+
+<h3>⚠ CHECK & CHECKMATE</h3>
+<p>If your King is in check (attacked by an enemy piece), you must move to escape — illegal moves that leave the King in check are blocked. If no legal moves exist while in check: <b>checkmate</b>. If no legal moves exist while not in check: <b>stalemate</b> (draw).</p>
+
+<h3>🎨 STATE INDICATORS</h3>
+<p>Dot above piece: <b style="color:#00e676">Green</b>=|0⟩ ground (stable). <b style="color:#00e5ff">Cyan</b>=superposition (unstable, powerful). <b style="color:#ff1744">Red</b>=|1⟩ excited (T1 decay risk). Coherence bar: green&gt;60%, yellow&gt;30%, red=critical. Bloch sphere panel shows the exact state vector of your selected piece.</p>
+`;
+  document.getElementById('modal-overlay').classList.add('show');
+}
+
+// ═══════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════
+window.addEventListener('load', () => {
+  document.fonts.ready.then(() => {
+    initBg();
+    animateBg();
+    runBoot();
+  });
+});
+</script>
+</body>
+</html>
