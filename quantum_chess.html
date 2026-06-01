@@ -672,7 +672,7 @@ body::before {
       <div id="sage-bar" onclick="toggleAdvisor()" title="Click or press ? for more advice">
         <canvas id="sage-portrait" width="100" height="82"></canvas>
         <div id="sage-bar-body">
-          <div id="sage-bar-name">⬟ THE SAGE · QUANTUM ADVISOR</div>
+          <div id="sage-bar-name">⬟ THE SAGE · QUANTUM ADVISOR<span id="claude-badge" style="display:none;float:right;font-size:6px;color:rgba(255,107,53,0.9);background:rgba(255,107,53,0.10);border:1px solid rgba(255,107,53,0.28);border-radius:3px;padding:1px 6px;font-family:var(--body);letter-spacing:0.3px;transition:opacity 0.3s">✦ Claude AI</span></div>
           <div id="sage-bar-text">Greetings, controller. Charge a qubit, close in, and strike.</div>
           <div id="sage-bar-footer">
             <span id="sage-bar-hotkey">[?] · A=ATK H/X/Y/Z=CHARGE M=MEASURE C=CNOT SPC=END</span>
@@ -1484,6 +1484,8 @@ function applyCNOT(ctrl, tgt) {
   sfxGate('CNOT');
   const el=document.getElementById('cnt-CNOT');
   if (el) el.textContent = parseInt(el.textContent||0)+1;
+  const _cnotTrig = `CNOT: Bell pair formed between ${coord(ctrl.row,ctrl.col)} and ${coord(tgt.row,tgt.col)} — strikes on one now bleed damage to the other`;
+  setTimeout(() => callSageAI(_cnotTrig).then(ok => { if (!ok) renderSage(); }), 300);
 }
 
 // ═══════════════════════════════════════════════════════
@@ -1532,6 +1534,8 @@ function attack(attacker, target) {
     spawn(target.px, target.py,'#6b76a8',6);
     GAME.floats.push({text:'MISS', x:target.px, y:target.py-CELL*0.4, vy:-1.0, life:0.7, color:'#6b76a8', size:7});
     beep(196,'square',0.07,0.12);
+    const _mfTrig = `MISFIRE: ${coord(attacker.row,attacker.col)} rolled |0⟩ and missed ${coord(target.row,target.col)} — P(hit) was ${(pAtt*100)|0}%`;
+    setTimeout(() => callSageAI(_mfTrig).then(ok => { if (!ok) renderSage(); }), 400);
     return;
   }
   // Mages hurl a spell blast at the target.
@@ -1564,6 +1568,11 @@ function attack(attacker, target) {
     logEv(`ENTANGLED SPLASH: ${coord(partner.row,partner.col)} shares 1 damage via Bell link.`,'quantum');
     damageUnit(partner, 1);
   }
+  const _splash = partner ? ` (Bell link splashed 1 dmg to ${coord(partner.row,partner.col)})` : '';
+  const _atTrig = crit
+    ? `CRITICAL HIT: ${coord(attacker.row,attacker.col)} measured ${coord(target.row,target.col)} in |1⟩ — 2 dmg${_splash}`
+    : `Strike: ${coord(attacker.row,attacker.col)} → ${coord(target.row,target.col)} — 1 dmg${_splash}`;
+  setTimeout(() => callSageAI(_atTrig).then(ok => { if (!ok) renderSage(); }), 400);
 }
 
 // ═══════════════════════════════════════════════════════
@@ -1626,6 +1635,7 @@ async function endTurn() {
 
   const isBotTurn = (GAME.mode==='vsBot' && GAME.turn===GAME.botColor) || GAME.mode==='attract';
   if (isBotTurn) setTimeout(doBotMove, GAME.mode==='attract'?1200:TURN_DELAY);
+  else setTimeout(() => callSageAI(`${GAME.turn==='white'?'KNIGHTS':'MAGES'} turn begins — strategic overview`).then(ok => { if (!ok) renderSage(); }), 500);
 }
 
 // ═══════════════════════════════════════════════════════
@@ -2891,14 +2901,16 @@ function startCrowdVote(options) {
   const voteOpts = options.filter(o=>o.action!=='SKIP').slice(0,4);
   const counts = {};
   voteOpts.forEach(o=>counts[o.action]=0);
+  window._voteCounts = counts; // expose to global scope for onclick handlers
 
   const grid   = document.getElementById('vote-grid');
   const timerEl= document.getElementById('vote-timer');
   const status = document.getElementById('vote-status');
+  if (!grid || !timerEl || !status) return;
   let sec = 15;
 
   grid.innerHTML = voteOpts.map((o,i)=>`
-    <div class="vote-btn" id="vb-${i}" onclick="castVote('${o.action}',${i},counts)">
+    <div class="vote-btn" id="vb-${i}" onclick="castVote('${o.action}',${i})">
       <span style="color:var(--gold);font-family:var(--pixel);font-size:11px">[${i+1}]</span>
       <br>${o.label.replace(/^\[\w+\]\s*/,'')}
       <span class="vote-count" id="vc-${i}">0</span>
@@ -2953,7 +2965,7 @@ function _doVote(action, idx, counts){
   if (el) el.textContent=counts[action];
   beep(523,'triangle',0.03,0.05);
 }
-window.castVote=function(action,idx){ /* handled via closure in startCrowdVote */ };
+window.castVote=function(action,idx){ _doVote(action, idx, window._voteCounts||{}); };
 
 // ═══════════════════════════════════════════════════════
 // REPLAY — serialize move log to clipboard
@@ -3189,7 +3201,7 @@ function stopAttractMode() {
 // ═══════════════════════════════════════════════════════
 let _advisorOpen = false;
 
-const SAGE_ICON = { danger:'⚠', warn:'◈', quantum:'⚛', chess:'♜', gate:'✦', info:'·' };
+const SAGE_ICON = { danger:'⚠', warn:'◈', quantum:'⚛', gate:'✦', info:'·' };
 
 function analyzePosition() {
   const me   = GAME.turn;
@@ -3268,6 +3280,73 @@ function toggleAdvisor() {
 }
 
 // ═══════════════════════════════════════════════════════
+// CLAUDE AI SAGE — LLM-powered quantum strategy oracle
+// ═══════════════════════════════════════════════════════
+let _sageAILastCall = 0;
+
+function _sageKey() { return localStorage.getItem('qb_api_key') || ''; }
+
+function _updateClaudeBadge() {
+  const b = document.getElementById('claude-badge');
+  if (!b) return;
+  b.style.display = _sageKey() ? 'inline' : 'none';
+  b.textContent = '✦ Claude AI';
+}
+
+function _buildGameState(trigger) {
+  const unitDesc = u => {
+    const ch = Math.round(charge(u) * 100);
+    const flags = [
+      u.entangledWith ? 'entangled' : '',
+      u.role === 'guardian' ? 'guardian' : '',
+      u.guarding ? 'guarding' : ''
+    ].filter(Boolean).join(',');
+    return `${coord(u.row,u.col)} HP:${u.hp}/${u.maxHp} charge:${ch}%${flags ? ' ['+flags+']' : ''}`;
+  };
+  const w = GAME.pieces.filter(p=>p.owner==='white').map(unitDesc).join(' | ');
+  const b = GAME.pieces.filter(p=>p.owner==='black').map(unitDesc).join(' | ');
+  return `Turn ${GAME.turnCount}/60. ${GAME.turn.toUpperCase()} player to act.\nKNIGHTS (white): ${w||'eliminated'}\nMAGES (black): ${b||'eliminated'}\nEvent: ${trigger}`;
+}
+
+async function callSageAI(trigger) {
+  const key = _sageKey();
+  if (!key || GAME.phase === 'gameover' || GAME.attractMode) return false;
+  const now = Date.now();
+  if (now - _sageAILastCall < 4000) return false; // max 1 call per 4s
+  _sageAILastCall = now;
+
+  const badge = document.getElementById('claude-badge');
+  if (badge) { badge.style.display = 'inline'; badge.textContent = '⟳ Claude...'; }
+  startTypewriter('⚛ Sage reads the quantum field...');
+
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'x-api-key': key,
+        'anthropic-version': '2023-06-01',
+        'content-type': 'application/json',
+        'anthropic-dangerous-allow-browser': 'true'
+      },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 110,
+        system: 'You are the Sage, a cryptic quantum oracle advising a player in QuBlitz — a tactical battle game where qubit units fight via quantum gates.\nGates: H=superposition |+⟩ (50% charge), X=flip to |1⟩ (100% charge), Z/S/T=phase rotations, CNOT=Bell pair entanglement, MEASURE=wavefunction collapse & stabilize.\nCombat (Born rule): charge=P(|1⟩). Attacking fires with probability=charge; target caught in |1⟩=CRITICAL (2 dmg), in |0⟩=1 dmg. Attacker discharges to |0⟩. Entangled units share damage via Bell link. Decoherence bleeds charge each turn. Guardian units [G] resist criticals.\nGive ONE sharp tactical insight in exactly 1-2 short sentences. Use quantum terminology naturally (|0⟩, |1⟩, superposition, Born rule, decoherence, Bell pair). Name units by grid coordinate. Be specific and tactical. Be slightly wise and cryptic. No lists, no headers, no emoji.',
+        messages: [{ role: 'user', content: _buildGameState(trigger) }]
+      })
+    });
+    if (badge) { badge.style.display = 'inline'; badge.textContent = '✦ Claude AI'; }
+    if (!res.ok) return false;
+    const data = await res.json();
+    const text = data.content?.[0]?.text?.trim();
+    if (text) { startTypewriter(text); return true; }
+  } catch(e) {
+    if (badge) { _updateClaudeBadge(); }
+  }
+  return false;
+}
+
+// ═══════════════════════════════════════════════════════
 // BOOT SEQUENCE
 // ═══════════════════════════════════════════════════════
 let _bootTimeout=null;
@@ -3282,6 +3361,7 @@ function finishBoot() {
   setTimeout(()=>{ boot.style.display='none'; },700);
   resetGame('vsBot');
   loop();
+  _updateClaudeBadge();
   setTimeout(openMenu, 200);
 }
 
@@ -3396,6 +3476,16 @@ function openMenu() {
   <button class="btn" style="display:inline;width:auto;padding:4px 10px;margin-left:8px;font-size:7px"
     id="vote-btn" onclick="GAME.voteMode=!GAME.voteMode;this.textContent=GAME.voteMode?'ON ✓':'OFF'">${GAME.voteMode?'ON ✓':'OFF'}</button>
 </p>
+<hr style="border-color:var(--border);margin:6px 0">
+<p style="color:var(--dim);font-size:7px;margin-bottom:4px;">🤖 Claude AI Sage — LLM quantum insights (Anthropic API key):</p>
+<div style="display:flex;gap:6px;align-items:center;margin-bottom:4px">
+  <input type="password" id="claude-key-inp" placeholder="sk-ant-api..."
+    value="${_sageKey()}"
+    style="flex:1;background:#0c1226;border:1px solid var(--border);color:var(--teal);font-family:var(--pixel);font-size:6px;padding:5px 8px;border-radius:4px;min-width:0">
+  <button class="btn" style="width:auto;padding:5px 10px;font-size:6px;white-space:nowrap"
+    onclick="localStorage.setItem('qb_api_key',document.getElementById('claude-key-inp').value);_updateClaudeBadge();beep(523,'triangle',0.05,0.08);this.textContent='SAVED ✓';setTimeout(()=>this.textContent='SAVE',1500)">SAVE</button>
+</div>
+<p style="color:var(--wood);font-size:5px;margin-bottom:6px;">Stored in browser localStorage only. Sent only to api.anthropic.com. Uses claude-haiku-4-5 for real-time play.</p>
 <hr style="border-color:var(--border);margin:6px 0">
 ${leaderboardHTML()}
 <p style="color:var(--wood);font-size:6px;text-align:center;margin-top:10px;">
