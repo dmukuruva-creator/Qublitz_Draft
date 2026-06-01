@@ -496,6 +496,119 @@ body::before {
   0%,100% { box-shadow: 0 4px 12px rgba(224,65,60,0.20); }
   50%     { box-shadow: 0 6px 20px rgba(224,65,60,0.55); }
 }
+
+/* ── Turn Timer bar (above sage bar) ─────────────────── */
+#timer-bar {
+  position: absolute; bottom: 84px; left: 0; right: 0;
+  height: 5px; background: rgba(139,125,255,0.12);
+  z-index: 9; pointer-events: none; overflow: hidden;
+  display: none;
+}
+#timer-bar.active { display: block; }
+#timer-fill {
+  height: 100%; width: 100%;
+  background: linear-gradient(90deg, var(--teal), var(--indigo));
+  transform-origin: left; transition: background 0.5s;
+}
+#timer-fill.urgent { background: linear-gradient(90deg, var(--red), var(--amber)); animation: timerPulse 0.4s ease infinite; }
+@keyframes timerPulse { 0%,100%{opacity:1} 50%{opacity:0.55} }
+
+/* ── Timer countdown chip ─────────────────────────────── */
+#timer-chip {
+  display: none; position: absolute; bottom: 90px; right: 6px;
+  font-family: var(--pixel); font-size: 9px;
+  color: var(--teal); z-index: 11; pointer-events: none;
+  background: rgba(4,6,20,0.85); padding: 2px 7px;
+  border: 1px solid rgba(47,224,208,0.35); border-radius: 4px;
+}
+#timer-chip.active { display: block; }
+#timer-chip.urgent { color: var(--red); border-color: rgba(255,90,114,0.5); }
+
+/* ── Crowd / Audience vote overlay ───────────────────── */
+#vote-overlay {
+  display: none; position: fixed; inset: 0; z-index: 300;
+  background: rgba(5,8,20,0.88);
+  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  align-items: center; justify-content: center;
+  flex-direction: column; gap: 18px;
+}
+#vote-overlay.show { display: flex; animation: fadeIn .3s var(--ease); }
+#vote-title {
+  font-family: var(--pixel); font-size: 13px;
+  color: var(--gold); letter-spacing: 3px;
+  text-shadow: 0 0 24px rgba(245,183,60,0.7);
+}
+#vote-subtitle { font-family: var(--body); font-size: 13px; color: var(--ink-2); }
+#vote-timer {
+  font-family: var(--pixel); font-size: 34px;
+  color: var(--teal); letter-spacing: 2px;
+  text-shadow: 0 0 18px rgba(47,224,208,0.6);
+  transition: color 0.3s;
+}
+#vote-timer.urgent { color: var(--red); text-shadow: 0 0 18px rgba(255,90,114,0.7); }
+#vote-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+  max-width: 580px; width: 94%;
+}
+.vote-btn {
+  background: rgba(14,18,48,0.92);
+  border: 2px solid rgba(90,80,204,0.45);
+  border-radius: 8px; padding: 14px 10px;
+  color: var(--ink); font-family: var(--pixel); font-size: 8px;
+  cursor: pointer; text-align: center; letter-spacing: 1px;
+  transition: all .15s var(--ease);
+  box-shadow: 0 2px 10px rgba(0,0,0,0.4);
+}
+.vote-btn:hover { background: rgba(90,80,204,0.32); border-color: var(--indigo);
+  box-shadow: 0 0 18px rgba(139,125,255,0.4); }
+.vote-count { font-size: 20px; margin-top: 6px; display: block; color: var(--gold); }
+#vote-status { font-family: var(--pixel); font-size: 7px; color: var(--ink-3); }
+
+/* ── Leaderboard ─────────────────────────────────────── */
+.lb-wrap { margin: 10px 0; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.lb-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 7px 12px; border-bottom: 1px solid rgba(90,80,204,0.15);
+  font-family: var(--pixel); font-size: 7px; color: var(--ink-2);
+}
+.lb-row:last-child { border-bottom: none; }
+.lb-icon { font-size: 14px; flex-shrink: 0; }
+.lb-val { color: var(--gold); margin-left: auto; }
+
+/* ── Guardian role badge ──────────────────────────────── */
+/* (painted on canvas, no DOM needed) */
+
+/* ── Peer.js connection panel ─────────────────────────── */
+#peer-panel {
+  display:none; padding:12px 14px; border:1px solid var(--border);
+  border-radius:6px; background:rgba(8,12,30,0.6); margin:8px 0;
+  text-align:center;
+}
+#peer-panel.show { display:block; }
+#peer-code {
+  font-family:var(--pixel); font-size:18px; color:var(--teal);
+  letter-spacing:6px; padding:10px 0; display:block;
+  text-shadow:0 0 14px rgba(47,224,208,0.6);
+}
+#peer-input {
+  background:#0c1226; border:2px solid var(--border);
+  color:var(--gold); font-family:var(--pixel); font-size:10px;
+  padding:6px 10px; width:100%; border-radius:4px; margin-top:6px;
+  letter-spacing:4px; text-transform:uppercase; text-align:center;
+}
+
+/* ── Campaign mission cards ──────────────────────────── */
+.mission-card {
+  margin:8px 0; padding:12px 14px;
+  border:1px solid rgba(90,80,204,0.30); border-radius:8px;
+  background:rgba(8,12,30,0.65);
+}
+.mission-card h4 {
+  font-family:var(--pixel); font-size:8px; color:var(--teal);
+  margin-bottom:6px; letter-spacing:1px;
+}
+.mission-card p { font-size:11px; color:var(--ink-2); margin-bottom:8px; }
+.mission-done { font-family:var(--pixel); font-size:7px; color:var(--green); margin-top:4px; }
 </style>
 </head>
 <body>
@@ -554,6 +667,8 @@ body::before {
       <canvas id="game-canvas" width="800" height="800"></canvas>
 
       <!-- Sage dialogue bar — overlays bottom of canvas like a JRPG dialogue box -->
+      <div id="timer-bar"><div id="timer-fill"></div></div>
+      <div id="timer-chip">30s</div>
       <div id="sage-bar" onclick="toggleAdvisor()" title="Click or press ? for more advice">
         <canvas id="sage-portrait" width="100" height="82"></canvas>
         <div id="sage-bar-body">
@@ -663,6 +778,16 @@ function sfxCheck() {
 function sfxGate(name) {
   const f = {H:523,X:392,Y:440,Z:349,S:494,T:587,Rx:330,Ry:370,CNOT:659,MEASURE:262};
   beep(f[name]||440,'triangle',0.11,0.18);
+  if (name==='X')    setTimeout(()=>beep(588,'triangle',0.07,0.13),38);
+  if (name==='H')    setTimeout(()=>beep(659,'triangle',0.05,0.12),52);
+  if (name==='CNOT') { setTimeout(()=>beep(784,'triangle',0.08,0.14),55); setTimeout(()=>beep(988,'triangle',0.05,0.10),110); }
+  if (name==='MEASURE'){ setTimeout(()=>beep(196,'triangle',0.06,0.20),0); }
+  if (name==='Z')    setTimeout(()=>beep(262,'square',0.05,0.14),45);
+}
+function sfxCrit() {
+  beep(988,'square',0.10,0.08);
+  setTimeout(()=>beep(1175,'square',0.08,0.10),55);
+  setTimeout(()=>beep(1319,'square',0.07,0.12),110);
 }
 function sfxWin() {
   [392,494,587,784,988].forEach((f,i)=>setTimeout(()=>beep(f,'triangle',0.17,0.30),i*120));
@@ -777,6 +902,8 @@ const DECOR_SRC = {
   rock:   {sx:0,  sy:64, sw:32, sh:32},
   flowers:{sx:64, sy:0,  sw:32, sh:32},
 };
+// Terrain cells: row*GRID+col → 'tree' (blocking) | 'well' (bonus charge)
+const TERRAIN = {}; // populated by initTerrain() on reset
 // Fixed scenery layout (fractions of the board, adapts to GRID).
 const DECOR = [
   {k:'tree',   cf:0.02, rf:0.16}, {k:'tree',   cf:0.98, rf:0.84},
@@ -986,27 +1113,42 @@ const CELL_GATES = ['H','X','Y','Z','S','T','Rx','Ry'];
 // |1⟩ amplitude ("charge") powers its attacks. Units start in |0⟩ — ground
 // state: safe, but unable to strike until charged.
 let _uid = 0;
-function createUnit(owner, row, col, walkIn=false) {
+function createUnit(owner, row, col, walkIn=false, role='warrior') {
   const ctr = tileCenter(row, col);
   // Spawn off-screen beyond the home row so the unit walks in on placement.
   const spawnY = walkIn
     ? (owner==='white' ? BOARD + CELL : -CELL)
     : ctr.y;
   return {
-    owner, row, col,
+    owner, row, col, role,
     state:         blochToState(0, 0),   // |0⟩
-    hp:            MAX_HP,
-    maxHp:         MAX_HP,
+    hp:            role==='guardian' ? MAX_HP+1 : MAX_HP,
+    maxHp:         role==='guardian' ? MAX_HP+1 : MAX_HP,
+    moveRange:     role==='guardian' ? Math.max(1,MOVE_RANGE-1) : MOVE_RANGE,
     coherence:     100,
     maxCoh:        100,
     entangledWith: null,
     inSuperpos:    false,
+    guarding:      false,   // GUARD ability active this turn
     id:            `u${_uid++}`,
     // 2D-character animation state
     px: ctr.x, py: spawnY,
     facing: owner==='white' ? 1 : -1,
     anim: 'idle', fi: 0, ft: 0, oneShot: false,
   };
+}
+
+// Populate terrain from DECOR positions (trees block, quantum wells give bonus).
+function initTerrain() {
+  // Clear previous terrain.
+  for (const k in TERRAIN) delete TERRAIN[k];
+  DECOR.forEach(d => {
+    const row = Math.round(d.rf*(GRID-1));
+    const col = Math.round(d.cf*(GRID-1));
+    if (!inBounds(row,col)) return;
+    if (d.k==='tree') TERRAIN[row*GRID+col]='tree';
+    if (d.k==='flowers') TERRAIN[row*GRID+col]='well';
+  });
 }
 
 // Place each side's army on its back row, centered.
@@ -1017,9 +1159,10 @@ function initBoard() {
   const out = [];
   for (let i=0; i<n; i++) {
     const c = startCol + i;
-    // Stagger walk-in by column so units march in one by one.
-    out.push(createUnit('black', 0,      c, true));
-    out.push(createUnit('white', GRID-1, c, true));
+    // Middle units become guardians (tankier, shorter range).
+    const role = (n > 2 && (i === Math.floor(n/2))) ? 'guardian' : 'warrior';
+    out.push(createUnit('black', 0,      c, true, role));
+    out.push(createUnit('white', GRID-1, c, true, role));
   }
   return out;
 }
@@ -1144,6 +1287,25 @@ const GAME = {
   deaths:[], fx:[],     // transient sprite animations (death, spell blasts)
   difficulty:1,         // 0=easy, 1=medium, 2=hard
   attractMode:false,
+  // Combat juice
+  shake:0,           // screen shake frames
+  floats:[],         // floating damage/crit text objects
+  // Turn timer
+  blitzMode:false, timerSec:30, timerLeft:30, _timerInterval:null,
+  // Stats for leaderboard
+  critCount:0, entanglCount:0,
+  // Entanglement beam flash
+  beamFlash:{},
+  // Bot explanation
+  botLastReason:'',
+  // Campaign
+  campaignMission:null, campaignDone:[],
+  // Guardian guard-stance
+  // (per-unit 'guarding' property on unit objects)
+  // Replay
+  moveLog:[],
+  // Crowd vote
+  voteMode:false,
 };
 
 let _attractTimer = null;
@@ -1159,8 +1321,13 @@ function resetGame(mode) {
     mode:mode||'vsBot', log:[], gateMenu:null, winner:null,
     cnotMode:false, cnotControl:null, attackMode:false, attackSource:null,
     particles:[], deaths:[], fx:[], attractMode: mode === 'attract',
+    shake:0, floats:[], beamFlash:{},
+    critCount:0, entanglCount:0, botLastReason:'', moveLog:[],
+    campaignMission: (mode==='attract'||mode==='vsBot'||mode==='vs2P') ? null : GAME.campaignMission,
   });
+  stopTurnTimer();
   GAME.pieces = initBoard();
+  initTerrain();
   ALL_GATE_IDS.forEach(g => {
     const el = document.getElementById(`cnt-${g}`);
     if (el) el.textContent = '0';
@@ -1187,12 +1354,13 @@ function reachableTiles(unit) {
   const key=(r,c)=>r*GRID+c, seen={[key(unit.row,unit.col)]:0};
   let frontier=[[unit.row,unit.col]];
   const tiles=[];
-  for (let d=0; d<MOVE_RANGE; d++) {
+  const _range = (unit.moveRange !== undefined) ? unit.moveRange : MOVE_RANGE;
+  for (let d=0; d<_range; d++) {
     const next=[];
     frontier.forEach(([r,c])=>{
       [[1,0],[-1,0],[0,1],[0,-1]].forEach(([dr,dc])=>{
         const nr=r+dr, nc=c+dc;
-        if (!inBounds(nr,nc) || seen[key(nr,nc)]!==undefined || unitAt(nr,nc)) return;
+        if (!inBounds(nr,nc) || seen[key(nr,nc)]!==undefined || unitAt(nr,nc) || TERRAIN[nr*GRID+nc]==="tree") return;
         seen[key(nr,nc)]=d+1;
         tiles.push({row:nr,col:nc});
         next.push([nr,nc]);
@@ -1281,7 +1449,10 @@ function propagateEntanglement(cell, gateName) {
 function applyGate(unit, gateName) {
   const gate = GATES[gateName]; if (!gate) return;
   unit.state     = normalizeState(gate(unit.state));
-  unit.coherence = Math.max(0, unit.coherence-5);
+  // Quantum well boosts coherence instead of draining it.
+  const onWell = TERRAIN[unit.row*GRID+unit.col]==='well';
+  unit.coherence = onWell ? Math.min(unit.maxCoh, unit.coherence+4) : Math.max(0, unit.coherence-5);
+  if (onWell) GAME.floats.push({text:'WELL+', x:unit.px, y:unit.py-CELL*0.5, vy:-0.9, life:0.9, color:'#3fe08a', size:7});
   refreshSuperpos(unit);
   logEv(`CHARGE [${gateName}] on ${coord(unit.row,unit.col)} — ${GATE_INFO[gateName]?.short||gateName}. `+
     `Charge now ${(charge(unit)*100)|0}%.`,'gate');
@@ -1305,6 +1476,7 @@ function applyMeasure(unit) {
 
 function applyCNOT(ctrl, tgt) {
   ctrl.entangledWith=tgt.id; tgt.entangledWith=ctrl.id;
+  GAME.entanglCount++;
   logEv(`ENTANGLE: ${coord(ctrl.row,ctrl.col)} ⊗ ${coord(tgt.row,tgt.col)} — Bell link formed. `+
     `A hit on one bleeds onto the other.`,'gate');
   spawn(ctrl.col*CELL+CELL/2, ctrl.row*CELL+CELL/2,'#c05070',10);
@@ -1320,7 +1492,10 @@ function applyCNOT(ctrl, tgt) {
 function destroyUnit(u) {
   // Leave a death animation playing where the unit fell.
   GAME.deaths.push({ sheet:unitSheet(u), x:u.px, y:u.py, facing:u.facing, fi:0, ft:0 });
-  spawn(u.px, u.py, FACTION[u.owner].col, 22);
+  spawn(u.px, u.py, FACTION[u.owner].col, 28);
+  spawn(u.px, u.py, '#ffffff', 10);
+  spawn(u.px, u.py, '#ffa83c', 14);
+  GAME.shake = Math.max(GAME.shake, 18);
   GAME.pieces = GAME.pieces.filter(p=>p!==u);
   GAME.pieces.forEach(p=>{ if(p.entangledWith===u.id) p.entangledWith=null; });
   if (GAME.selected===u) GAME.selected=null;
@@ -1330,6 +1505,7 @@ function damageUnit(u, dmg) {
   u.hp -= dmg;
   spawn(u.px, u.py, '#ff5a72', 10+dmg*4);
   sfxCapture();
+  GAME.floats.push({text:'-'+dmg, x:u.px+(Math.random()-0.5)*18, y:u.py-CELL*0.35, vy:-1.5, life:1.0, color:'#ff5a72', size:10});
   if (u.hp<=0) {
     logEv(`DESTROYED: ${u.owner.toUpperCase()} unit at ${coord(u.row,u.col)} collapses out of play.`,'capture');
     destroyUnit(u);
@@ -1354,6 +1530,7 @@ function attack(attacker, target) {
   if (!fired) {
     logEv(`MISFIRE: ${coord(attacker.row,attacker.col)} measured |0⟩ (P(hit) was ${(pAtt*100)|0}%) — no discharge.`,'info');
     spawn(target.px, target.py,'#6b76a8',6);
+    GAME.floats.push({text:'MISS', x:target.px, y:target.py-CELL*0.4, vy:-1.0, life:0.7, color:'#6b76a8', size:7});
     beep(196,'square',0.07,0.12);
     return;
   }
@@ -1361,12 +1538,27 @@ function attack(attacker, target) {
   if (attacker.owner==='black') GAME.fx.push({ x:target.px, y:target.py, fi:0, ft:0 });
   const tm = measureState(target.state);
   target.state = tm.state; refreshSuperpos(target);
-  const crit = tm.collapsed===1;
+  // Guarding units cannot take criticals (they collapsed to |0⟩ defensively).
+  const crit = tm.collapsed===1 && !target.guarding;
   const dmg  = crit?2:1;
+  if (crit) {
+    GAME.shake = Math.max(GAME.shake, 16);
+    GAME.critCount++;
+    sfxCrit();
+    GAME.floats.push({text:'CRITICAL!', x:target.px+(Math.random()-0.5)*12, y:target.py-CELL*0.7, vy:-0.8, life:1.6, color:'#ffa83c', size:9});
+    spawn(target.px, target.py, '#ffa83c', 16);
+  } else {
+    GAME.shake = Math.max(GAME.shake, 8);
+  }
   logEv(`STRIKE: ${coord(attacker.row,attacker.col)} → ${coord(target.row,target.col)} for ${dmg}`+
     `${crit?' (CRITICAL — target caught in |1⟩!)':''}.`,'capture');
   spawn(attacker.px, attacker.py, FACTION[attacker.owner].col, 8);
   const partner = target.entangledWith && GAME.pieces.find(p=>p.id===target.entangledWith);
+  // Flash the entanglement beam when a hit propagates.
+  if (partner) {
+    const bKey = [target.id, partner.id].sort().join('|');
+    GAME.beamFlash[bKey] = 30;
+  }
   damageUnit(target, dmg);
   if (partner && GAME.pieces.includes(partner)) {
     logEv(`ENTANGLED SPLASH: ${coord(partner.row,partner.col)} shares 1 damage via Bell link.`,'quantum');
@@ -1391,6 +1583,9 @@ function checkWinner(force) {
 }
 
 async function endTurn() {
+  // Stop any running blitz timer; clear guard stances for current side.
+  stopTurnTimer();
+  GAME.pieces.filter(p=>p.owner===GAME.turn).forEach(p=>{ p.guarding=false; });
   // Wait for all sprites to finish their current action before processing the turn.
   await waitForAnims(120);
 
@@ -1399,7 +1594,18 @@ async function endTurn() {
   GAME.winner = checkWinner(false);
   if (GAME.winner) {
     logEv(`🏆 ${GAME.winner==='draw'?'DRAW — mutual annihilation':FACTION[GAME.winner].name+' WINS — enemy qubits eliminated'}.`,'measure');
-    GAME.phase='gameover'; sfxWin(); updateHUD(); return;
+    GAME.phase='gameover'; sfxWin(); updateHUD();
+    checkLeaderboard();
+    // Campaign win check
+    if (GAME.campaignMission !== null) {
+      const m = CAMPAIGN_MISSIONS[GAME.campaignMission];
+      if (m && GAME.winner !== 'draw') {
+        GAME.campaignDone = GAME.campaignDone || [];
+        if (!GAME.campaignDone.includes(GAME.campaignMission)) GAME.campaignDone.push(GAME.campaignMission);
+        setTimeout(() => { startTypewriter('Mission complete! ' + m.winText); }, 600);
+      }
+    }
+    return;
   }
 
   GAME.turn      = GAME.turn==='white'?'black':'white';
@@ -1416,6 +1622,7 @@ async function endTurn() {
 
   updateHUD();
   updateSelInfo(null);
+  startTurnTimer();
 
   const isBotTurn = (GAME.mode==='vsBot' && GAME.turn===GAME.botColor) || GAME.mode==='attract';
   if (isBotTurn) setTimeout(doBotMove, GAME.mode==='attract'?1200:TURN_DELAY);
@@ -1472,13 +1679,20 @@ async function doBotMove() {
   updateSelInfo(u);
 
   const target = adjacentEnemies(u).sort((a,b)=>a.hp-b.hp)[0];
+  let _botGate = (GAME.difficulty>=2 && Math.random()<0.35) ? 'H' : 'X';
   if (target && charge(u) > 0.6) {
+    GAME.botLastReason = `Bot strikes ${coord(target.row,target.col)} — charge ${(charge(u)*100)|0}%, Born rule: P(hit) = |β|².`;
     attack(u, target);
   } else if (charge(u) < 0.6) {
-    applyGate(u, (GAME.difficulty>=2 && Math.random()<0.35) ? 'H' : 'X');
+    GAME.botLastReason = _botGate==='H'
+      ? `Bot applies H — entering |+⟩ superposition (50% charge). Risky but fast.`
+      : `Bot charges with X gate — flips state to |1⟩ for a guaranteed hit next turn.`;
+    applyGate(u, _botGate);
   } else if (target) {
+    GAME.botLastReason = `Bot strikes ${coord(target.row,target.col)} — unit was charged, measuring the enemy.`;
     attack(u, target);
   } else {
+    GAME.botLastReason = `Bot charges with X — it can't reach an enemy yet, building up |1⟩.`;
     applyGate(u, 'X');
   }
 
@@ -1585,6 +1799,22 @@ function drawBoard() {
   }
   ctx.textAlign='left'; ctx.textBaseline='alphabetic';
 
+  // Quantum well tiles — glowing teal floor tiles that boost coherence.
+  const wellPulse = 0.5+0.5*Math.sin(_t*0.07);
+  Object.entries(TERRAIN).forEach(([k,type])=>{
+    if (type!=='well') return;
+    const idx=parseInt(k), wr=Math.floor(idx/GRID), wc=idx%GRID;
+    const wx=wc*CELL, wy=wr*CELL;
+    ctx.fillStyle=`rgba(63,224,138,${0.08*wellPulse})`;
+    ctx.fillRect(wx,wy,CELL,CELL);
+    ctx.strokeStyle=`rgba(63,224,138,${0.3*wellPulse})`;
+    ctx.lineWidth=1.5; ctx.shadowColor='#3fe08a'; ctx.shadowBlur=6*wellPulse;
+    ctx.strokeRect(wx+2,wy+2,CELL-4,CELL-4); ctx.shadowBlur=0;
+    ctx.fillStyle=`rgba(63,224,138,${0.6*wellPulse})`;
+    ctx.font="7px 'Press Start 2P',monospace"; ctx.textAlign='center';
+    ctx.fillText('⚛',wx+CELL/2,wy+CELL/2+3); ctx.textAlign='left';
+  });
+
   // Faction camp highlight — translucent tints over home rows.
   ctx.fillStyle='rgba(47,224,208,0.18)';  ctx.fillRect(0,hy,BOARD,CELL);
   ctx.fillStyle='rgba(255,77,157,0.14)';  ctx.fillRect(0,0,BOARD,CELL);
@@ -1678,13 +1908,27 @@ function drawEntanglementBeams() {
     if (!partner) return;
     const x1=p.col*CELL+CELL/2, y1=p.row*CELL+CELL/2;
     const x2=partner.col*CELL+CELL/2, y2=partner.row*CELL+CELL/2;
-    const pulse=0.4+0.6*Math.sin(_t*0.06);
+    const pulse=0.55+0.45*Math.sin(_t*0.09);
+    // Flash when a linked hit just occurred.
+    const flash = GAME.beamFlash[key] || 0;
+    const isFlashing = flash > 0;
+    if (isFlashing) GAME.beamFlash[key] = Math.max(0, flash - 1);
+    // Alternate hot-pink / cyan every 40 ticks.
+    const altA = (_t%80<40);
+    const baseR = isFlashing ? '255,60,60' : (altA ? '255,77,157' : '47,224,208');
+    const baseAlpha = isFlashing ? 0.95 : (0.78*pulse);
     ctx.save();
-    ctx.strokeStyle=`rgba(192,80,112,${0.65*pulse})`;
-    ctx.lineWidth=1.5;
-    ctx.shadowColor='#c05070'; ctx.shadowBlur=8*pulse;
-    ctx.setLineDash([4,4]);
-    ctx.lineDashOffset=-(_t*0.5);
+    // Outer glow
+    ctx.strokeStyle=`rgba(${baseR},${baseAlpha})`;
+    ctx.lineWidth=isFlashing ? 4.5 : 3;
+    ctx.shadowColor=isFlashing ? '#ff3c3c' : (altA ? '#ff4d9d' : '#2fe0d0');
+    ctx.shadowBlur=isFlashing ? 22 : 14*pulse;
+    ctx.setLineDash([7,5]);
+    ctx.lineDashOffset=-(_t*0.9);
+    ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
+    // Inner bright core
+    ctx.strokeStyle=`rgba(255,255,255,${isFlashing?0.9:0.28*pulse})`;
+    ctx.lineWidth=1.2; ctx.shadowBlur=0; ctx.setLineDash([]);
     ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
     ctx.restore();
     ctx.setLineDash([]);
@@ -1743,6 +1987,41 @@ function drawPiece(u) {
   const cc = ch>0.66?'#ff5a72': ch>0.33?'#f5b73c':'#3fe08a';
   ctx.fillStyle=cc; if (ch>0.05){ctx.shadowColor=cc;ctx.shadowBlur=4;}
   ctx.fillRect(bX,bY,Math.round(bW*ch),bH); ctx.shadowBlur=0;
+
+  // ── Mini Bloch glyph (live qubit orientation indicator) ──
+  const {theta:bTh,phi:bPh}=stateToBloch(u.state);
+  const gR=Math.max(6,Math.round(CELL*0.090));
+  const gCx=bX+bW+gR+4, gCy=bY+bH/2;
+  ctx.strokeStyle='rgba(140,150,200,0.35)'; ctx.lineWidth=0.8;
+  ctx.beginPath(); ctx.arc(gCx,gCy,gR,0,2*π); ctx.stroke();
+  const gvx=Math.sin(bTh)*Math.cos(bPh)*0.75;
+  const gvz=Math.cos(bTh);
+  const gSx=gCx+gR*gvx, gSy=gCy-gR*gvz;
+  const gCol = ch>0.5?'#ff5a72': ch>0.15?'#f5b73c':'#3fe08a';
+  ctx.strokeStyle=gCol; ctx.lineWidth=1.5;
+  ctx.shadowColor=gCol; ctx.shadowBlur=4;
+  ctx.beginPath(); ctx.moveTo(gCx,gCy); ctx.lineTo(gSx,gSy); ctx.stroke();
+  ctx.fillStyle=gCol;
+  ctx.beginPath(); ctx.arc(gSx,gSy,1.8,0,2*π); ctx.fill();
+  ctx.shadowBlur=0;
+
+  // ── Guardian badge ──
+  if (u.role==='guardian') {
+    ctx.font=`bold ${Math.max(6,Math.round(CELL*0.085))}px 'Press Start 2P',monospace`;
+    ctx.textAlign='center';
+    ctx.fillStyle=fac.col; ctx.shadowColor=fac.col; ctx.shadowBlur=6;
+    ctx.fillText('G', cx, headY-3);
+    ctx.shadowBlur=0; ctx.textAlign='left';
+  }
+
+  // ── Guard-stance shield ring ──
+  if (u.guarding) {
+    const gsPulse=0.65+0.35*Math.sin(_t*0.12);
+    ctx.strokeStyle=`rgba(139,125,255,${gsPulse})`; ctx.lineWidth=3;
+    ctx.shadowColor='#8b7dff'; ctx.shadowBlur=18*gsPulse;
+    ctx.beginPath(); ctx.arc(cx,cy,CELL*0.48,0,2*π); ctx.stroke();
+    ctx.shadowBlur=0;
+  }
 }
 
 // Transient death animations + spell blasts (drawn above the units).
@@ -2005,7 +2284,10 @@ function drawOverlay() {
     }
     ctx.fillStyle='#9aa3c4';
     ctx.font="7px 'Press Start 2P',monospace";
-    ctx.fillText('Click anywhere to return to the menu.', BOARD/2, BOARD*0.544);
+    ctx.fillText('Click to menu · R to copy replay', BOARD/2, BOARD*0.544);
+    // Session stats
+    ctx.font="6px 'Press Start 2P',monospace"; ctx.fillStyle='#6b76a8';
+    ctx.fillText(`Turns: ${GAME.turnCount+1}  |  Criticals: ${GAME.critCount}  |  Entanglements: ${GAME.entanglCount}`, BOARD/2, BOARD*0.584);
     ctx.textAlign='left';
   }
 
@@ -2144,10 +2426,18 @@ function openGateMenu(unit) {
   }));
   opts.push({label:'[C] Entangle (CNOT)', short:GATE_INFO.CNOT.short,   action:'CNOT'});
   opts.push({label:'[M] Measure',          short:GATE_INFO.MEASURE.short, action:'MEASURE'});
+  // Guardians get a GUARD ability: collapse to |0⟩ defensively, immune to crits.
+  if (unit.role==='guardian')
+    opts.push({label:'[G] GUARD',          short:'collapse to |0⟩, crit-immune 1 turn', action:'GUARD'});
   opts.push({label:'[·] End turn',          short:'',                     action:'SKIP'});
   GAME.gateMenu={ piece:unit, options:opts };
   GAME._menuHover=-1;
   GAME.phase='gate';
+
+  // Crowd vote: if voteMode is on for this turn, auto-launch vote overlay.
+  if (GAME.voteMode && GAME.turn !== GAME.botColor) {
+    setTimeout(() => startCrowdVote(opts), 200);
+  }
 }
 
 function handleGateClick(mx,my) {
@@ -2166,6 +2456,12 @@ function handleGateClick(mx,my) {
         case 'CNOT':
           GAME.cnotMode=true; GAME.cnotControl=piece;
           logEv('Entangle mode: click an adjacent unit to form a Bell link. [ESC] to cancel.','quantum'); break;
+        case 'GUARD':
+          piece.guarding=true;
+          piece.state=blochToState(0,0); refreshSuperpos(piece);
+          piece.coherence=Math.min(piece.maxCoh, piece.coherence+8);
+          logEv(`GUARD: ${coord(piece.row,piece.col)} collapses to |0⟩ — immune to criticals this turn.`,'quantum');
+          spawn(piece.px,piece.py,'#8b7dff',12); sfxGate('Z'); endTurn(); break;
         default:
           applyGate(piece, opt.action); endTurn();
       }
@@ -2186,7 +2482,7 @@ function getMenuHoverIndex(mx,my) {
 }
 
 // Keyboard shortcut gate lookup
-const KB_GATES = {h:'H',x:'X',y:'Y',z:'Z',s:'S',t:'T',m:'MEASURE'};
+const KB_GATES = {h:'H',x:'X',y:'Y',z:'Z',s:'S',t:'T',m:'MEASURE',g:'GUARD'};
 
 // ═══════════════════════════════════════════════════════
 // INPUT — CLICK
@@ -2291,6 +2587,8 @@ document.addEventListener('keydown', e => {
 
   // ? toggles Sage advisor
   if (e.key==='?') { toggleAdvisor(); return; }
+  // R copies replay
+  if (e.key.toLowerCase()==='r' && GAME.phase==='gameover') { copyReplay(); return; }
 
   // ESC: cancel everything
   if (e.key==='Escape') {
@@ -2318,9 +2616,13 @@ document.addEventListener('keydown', e => {
   if (KB_GATES[key]) {
     const gateName=KB_GATES[key];
     GAME.gateMenu=null;
-    if (gateName==='MEASURE') { applyMeasure(piece); }
-    else { applyGate(piece, gateName); }
-    endTurn();
+    if (gateName==='MEASURE') { applyMeasure(piece); endTurn(); }
+    else if (gateName==='GUARD' && piece.role==='guardian') {
+      piece.guarding=true; piece.state=blochToState(0,0); refreshSuperpos(piece);
+      piece.coherence=Math.min(piece.maxCoh,piece.coherence+8);
+      logEv(`GUARD: ${coord(piece.row,piece.col)} collapses to |0⟩ — crit-immune this turn.`,'quantum');
+      spawn(piece.px,piece.py,'#8b7dff',12); sfxGate('Z'); endTurn();
+    } else { applyGate(piece, gateName); endTurn(); }
     return;
   }
 
@@ -2379,8 +2681,18 @@ document.addEventListener('keydown', e => {
 function loop() {
   _t++;
   tickParticles();
+  tickFloats();
   advanceAnims();
   ctx.clearRect(0,0,BOARD,BOARD);
+
+  // Screen shake: translate canvas by random jitter, decaying each frame.
+  let _doShake = GAME.shake > 0;
+  if (_doShake) {
+    ctx.save();
+    ctx.translate((Math.random()-0.5)*GAME.shake*0.7, (Math.random()-0.5)*GAME.shake*0.5);
+    GAME.shake = Math.max(0, GAME.shake - 1.4);
+  }
+
   drawBoard();
   drawHighlights();
   drawEntanglementBeams();
@@ -2389,12 +2701,332 @@ function loop() {
   drawDeaths();
   drawFx();
   drawParticles();
+  drawFloats();
   drawGateMenu();
   drawTurnBanner();
   drawOverlay();
+
+  if (_doShake) ctx.restore();
+
   if (GAME.selected) drawBloch();
   drawSageNPC();
   requestAnimationFrame(loop);
+}
+
+
+// ═══════════════════════════════════════════════════════
+// FLOATING NUMBERS — damage / crit / miss text
+// ═══════════════════════════════════════════════════════
+function tickFloats() {
+  GAME.floats = GAME.floats.filter(f => {
+    f.x += (f.vx||0); f.y += f.vy; f.life -= 0.022; return f.life > 0;
+  });
+}
+function drawFloats() {
+  ctx.save();
+  GAME.floats.forEach(f => {
+    ctx.globalAlpha = Math.min(1, f.life * 1.4);
+    ctx.font = `bold ${f.size||11}px 'Press Start 2P',monospace`;
+    ctx.textAlign = 'center';
+    ctx.fillStyle = f.color || '#ff5a72';
+    ctx.shadowColor = f.color || '#ff5a72'; ctx.shadowBlur = 10;
+    ctx.fillText(f.text, f.x, f.y);
+    ctx.shadowBlur = 0;
+  });
+  ctx.globalAlpha = 1;
+  ctx.textAlign = 'left';
+  ctx.restore();
+}
+
+// ═══════════════════════════════════════════════════════
+// BLITZ TURN TIMER
+// ═══════════════════════════════════════════════════════
+function startTurnTimer() {
+  if (!GAME.blitzMode || GAME.phase === 'gameover') return;
+  if (GAME.mode === 'vsBot' && GAME.turn === GAME.botColor) return; // don't time the bot
+  GAME.timerLeft = GAME.timerSec;
+  const bar  = document.getElementById('timer-bar');
+  const fill = document.getElementById('timer-fill');
+  const chip = document.getElementById('timer-chip');
+  if (bar)  bar.classList.add('active');
+  if (chip) chip.classList.add('active');
+  _updateTimerDOM();
+  GAME._timerInterval = setInterval(() => {
+    if (GAME.phase === 'gameover') { stopTurnTimer(); return; }
+    GAME.timerLeft--;
+    _updateTimerDOM();
+    if (GAME.timerLeft <= 8) beep(880,'square',0.03,0.04);
+    if (GAME.timerLeft <= 0) {
+      stopTurnTimer();
+      logEv("⏱ TIME'S UP! Charge bleeds hard — decoherence spike.",'decohere');
+      // Penalty: apply extra decoherence this turn
+      GAME.pieces.filter(p=>p.owner===GAME.turn).forEach(u=>{
+        const {theta,phi}=stateToBloch(u.state);
+        u.state=blochToState(theta*0.55,phi); u.coherence=Math.max(0,u.coherence-18);
+        refreshSuperpos(u);
+      });
+      if (GAME.gateMenu) GAME.gateMenu=null;
+      endTurn();
+    }
+  }, 1000);
+}
+function stopTurnTimer() {
+  if (GAME._timerInterval) { clearInterval(GAME._timerInterval); GAME._timerInterval=null; }
+  const bar  = document.getElementById('timer-bar');
+  const fill = document.getElementById('timer-fill');
+  const chip = document.getElementById('timer-chip');
+  if (bar)  bar.classList.remove('active');
+  if (fill) { fill.style.transform='scaleX(1)'; fill.classList.remove('urgent'); }
+  if (chip) { chip.classList.remove('active','urgent'); }
+}
+function _updateTimerDOM() {
+  const fill = document.getElementById('timer-fill');
+  const chip = document.getElementById('timer-chip');
+  const pct  = Math.max(0, GAME.timerLeft / GAME.timerSec);
+  if (fill) { fill.style.transform=`scaleX(${pct})`; fill.classList.toggle('urgent', GAME.timerLeft<=8); }
+  if (chip) { chip.textContent=GAME.timerLeft+'s'; chip.classList.toggle('urgent', GAME.timerLeft<=8); }
+}
+
+// ═══════════════════════════════════════════════════════
+// LEADERBOARD (localStorage)
+// ═══════════════════════════════════════════════════════
+function loadLeaderboard() {
+  try { return JSON.parse(localStorage.getItem('qublitz_lb')||'{}'); } catch(e){ return {}; }
+}
+function saveLeaderboard(lb) {
+  try { localStorage.setItem('qublitz_lb', JSON.stringify(lb)); } catch(e){}
+}
+function checkLeaderboard() {
+  const lb = loadLeaderboard();
+  const tc = GAME.turnCount+1;
+  let updated = false;
+  if (GAME.winner && GAME.winner!=='draw') {
+    if (!lb.fastestWin || tc < lb.fastestWin) { lb.fastestWin=tc; updated=true; }
+  }
+  if (!lb.mostCrits  || GAME.critCount    > lb.mostCrits)   { lb.mostCrits=GAME.critCount;    updated=true; }
+  if (!lb.mostEntangl|| GAME.entanglCount > lb.mostEntangl) { lb.mostEntangl=GAME.entanglCount; updated=true; }
+  if (updated) { saveLeaderboard(lb); logEv('🏅 New hall-of-fame record!','quantum'); }
+}
+function leaderboardHTML() {
+  const lb = loadLeaderboard();
+  if (!lb.fastestWin && !lb.mostCrits && !lb.mostEntangl) return '';
+  return `<h3>🏆 HALL OF FAME</h3>
+<div class="lb-wrap">
+  ${lb.fastestWin  ? `<div class="lb-row"><span class="lb-icon">⚡</span>Fastest win<span class="lb-val">${lb.fastestWin} turns</span></div>` : ''}
+  ${lb.mostCrits   ? `<div class="lb-row"><span class="lb-icon">💥</span>Most criticals<span class="lb-val">${lb.mostCrits}</span></div>`    : ''}
+  ${lb.mostEntangl ? `<div class="lb-row"><span class="lb-icon">🔗</span>Most entanglements<span class="lb-val">${lb.mostEntangl}</span></div>` : ''}
+</div>`;
+}
+
+// ═══════════════════════════════════════════════════════
+// CAMPAIGN — 3 training missions
+// ═══════════════════════════════════════════════════════
+const CAMPAIGN_MISSIONS = [
+  {
+    title:'MISSION 1 — THE BORN RULE',
+    intro:'One enemy Mage is fully charged at |1⟩ — it will strike unless you beat it. The Born rule: charge = hit chance (P(|1⟩) = |β|²). Charge your Knight with X and strike first.',
+    winText:'Born rule mastered! P(hit) = |β|² — your charge is your strike probability.',
+    setup(game) {
+      // 1v1, mage pre-charged
+      game.pieces = game.pieces.filter((_,i)=>i<2);
+      const mage = game.pieces.find(p=>p.owner==='black');
+      if (mage){ mage.state=blochToState(Math.PI,0); refreshSuperpos(mage); }
+    },
+  },
+  {
+    title:'MISSION 2 — DECOHERENCE RACE',
+    intro:'T1 decoherence bleeds your charge each turn. Your Knights start pre-charged — but you only have 8 turns before they decay to |0⟩. Strike NOW before the quantum clock runs out.',
+    winText:'T1 decoherence conquered! Real qubits lose coherence in microseconds — speed is everything.',
+    setup(game) {
+      game.turnCap=8;
+      game.pieces.filter(p=>p.owner==='white').forEach(u=>{
+        u.state=blochToState(Math.PI*0.8,0); refreshSuperpos(u);
+      });
+    },
+  },
+  {
+    title:'MISSION 3 — BELL PAIR TRAP',
+    intro:'Two enemy Mages share a Bell entanglement. Hit one and the other suffers splash damage. Identify the entangled pair and strike both in one move using CNOT.',
+    winText:'Entanglement weaponized! Bell pairs propagate measurement — Einstein called it spooky action at a distance.',
+    setup(game) {
+      const mages = game.pieces.filter(p=>p.owner==='black').slice(0,2);
+      if (mages.length===2){ mages[0].entangledWith=mages[1].id; mages[1].entangledWith=mages[0].id; }
+    },
+  },
+];
+
+function startMission(n) {
+  closeModal();
+  resetGame('vsBot');
+  GAME.campaignMission = n;
+  CAMPAIGN_MISSIONS[n].setup(GAME);
+  updateHUD();
+  setTimeout(()=>{ startTypewriter(CAMPAIGN_MISSIONS[n].intro); },400);
+  logEv(CAMPAIGN_MISSIONS[n].title + ' BEGIN','quantum');
+}
+
+function openCampaign() {
+  const done = GAME.campaignDone || [];
+  document.getElementById('modal-content').innerHTML=`
+<h2>◈ TRAINING PROGRAMS ◈</h2>
+<p style="text-align:center;color:var(--dim);font-size:7px;margin-bottom:16px">3 quantum scenarios — each teaches one real physics concept.</p>
+${CAMPAIGN_MISSIONS.map((m,i)=>`
+<div class="mission-card">
+  <h4>${m.title}${done.includes(i)?'  ✓':''}</h4>
+  <p>${m.intro}</p>
+  <button class="btn" onclick="startMission(${i})">▶ START</button>
+  ${done.includes(i)?`<div class="mission-done">✓ Completed: ${m.winText}</div>`:''}
+</div>`).join('')}
+<button class="btn" onclick="closeModal();openMenu()" style="margin-top:12px">← BACK TO MENU</button>`;
+  document.getElementById('modal-overlay').classList.add('show');
+}
+
+// ═══════════════════════════════════════════════════════
+// CROWD / AUDIENCE VOTE MODE
+// ═══════════════════════════════════════════════════════
+let _voteInterval = null;
+function startCrowdVote(options) {
+  const overlay = document.getElementById('vote-overlay');
+  if (!overlay) return;
+  const voteOpts = options.filter(o=>o.action!=='SKIP').slice(0,4);
+  const counts = {};
+  voteOpts.forEach(o=>counts[o.action]=0);
+
+  const grid   = document.getElementById('vote-grid');
+  const timerEl= document.getElementById('vote-timer');
+  const status = document.getElementById('vote-status');
+  let sec = 15;
+
+  grid.innerHTML = voteOpts.map((o,i)=>`
+    <div class="vote-btn" id="vb-${i}" onclick="castVote('${o.action}',${i},counts)">
+      <span style="color:var(--gold);font-family:var(--pixel);font-size:11px">[${i+1}]</span>
+      <br>${o.label.replace(/^\[\w+\]\s*/,'')}
+      <span class="vote-count" id="vc-${i}">0</span>
+    </div>`).join('');
+  overlay.classList.add('show');
+  timerEl.textContent = sec; timerEl.classList.remove('urgent');
+
+  // Keyboard voting: any press of 1-4
+  const kv = e => {
+    const n = parseInt(e.key)-1;
+    if (n>=0 && n<voteOpts.length){ _doVote(voteOpts[n].action, n, counts); }
+  };
+  document.addEventListener('keydown', kv);
+
+  _voteInterval = setInterval(()=>{
+    sec--;
+    timerEl.textContent=sec;
+    if (sec<=5) timerEl.classList.add('urgent');
+    if (sec<=5) beep(880,'square',0.03,0.04);
+    if (sec<=0){
+      clearInterval(_voteInterval); _voteInterval=null;
+      document.removeEventListener('keydown',kv);
+      overlay.classList.remove('show');
+      // Pick winner
+      const winner=Object.entries(counts).sort((a,b)=>b[1]-a[1])[0];
+      if (winner){
+        const opt=voteOpts.find(o=>o.action===winner[0]);
+        logEv(`CROWD VOTED: [${winner[0]}] with ${winner[1]} votes.`,'quantum');
+        const piece=GAME.gateMenu?GAME.gateMenu.piece:GAME.selected;
+        if (piece){
+          GAME.gateMenu=null;
+          if (winner[0]==='ATTACK' && adjacentEnemies(piece).length){
+            GAME.attackMode=true; GAME.attackSource=piece;
+          } else if (winner[0]==='CNOT'){
+            GAME.cnotMode=true; GAME.cnotControl=piece;
+          } else if (winner[0]==='MEASURE'){
+            applyMeasure(piece); endTurn();
+          } else if (winner[0]==='GUARD' && piece.role==='guardian'){
+            piece.guarding=true; piece.state=blochToState(0,0); refreshSuperpos(piece);
+            logEv('GUARD activated by crowd vote.','quantum'); sfxGate('Z'); endTurn();
+          } else {
+            applyGate(piece,winner[0]); endTurn();
+          }
+        }
+      }
+    }
+  },1000);
+}
+function _doVote(action, idx, counts){
+  counts[action]=(counts[action]||0)+1;
+  const el=document.getElementById('vc-'+idx);
+  if (el) el.textContent=counts[action];
+  beep(523,'triangle',0.03,0.05);
+}
+window.castVote=function(action,idx){ /* handled via closure in startCrowdVote */ };
+
+// ═══════════════════════════════════════════════════════
+// REPLAY — serialize move log to clipboard
+// ═══════════════════════════════════════════════════════
+function recordMove(type, data) {
+  GAME.moveLog.push({t:GAME.turnCount, turn:GAME.turn, type, ...data});
+}
+function copyReplay() {
+  try {
+    const s=btoa(JSON.stringify(GAME.moveLog));
+    if (navigator.clipboard) navigator.clipboard.writeText(s).catch(()=>{});
+    logEv('Replay log ('+GAME.moveLog.length+' moves) copied to clipboard.','system');
+    beep(523,'triangle',0.07,0.13);
+  } catch(e){}
+}
+
+// ═══════════════════════════════════════════════════════
+// PEER.JS NETWORKED 2P
+// ═══════════════════════════════════════════════════════
+let _peer=null, _peerConn=null;
+function initPeer(){
+  const panel=document.getElementById('peer-panel');
+  if(panel) panel.classList.add('show');
+  if(typeof Peer!=='undefined'){ _setupPeer(); return; }
+  logEv('Loading Peer.js...','system');
+  const s=document.createElement('script');
+  s.src='https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js';
+  s.onload=()=>{ logEv('Peer.js ready.','system'); _setupPeer(); };
+  s.onerror=()=>logEv('Peer.js failed to load (need internet).','system');
+  document.head.appendChild(s);
+}
+function _setupPeer(){
+  const code=Math.random().toString(36).slice(2,8).toUpperCase();
+  try{ _peer=new Peer('qb-'+code); }catch(e){ logEv('Peer error: '+e.message,'system'); return; }
+  _peer.on('open',()=>{
+    const el=document.getElementById('peer-code'); if(el) el.textContent=code;
+    logEv('Your peer code: '+code+' — share with opponent.','system');
+  });
+  _peer.on('connection',conn=>{ _peerConn=conn; _setupConn(conn,'host'); });
+  _peer.on('error',e=>logEv('Peer: '+e.type,'system'));
+}
+function connectToPeer(code){
+  if(!code||code.length<4){ logEv('Enter the 6-character code.','system'); return; }
+  if(!_peer) initPeer();
+  setTimeout(()=>{
+    try{
+      const conn=_peer.connect('qb-'+code.toUpperCase().trim());
+      _setupConn(conn,'guest');
+    }catch(e){ logEv('Connect failed: '+e.message,'system'); }
+  },800);
+}
+function _setupConn(conn,role){
+  _peerConn=conn;
+  conn.on('open',()=>{
+    logEv('P2P link established ('+role+')!','quantum');
+    closeModal(); resetGame('vs2P');
+    if(role==='guest') GAME.botColor='white'; // guest plays white
+  });
+  conn.on('data',d=>{
+    if(d.type==='move'){
+      // Apply remote move: update the piece that moved.
+      const u=GAME.pieces.find(p=>p.id===d.id);
+      if(!u) return;
+      u.row=d.row; u.col=d.col;
+      if(d.gate) applyGate(u,d.gate);
+      if(d.measure){ const m=measureState(u.state); u.state=m.state; refreshSuperpos(u); }
+      endTurn();
+    }
+  });
+  conn.on('close',()=>logEv('Peer disconnected.','system'));
+}
+function _syncMove(data){
+  if(_peerConn&&_peerConn.open) _peerConn.send({type:'move',...data});
 }
 
 // ═══════════════════════════════════════════════════════
@@ -2596,6 +3228,14 @@ function analyzePosition() {
 
 // Update the Sage dialogue bar (always visible) and the optional expanded tips panel.
 function renderSage() {
+  // If the bot just explained a move, show that first (fades after one call).
+  if (GAME.botLastReason) {
+    startTypewriter('BOT: ' + GAME.botLastReason);
+    GAME.botLastReason = '';
+    const bar = document.getElementById('sage-bar');
+    if (bar) bar.classList.remove('urgent');
+    return;
+  }
   const tips = analyzePosition();
   const bar  = document.getElementById('sage-bar');
   const btn  = document.querySelector('.btn-sage');
@@ -2701,11 +3341,24 @@ function openMenu() {
   document.getElementById('modal-content').innerHTML=`
 <h2>◈ QUBLITZ ◈</h2>
 <p style="text-align:center;color:var(--dim);margin:-10px 0 18px;font-size:7px;">Qubit Battle Arena — charge, close in, collapse the enemy</p>
-<button class="btn" onclick="closeModal();resetGame('vsBot');GAME.difficulty=parseInt(document.getElementById('diff-sel').value)||1">▶ PLAY vs BOT (1P)</button>
+
+<button class="btn" style="background:linear-gradient(135deg,rgba(47,224,208,0.18),rgba(139,125,255,0.14));border-color:var(--teal)"
+  onclick="closeModal();resetGame('vsBot');GAME.difficulty=parseInt(document.getElementById('diff-sel')?document.getElementById('diff-sel').value:1)||1">▶ PLAY vs BOT (1P)</button>
 <button class="btn" onclick="closeModal();resetGame('vs2P')">▶ LOCAL vs FRIEND (2P)</button>
+<button class="btn" style="border-color:var(--indigo);color:var(--indigo)"
+  onclick="closeModal();initPeer()">🌐 NETWORK 2P (Peer.js)</button>
+<div id="peer-panel">
+  <span style="font-family:var(--pixel);font-size:7px;color:var(--ink-2)">YOUR CODE:</span>
+  <span id="peer-code">------</span>
+  <input id="peer-input" type="text" placeholder="ENTER OPPONENT CODE" maxlength="6"
+    onkeydown="if(event.key==='Enter')connectToPeer(this.value)">
+  <button class="btn" style="margin-top:6px" onclick="connectToPeer(document.getElementById('peer-input').value)">⚡ CONNECT</button>
+</div>
 <hr style="border-color:var(--border);margin:12px 0">
+<button class="btn" onclick="openCampaign()">🎓 TRAINING PROGRAMS (3 missions)</button>
 <button class="btn" onclick="closeModal();openTutorial()">📜 BATTLE MANUAL</button>
 <hr style="border-color:var(--border);margin:12px 0">
+
 <h3>SETTINGS</h3>
 <p style="color:var(--dim);font-size:7px;margin-bottom:6px;">
   Bot Difficulty:
@@ -2732,9 +3385,22 @@ function openMenu() {
 </p>
 <button class="btn" onclick="GAME.decoRate=Math.max(1,GAME.decoRate-1);document.getElementById('dv').textContent=GAME.decoRate">◀ SLOWER DECO</button>
 <button class="btn" onclick="GAME.decoRate=Math.min(12,GAME.decoRate+1);document.getElementById('dv').textContent=GAME.decoRate">▶ FASTER DECO</button>
-<hr style="border-color:var(--border);margin:12px 0">
-<p style="color:var(--wood);font-size:6px;text-align:center;">
-  Every unit is a qubit.<br>Charge toward |1⟩ to strike · Measure to defend.<br>Eliminate the enemy army.
+<hr style="border-color:var(--border);margin:6px 0">
+<p style="color:var(--dim);font-size:7px;margin-bottom:6px;">
+  ⏱ Blitz Mode (30s/turn):
+  <button class="btn" style="display:inline;width:auto;padding:4px 10px;margin-left:8px;font-size:7px"
+    id="blitz-btn" onclick="GAME.blitzMode=!GAME.blitzMode;this.textContent=GAME.blitzMode?'ON ✓':'OFF'">${GAME.blitzMode?'ON ✓':'OFF'}</button>
+</p>
+<p style="color:var(--dim);font-size:7px;margin-bottom:6px;">
+  👥 Crowd Vote Mode (audience votes gates):
+  <button class="btn" style="display:inline;width:auto;padding:4px 10px;margin-left:8px;font-size:7px"
+    id="vote-btn" onclick="GAME.voteMode=!GAME.voteMode;this.textContent=GAME.voteMode?'ON ✓':'OFF'">${GAME.voteMode?'ON ✓':'OFF'}</button>
+</p>
+<hr style="border-color:var(--border);margin:6px 0">
+${leaderboardHTML()}
+<p style="color:var(--wood);font-size:6px;text-align:center;margin-top:10px;">
+  Every unit is a qubit · Guardians [G] resist criticals · Charge → strike.<br>
+  Warriors attack, Guardians tank. Eliminate the enemy army.
 </p>`;
   document.getElementById('modal-overlay').classList.add('show');
 }
@@ -2795,5 +3461,13 @@ window.addEventListener('load', () => {
   });
 });
 </script>
+
+<div id="vote-overlay">
+  <div id="vote-title">◈ CROWD VOTE ◈</div>
+  <div id="vote-subtitle">Press 1–4 to vote! Most votes wins the turn.</div>
+  <div id="vote-timer">15</div>
+  <div id="vote-grid"></div>
+  <div id="vote-status"></div>
+</div>
 </body>
 </html>
