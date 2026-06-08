@@ -15,5 +15,14 @@ venv/
 .DS_Store
 Thumbs.db
 
-# Source art packs (Biome tilesets) — embedded as base64 in quantum_chess.html
+# Source art packs (Biome tilesets / sprite sheets) — embedded as base64 in quantum_chess.html
 assets_src/
+*.zip
+Elite Knight Sprite Pack/
+Elite Mage Sprite Pack/
+
+# Third-party template (reference only, not project source)
+modern_musician_template/
+
+# Poster build artifact: 3.5M base64-embedded HTML; the *.pdf outputs are the deliverables (already ignored)
+QuBlitz_Poster_TechniGala26.html

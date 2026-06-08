@@ -162,6 +162,9 @@ html, body {
   border: 2px solid rgba(90,80,204,0.45);
   border-radius: 4px;
   box-shadow: 0 0 32px rgba(90,80,204,0.14), 0 8px 32px rgba(0,0,0,0.60);
+  /* Push sage bar and timer elements into the padding zone below the canvas
+     so they never overlap pieces. 90px clears the 82px sage bar + 5px timer bar. */
+  padding-bottom: 90px;
 }
 
 canvas { display: block; cursor: pointer; }
@@ -334,14 +337,16 @@ body.biome-snow {
 }
 #sage-bar-more.show { display: block; }
 
-/* Expanded tips panel — overlays canvas above the sage bar */
+/* Expanded tips panel — sits directly above the sage bar in the padding zone.
+   max-height keeps it from ever reaching the canvas area. */
 #sage-tips {
   position: absolute; bottom: 82px; left: 0; right: 0;
+  max-height: calc(100% - 800px - 90px); /* can't grow above the canvas bottom */
   display: none; flex-direction: column;
   background: rgba(3,4,14,0.96);
   border-top: 1px solid rgba(90,80,204,0.50);
   border-bottom: 1px solid rgba(90,80,204,0.50);
-  overflow: hidden;
+  overflow-y: auto;
   z-index: 10;
   animation: tipPanelIn .22s var(--ease);
 }
@@ -497,9 +502,9 @@ body::before {
   50%     { box-shadow: 0 6px 20px rgba(224,65,60,0.55); }
 }
 
-/* ── Turn Timer bar (above sage bar) ─────────────────── */
+/* ── Turn Timer bar (sits in padding zone, never over the canvas) ── */
 #timer-bar {
-  position: absolute; bottom: 84px; left: 0; right: 0;
+  position: absolute; bottom: 85px; left: 0; right: 0;
   height: 5px; background: rgba(139,125,255,0.12);
   z-index: 9; pointer-events: none; overflow: hidden;
   display: none;
@@ -515,7 +520,7 @@ body::before {
 
 /* ── Timer countdown chip ─────────────────────────────── */
 #timer-chip {
-  display: none; position: absolute; bottom: 90px; right: 6px;
+  display: none; position: absolute; bottom: 86px; right: 6px;
   font-family: var(--pixel); font-size: 9px;
   color: var(--teal); z-index: 11; pointer-events: none;
   background: rgba(4,6,20,0.85); padding: 2px 7px;
@@ -2597,6 +2602,15 @@ document.addEventListener('keydown', e => {
 
   // ? toggles Sage advisor
   if (e.key==='?') { toggleAdvisor(); return; }
+  // V toggles Crowd Vote mode without opening the Settings menu
+  if (e.key.toLowerCase()==='v' && GAME.phase!=='gameover') {
+    GAME.voteMode = !GAME.voteMode;
+    const btn = document.getElementById('vote-btn');
+    if (btn) btn.textContent = GAME.voteMode ? 'ON ✓' : 'OFF';
+    _updateVoteBadge();
+    logEv(`Crowd Vote mode ${GAME.voteMode?'ENABLED — audience presses 1–4 next turn':'disabled'}.`,'system');
+    return;
+  }
   // R copies replay
   if (e.key.toLowerCase()==='r' && GAME.phase==='gameover') { copyReplay(); return; }
 
@@ -2895,70 +2909,102 @@ ${CAMPAIGN_MISSIONS.map((m,i)=>`
 // CROWD / AUDIENCE VOTE MODE
 // ═══════════════════════════════════════════════════════
 let _voteInterval = null;
+
+// Execute the winning action fully — no dangling attackMode/cnotMode state.
+function _executeVoteWinner(action, piece) {
+  GAME.gateMenu = null;
+  if (action === 'ATTACK') {
+    const foes = adjacentEnemies(piece);
+    if (!foes.length) { endTurn(); return; }
+    // Auto-target the weakest adjacent enemy — no manual click required.
+    const target = foes.sort((a,b)=>a.hp-b.hp)[0];
+    logEv(`CROWD VOTED: ATTACK → auto-targeting ${coord(target.row,target.col)}.`,'quantum');
+    doAttack(piece, target);
+    endTurn();
+  } else if (action === 'CNOT') {
+    // Auto-entangle the first adjacent enemy, or nearest ally if no enemies adjacent.
+    const candidates = GAME.pieces.filter(p=>p!==piece && adjacent(p,piece));
+    const target = candidates.find(p=>p.owner!==piece.owner) || candidates[0];
+    if (target) {
+      logEv(`CROWD VOTED: CNOT → auto-entangling ${coord(target.row,target.col)}.`,'quantum');
+      applyCNOT(piece, target);
+      endTurn();
+    } else { endTurn(); }
+  } else if (action === 'MEASURE') {
+    applyMeasure(piece); endTurn();
+  } else if (action === 'GUARD' && piece.role === 'guardian') {
+    piece.guarding=true; piece.state=blochToState(0,0); refreshSuperpos(piece);
+    logEv('GUARD activated by crowd vote.','quantum'); sfxGate('Z'); endTurn();
+  } else {
+    applyGate(piece, action); endTurn();
+  }
+}
+
+function _resolveVote(counts, voteOpts, piece, kv) {
+  clearInterval(_voteInterval); _voteInterval = null;
+  document.removeEventListener('keydown', kv);
+  document.getElementById('vote-overlay').classList.remove('show');
+  const winner = Object.entries(counts).sort((a,b)=>b[1]-a[1])[0];
+  if (!winner || !piece) return;
+  logEv(`CROWD VOTED: [${winner[0]}] with ${winner[1]} vote${winner[1]===1?'':'s'}.`,'quantum');
+  _executeVoteWinner(winner[0], piece);
+}
+
 function startCrowdVote(options) {
   const overlay = document.getElementById('vote-overlay');
   if (!overlay) return;
   const voteOpts = options.filter(o=>o.action!=='SKIP').slice(0,4);
+  if (!voteOpts.length) return;
   const counts = {};
   voteOpts.forEach(o=>counts[o.action]=0);
-  window._voteCounts = counts; // expose to global scope for onclick handlers
+  window._voteCounts = counts;
 
-  const grid   = document.getElementById('vote-grid');
-  const timerEl= document.getElementById('vote-timer');
-  const status = document.getElementById('vote-status');
+  const grid    = document.getElementById('vote-grid');
+  const timerEl = document.getElementById('vote-timer');
+  const status  = document.getElementById('vote-status');
   if (!grid || !timerEl || !status) return;
-  let sec = 15;
+
+  // Capture piece reference now — before gateMenu is cleared.
+  const piece = GAME.gateMenu ? GAME.gateMenu.piece : GAME.selected;
+
+  let sec = 12; // Snappier than 15 for demo pacing.
 
   grid.innerHTML = voteOpts.map((o,i)=>`
     <div class="vote-btn" id="vb-${i}" onclick="castVote('${o.action}',${i})">
-      <span style="color:var(--gold);font-family:var(--pixel);font-size:11px">[${i+1}]</span>
+      <span style="color:var(--gold);font-family:var(--pixel);font-size:13px">[${i+1}]</span>
       <br>${o.label.replace(/^\[\w+\]\s*/,'')}
       <span class="vote-count" id="vc-${i}">0</span>
     </div>`).join('');
   overlay.classList.add('show');
   timerEl.textContent = sec; timerEl.classList.remove('urgent');
+  status.textContent = '';
 
-  // Keyboard voting: any press of 1-4
+  // Opening fanfare so audience looks up.
+  beep(523,'triangle',0.06,0.08);
+  setTimeout(()=>beep(659,'triangle',0.06,0.08),90);
+  setTimeout(()=>beep(784,'triangle',0.08,0.12),180);
+
+  // Keyboard handler: 1-4 = vote, Escape/Enter/Space = force-resolve immediately.
   const kv = e => {
     const n = parseInt(e.key)-1;
-    if (n>=0 && n<voteOpts.length){ _doVote(voteOpts[n].action, n, counts); }
+    if (n>=0 && n<voteOpts.length) { _doVote(voteOpts[n].action, n, counts); return; }
+    if (e.key==='Escape' || e.key==='Enter' || e.key===' ') {
+      e.preventDefault();
+      status.textContent = 'Resolved early.';
+      _resolveVote(counts, voteOpts, piece, kv);
+    }
   };
   document.addEventListener('keydown', kv);
 
   _voteInterval = setInterval(()=>{
     sec--;
-    timerEl.textContent=sec;
-    if (sec<=5) timerEl.classList.add('urgent');
-    if (sec<=5) beep(880,'square',0.03,0.04);
-    if (sec<=0){
-      clearInterval(_voteInterval); _voteInterval=null;
-      document.removeEventListener('keydown',kv);
-      overlay.classList.remove('show');
-      // Pick winner
-      const winner=Object.entries(counts).sort((a,b)=>b[1]-a[1])[0];
-      if (winner){
-        const opt=voteOpts.find(o=>o.action===winner[0]);
-        logEv(`CROWD VOTED: [${winner[0]}] with ${winner[1]} votes.`,'quantum');
-        const piece=GAME.gateMenu?GAME.gateMenu.piece:GAME.selected;
-        if (piece){
-          GAME.gateMenu=null;
-          if (winner[0]==='ATTACK' && adjacentEnemies(piece).length){
-            GAME.attackMode=true; GAME.attackSource=piece;
-          } else if (winner[0]==='CNOT'){
-            GAME.cnotMode=true; GAME.cnotControl=piece;
-          } else if (winner[0]==='MEASURE'){
-            applyMeasure(piece); endTurn();
-          } else if (winner[0]==='GUARD' && piece.role==='guardian'){
-            piece.guarding=true; piece.state=blochToState(0,0); refreshSuperpos(piece);
-            logEv('GUARD activated by crowd vote.','quantum'); sfxGate('Z'); endTurn();
-          } else {
-            applyGate(piece,winner[0]); endTurn();
-          }
-        }
-      }
-    }
-  },1000);
+    timerEl.textContent = sec;
+    if (sec<=4) timerEl.classList.add('urgent');
+    if (sec<=4) beep(880,'square',0.03,0.04);
+    if (sec<=0) _resolveVote(counts, voteOpts, piece, kv);
+  }, 1000);
 }
+
 function _doVote(action, idx, counts){
   counts[action]=(counts[action]||0)+1;
   const el=document.getElementById('vc-'+idx);
@@ -2966,6 +3012,21 @@ function _doVote(action, idx, counts){
   beep(523,'triangle',0.03,0.05);
 }
 window.castVote=function(action,idx){ _doVote(action, idx, window._voteCounts||{}); };
+
+// Update the persistent on-screen vote-mode badge.
+function _updateVoteBadge() {
+  const badge = document.getElementById('vote-mode-badge');
+  if (!badge) return;
+  if (GAME.voteMode) {
+    badge.textContent = '🗳 VOTE ON [V]';
+    badge.style.opacity='1'; badge.style.background='rgba(47,224,208,0.18)';
+    badge.style.borderColor='rgba(47,224,208,0.6)'; badge.style.color='#2fe0d0';
+  } else {
+    badge.textContent = 'VOTE OFF [V]';
+    badge.style.opacity='0.38'; badge.style.background='rgba(18,24,52,0.5)';
+    badge.style.borderColor='rgba(124,140,230,0.2)'; badge.style.color='#6b76a8';
+  }
+}
 
 // ═══════════════════════════════════════════════════════
 // REPLAY — serialize move log to clipboard
@@ -3472,9 +3533,9 @@ function openMenu() {
     id="blitz-btn" onclick="GAME.blitzMode=!GAME.blitzMode;this.textContent=GAME.blitzMode?'ON ✓':'OFF'">${GAME.blitzMode?'ON ✓':'OFF'}</button>
 </p>
 <p style="color:var(--dim);font-size:7px;margin-bottom:6px;">
-  👥 Crowd Vote Mode (audience votes gates):
+  👥 Crowd Vote Mode — audience presses 1–4 to vote gates &nbsp;<span style="color:var(--teal)">[V]&nbsp;to&nbsp;toggle&nbsp;anytime</span>:
   <button class="btn" style="display:inline;width:auto;padding:4px 10px;margin-left:8px;font-size:7px"
-    id="vote-btn" onclick="GAME.voteMode=!GAME.voteMode;this.textContent=GAME.voteMode?'ON ✓':'OFF'">${GAME.voteMode?'ON ✓':'OFF'}</button>
+    id="vote-btn" onclick="GAME.voteMode=!GAME.voteMode;this.textContent=GAME.voteMode?'ON ✓':'OFF';_updateVoteBadge();">${GAME.voteMode?'ON ✓':'OFF'}</button>
 </p>
 <hr style="border-color:var(--border);margin:6px 0">
 <p style="color:var(--dim);font-size:7px;margin-bottom:4px;">🤖 Claude AI Sage — LLM quantum insights (Anthropic API key):</p>
@@ -3554,10 +3615,26 @@ window.addEventListener('load', () => {
 
 <div id="vote-overlay">
   <div id="vote-title">◈ CROWD VOTE ◈</div>
-  <div id="vote-subtitle">Press 1–4 to vote! Most votes wins the turn.</div>
-  <div id="vote-timer">15</div>
+  <div id="vote-subtitle">Press 1–4 on any keyboard to vote! Most votes wins.</div>
+  <div id="vote-timer">12</div>
   <div id="vote-grid"></div>
-  <div id="vote-status"></div>
+  <div id="vote-status" style="font-size:7px;color:rgba(255,255,255,0.4);margin-top:6px;">
+    [ESC] or [Enter] to resolve immediately
+  </div>
 </div>
+
+<!-- Persistent vote-mode badge, always visible on the game screen -->
+<div id="vote-mode-badge"
+  onclick="GAME.voteMode=!GAME.voteMode;const b=document.getElementById('vote-btn');if(b)b.textContent=GAME.voteMode?'ON ✓':'OFF';_updateVoteBadge();logEv(GAME.voteMode?'Crowd Vote ENABLED — audience presses 1–4 next turn':'Crowd Vote disabled.','system');"
+  title="Toggle Crowd Vote (or press V)"
+  style="
+    position:fixed; bottom:8px; left:50%; transform:translateX(-50%);
+    font-family:var(--pixel); font-size:7px; letter-spacing:1px;
+    padding:5px 14px; border-radius:4px; cursor:pointer;
+    border:1px solid rgba(124,140,230,0.2);
+    background:rgba(18,24,52,0.5); color:#6b76a8;
+    opacity:0.38; z-index:200;
+    transition:all 0.25s ease; user-select:none;
+  ">VOTE OFF [V]</div>
 </body>
 </html>
