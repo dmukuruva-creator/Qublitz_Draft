@@ -21,7 +21,7 @@
   --border-hi: rgba(124,140,230,0.46);
   --ink:       #eaf0ff;   /* primary high-contrast text */
   --ink-2:     #aeb8e6;   /* secondary text */
-  --ink-3:     #6b76a8;   /* muted text */
+  --ink-3:     #9aa3cf;   /* muted text — lightened to meet WCAG AA 4.5:1 on dark bg (QB-8) */
   --gold:      #f5b73c;
   --teal:      #2fe0d0;   /* WHITE controller neon (cyan) */
   --indigo:    #8b7dff;
@@ -31,11 +31,23 @@
   --rose:      #ff4d9d;   /* BLACK controller neon (magenta) */
   --warm:      #eaf0ff;   /* legacy alias → light ink */
   --parchment: #aeb8e6;
-  --dim:       #6b76a8;
-  --wood:      #6b76a8;
+  --dim:       #9aa3cf;   /* QB-8 — AA-contrast muted text on dark bg */
+  --wood:      #9aa3cf;   /* QB-8 — AA-contrast muted text on dark bg */
   --pixel:     'Press Start 2P', monospace;
   --body:      'Space Grotesk', system-ui, -apple-system, sans-serif;
   --ease:      cubic-bezier(.22,.61,.36,1);
+}
+
+/* QB-8 — calm board for users who ask for reduced motion: drop CSS animations
+   and transitions (particles, shake and flashes are gated in JS via
+   REDUCE_MOTION). */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 html, body {
@@ -662,7 +674,13 @@ body::before {
 
     <!-- CANVAS + RPG DIALOGUE BAR (overlaid at bottom of canvas) -->
     <div id="canvas-wrap">
-      <canvas id="game-canvas" width="800" height="800"></canvas>
+      <canvas id="game-canvas" width="800" height="800"
+              role="application"
+              aria-label="QuBlitz quantum battle board. Click a unit to select it, click again to open its action menu."
+              tabindex="0"></canvas>
+      <!-- Screen-reader announcements: turn, selection, winner (QB-8) -->
+      <div id="a11y-status" aria-live="polite" role="status"
+           style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap"></div>
 
       <!-- Sage dialogue bar — overlays bottom of canvas like a JRPG dialogue box -->
       <div id="timer-bar"><div id="timer-fill"></div></div>
@@ -1564,7 +1582,13 @@ function adjacentEnemies(unit, atRow, atCol) {
 // ═══════════════════════════════════════════════════════
 // PARTICLES
 // ═══════════════════════════════════════════════════════
+// QB-8 — honour prefers-reduced-motion: skip particle bursts (and screen shake,
+// gated at the call sites) for users who ask for a calm UI.
+const REDUCE_MOTION = (typeof window!=='undefined' && window.matchMedia)
+  ? window.matchMedia('(prefers-reduced-motion: reduce)').matches : false;
+
 function spawn(cx, cy, color, n=8) {
+  if (REDUCE_MOTION) return;
   for (let i=0; i<n; i++) {
     const a=Math.random()*2*π, spd=1+Math.random()*3;
     GAME.particles.push({
@@ -2668,6 +2692,13 @@ function updateHUD() {
   document.getElementById('turn-info').textContent=FACTION[GAME.turn].name+' to move';
   document.getElementById('phase-info').textContent=`units ${w} – ${b}`;
   document.getElementById('turn-cnt').textContent=`${GAME.turnCount+1}/${GAME.turnCap}`;
+  // QB-8 — mirror turn/winner state into the aria-live region for screen readers.
+  const status = document.getElementById('a11y-status');
+  if (status) {
+    status.textContent = GAME.winner
+      ? (GAME.winner==='draw' ? 'Game over: draw.' : `Game over: ${FACTION[GAME.winner].name} wins.`)
+      : `${FACTION[GAME.turn].name} to move. Units ${w} to ${b}, turn ${GAME.turnCount+1} of ${GAME.turnCap}.`;
+  }
   if (typeof renderSage==='function') renderSage();
 }
 
@@ -2689,6 +2720,19 @@ function updateSelInfo(unit) {
   document.getElementById('sel-coh').textContent=unit.coherence.toFixed(0)+'%';
   document.getElementById('sel-hint').textContent=
     `Charge = strike chance (P(|1⟩)). Use X to charge toward |1⟩, H for a 50% gamble, MEASURE to discharge & stabilize. After attacking, the unit drops to |0⟩.`;
+  // QB-8 — announce the selection and, on the very first selection, show a
+  // one-time "click again for actions" onboarding hint.
+  const st = document.getElementById('a11y-status');
+  if (st) st.textContent = `Selected ${coord(unit.row,unit.col)}, ${FACTION[unit.owner].name}. `+
+    `Charge ${(ch*100)|0} percent, ${unit.hp} of ${unit.maxHp} HP. Click again to open actions.`;
+  try {
+    if (!localStorage.getItem('qb_hint_actions')) {
+      localStorage.setItem('qb_hint_actions','1');
+      logEv('TIP: click the selected unit again to open its action menu (charge, attack, measure, entangle).','system');
+      if (!REDUCE_MOTION)
+        GAME.floats.push({text:'click again for actions', x:unit.px, y:unit.py-CELL*0.6, vy:-0.5, life:2.6, color:'#f5b73c', size:7});
+    }
+  } catch(e){}
   drawBloch();
   if (typeof renderSage==='function') renderSage();
 }
@@ -2988,7 +3032,9 @@ function loop() {
   ctx.clearRect(0,0,BOARD,BOARD);
 
   // Screen shake: translate canvas by random jitter, decaying each frame.
-  let _doShake = GAME.shake > 0;
+  // Suppressed entirely under prefers-reduced-motion (QB-8).
+  let _doShake = GAME.shake > 0 && !REDUCE_MOTION;
+  if (REDUCE_MOTION) GAME.shake = 0;
   if (_doShake) {
     ctx.save();
     ctx.translate((Math.random()-0.5)*GAME.shake*0.7, (Math.random()-0.5)*GAME.shake*0.5);
