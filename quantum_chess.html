@@ -133,14 +133,6 @@ html, body {
   letter-spacing: 4px;
 }
 #title-bar .sub { font-size: 11px; font-family: var(--body); font-weight: 600; color: var(--ink-2); letter-spacing: 1px; }
-#check-warn {
-  font-family: var(--pixel); font-size: 10px;
-  color: #fff; background: var(--red);
-  padding: 5px 10px; border-radius: 999px;
-  box-shadow: 0 4px 14px rgba(224,65,60,0.45);
-  animation: blink 0.5s step-end infinite;
-  display: none;
-}
 #attract-badge {
   font-family: var(--pixel); font-size: 9px;
   color: var(--indigo); letter-spacing: 1px;
@@ -583,25 +575,6 @@ body::before {
 /* ── Guardian role badge ──────────────────────────────── */
 /* (painted on canvas, no DOM needed) */
 
-/* ── Peer.js connection panel ─────────────────────────── */
-#peer-panel {
-  display:none; padding:12px 14px; border:1px solid var(--border);
-  border-radius:6px; background:rgba(8,12,30,0.6); margin:8px 0;
-  text-align:center;
-}
-#peer-panel.show { display:block; }
-#peer-code {
-  font-family:var(--pixel); font-size:18px; color:var(--teal);
-  letter-spacing:6px; padding:10px 0; display:block;
-  text-shadow:0 0 14px rgba(47,224,208,0.6);
-}
-#peer-input {
-  background:#0c1226; border:2px solid var(--border);
-  color:var(--gold); font-family:var(--pixel); font-size:10px;
-  padding:6px 10px; width:100%; border-radius:4px; margin-top:6px;
-  letter-spacing:4px; text-transform:uppercase; text-align:center;
-}
-
 /* ── Campaign mission cards ──────────────────────────── */
 .mission-card {
   margin:8px 0; padding:12px 14px;
@@ -633,7 +606,6 @@ body::before {
   <!-- Title bar -->
   <div id="title-bar">
     <h1>◈ QUBLITZ</h1>
-    <div id="check-warn">★ MAJORITY ★</div>
     <div id="attract-badge">★ DEMO — CLICK TO PLAY ★</div>
     <span class="sub">QUBIT BATTLE ARENA · CHARGE · STRIKE · COLLAPSE</span>
   </div>
@@ -1438,8 +1410,6 @@ const GAME = {
   campaignMission:null, campaignDone:[],
   // Guardian guard-stance
   // (per-unit 'guarding' property on unit objects)
-  // Replay
-  moveLog:[],
   // Crowd vote
   voteMode:false,
 };
@@ -1458,7 +1428,7 @@ function resetGame(mode) {
     cnotMode:false, cnotControl:null, attackMode:false, attackSource:null,
     particles:[], deaths:[], fx:[], attractMode: mode === 'attract',
     shake:0, floats:[], beamFlash:{},
-    critCount:0, entanglCount:0, botLastReason:'', moveLog:[],
+    critCount:0, entanglCount:0, botLastReason:'',
     campaignMission: (mode==='attract'||mode==='vsBot'||mode==='vs2P') ? null : GAME.campaignMission,
   });
   stopTurnTimer();
@@ -1468,7 +1438,6 @@ function resetGame(mode) {
     const el = document.getElementById(`cnt-${g}`);
     if (el) el.textContent = '0';
   });
-  document.getElementById('check-warn').style.display = 'none';
   document.getElementById('attract-badge').style.display =
     mode === 'attract' ? 'block' : 'none';
   logEv(`Battle start — ${p.label}. Charge your qubits toward |1⟩, close in, and strike. WHITE moves first.`,'system');
@@ -2767,7 +2736,6 @@ document.addEventListener('keydown', e => {
     return;
   }
   // R copies replay
-  if (e.key.toLowerCase()==='r' && GAME.phase==='gameover') { copyReplay(); return; }
 
   // ESC: cancel everything
   if (e.key==='Escape') {
@@ -3185,74 +3153,6 @@ function _updateVoteBadge() {
     badge.style.opacity='0.38'; badge.style.background='rgba(18,24,52,0.5)';
     badge.style.borderColor='rgba(124,140,230,0.2)'; badge.style.color='#6b76a8';
   }
-}
-
-// ═══════════════════════════════════════════════════════
-// REPLAY — serialize move log to clipboard
-// ═══════════════════════════════════════════════════════
-function copyReplay() {
-  try {
-    const s=btoa(JSON.stringify(GAME.moveLog));
-    if (navigator.clipboard) navigator.clipboard.writeText(s).catch(()=>{});
-    logEv('Replay log ('+GAME.moveLog.length+' moves) copied to clipboard.','system');
-    beep(523,'triangle',0.07,0.13);
-  } catch(e){}
-}
-
-// ═══════════════════════════════════════════════════════
-// PEER.JS NETWORKED 2P
-// ═══════════════════════════════════════════════════════
-let _peer=null, _peerConn=null;
-function initPeer(){
-  const panel=document.getElementById('peer-panel');
-  if(panel) panel.classList.add('show');
-  if(typeof Peer!=='undefined'){ _setupPeer(); return; }
-  logEv('Loading Peer.js...','system');
-  const s=document.createElement('script');
-  s.src='https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js';
-  s.onload=()=>{ logEv('Peer.js ready.','system'); _setupPeer(); };
-  s.onerror=()=>logEv('Peer.js failed to load (need internet).','system');
-  document.head.appendChild(s);
-}
-function _setupPeer(){
-  const code=Math.random().toString(36).slice(2,8).toUpperCase();
-  try{ _peer=new Peer('qb-'+code); }catch(e){ logEv('Peer error: '+e.message,'system'); return; }
-  _peer.on('open',()=>{
-    const el=document.getElementById('peer-code'); if(el) el.textContent=code;
-    logEv('Your peer code: '+code+' — share with opponent.','system');
-  });
-  _peer.on('connection',conn=>{ _peerConn=conn; _setupConn(conn,'host'); });
-  _peer.on('error',e=>logEv('Peer: '+e.type,'system'));
-}
-function connectToPeer(code){
-  if(!code||code.length<4){ logEv('Enter the 6-character code.','system'); return; }
-  if(!_peer) initPeer();
-  setTimeout(()=>{
-    try{
-      const conn=_peer.connect('qb-'+code.toUpperCase().trim());
-      _setupConn(conn,'guest');
-    }catch(e){ logEv('Connect failed: '+e.message,'system'); }
-  },800);
-}
-function _setupConn(conn,role){
-  _peerConn=conn;
-  conn.on('open',()=>{
-    logEv('P2P link established ('+role+')!','quantum');
-    closeModal(); resetGame('vs2P');
-    if(role==='guest') GAME.botColor='white'; // guest plays white
-  });
-  conn.on('data',d=>{
-    if(d.type==='move'){
-      // Apply remote move: update the piece that moved.
-      const u=GAME.pieces.find(p=>p.id===d.id);
-      if(!u) return;
-      u.row=d.row; u.col=d.col;
-      if(d.gate) applyGate(u,d.gate);
-      if(d.measure){ const m=measureState(u.state); u.state=m.state; refreshSuperpos(u); }
-      endTurn();
-    }
-  });
-  conn.on('close',()=>logEv('Peer disconnected.','system'));
 }
 
 // ═══════════════════════════════════════════════════════
@@ -3698,15 +3598,6 @@ function openMenu() {
 <button class="btn" style="background:linear-gradient(135deg,rgba(47,224,208,0.18),rgba(139,125,255,0.14));border-color:var(--teal)"
   onclick="closeModal();resetGame('vsBot');GAME.difficulty=parseInt(document.getElementById('diff-sel')?document.getElementById('diff-sel').value:1)||1">▶ PLAY vs BOT (1P)</button>
 <button class="btn" onclick="closeModal();resetGame('vs2P')">▶ LOCAL vs FRIEND (2P)</button>
-<button class="btn" style="border-color:var(--indigo);color:var(--indigo)"
-  onclick="closeModal();initPeer()">🌐 NETWORK 2P (Peer.js)</button>
-<div id="peer-panel">
-  <span style="font-family:var(--pixel);font-size:7px;color:var(--ink-2)">YOUR CODE:</span>
-  <span id="peer-code">------</span>
-  <input id="peer-input" type="text" placeholder="ENTER OPPONENT CODE" maxlength="6"
-    onkeydown="if(event.key==='Enter')connectToPeer(this.value)">
-  <button class="btn" style="margin-top:6px" onclick="connectToPeer(document.getElementById('peer-input').value)">⚡ CONNECT</button>
-</div>
 <hr style="border-color:var(--border);margin:12px 0">
 <button class="btn" onclick="openCampaign()">🎓 TRAINING PROGRAMS (3 missions)</button>
 <button class="btn" onclick="closeModal();openTutorial()">📜 BATTLE MANUAL</button>
