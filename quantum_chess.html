@@ -977,13 +977,13 @@ const GATE_INFO = {
   H: {label:'Hadamard',short:'|0⟩↔|+⟩ superposition',ctrl:'π rotation around (X+Z)/√2. Creates maximum superposition — equal |0⟩/|1⟩ amplitude. Drives qubit to Bloch equator.'},
   X: {label:'Pauli-X',short:'|0⟩↔|1⟩ bit-flip NOT',ctrl:'π rotation around X-axis. Full population inversion. The quantum NOT gate — foundational to error correction.'},
   Y: {label:'Pauli-Y',short:'bit-flip + phase flip',ctrl:'π rotation around Y-axis. Applies both bit-flip and phase-flip: α↦−iβ, β↦iα.'},
-  Z: {label:'Pauli-Z',short:'flip |+⟩↔|−⟩ (steal)',ctrl:'π rotation around Z-axis. Flips the sign of |1⟩ amplitude — swaps |+⟩↔|−⟩ to steal a cell.'},
-  S: {label:'S Phase',short:'π/2 phase on |1⟩',ctrl:'90° Z-axis rotation. Multiplies |1⟩ by i. Chain two S gates to get Z.'},
-  T: {label:'T Gate',short:'π/4 phase on |1⟩',ctrl:'45° Z-axis rotation. Non-Clifford — essential for universal quantum computation.'},
-  Rx:{label:'Rx(π/4)',short:'Larmor precession',ctrl:'π/4 X-axis rotation, modelling Larmor spin precession. Enables quantum tunneling at high coherence.'},
-  Ry:{label:'Ry(π/4)',short:'Rabi oscillation',ctrl:'π/4 Y-axis rotation, modelling Rabi oscillation — the cleanest coherent qubit drive.'},
-  CNOT:   {label:'CNOT',short:'entangle two qubits',ctrl:'Conditional X: flips target if control |1⟩. Creates Bell-state entanglement when control is in superposition.'},
-  MEASURE:{label:'Measure',short:'collapse to eigenstate',ctrl:'Projective Z-basis measurement. Collapses |ψ⟩ to |0⟩ or |1⟩. Partially restores coherence (+10).'},
+  Z: {label:'Pauli-Z',short:'phase flip |+⟩↔|−⟩',ctrl:'π rotation around Z-axis. Flips the sign of the |1⟩ amplitude (φ→φ+π), which swaps |+⟩↔|−⟩. Phase is invisible to charge and a Z-basis strike, but flips a safe X-basis GUARD into an exposed one.'},
+  S: {label:'S Phase',short:'+π/2 relative phase',ctrl:'90° Z-axis rotation. Multiplies |1⟩ by i (φ→φ+π/2). Chain two S gates to get Z. Sets up the relative phase that decides a GUARD\'s X-basis crit odds.'},
+  T: {label:'T Gate',short:'+π/4 relative phase',ctrl:'45° Z-axis rotation (φ→φ+π/4). Non-Clifford — essential for universal computation. Like S/Z, it only changes outcomes through X-basis interference (GUARD).'},
+  Rx:{label:'Rx(π/4)',short:'π/4 X-axis tilt',ctrl:'π/4 X-axis rotation, modelling Larmor spin precession. Tilts the qubit toward the equator, adjusting both charge and the X-basis phase.'},
+  Ry:{label:'Ry(π/4)',short:'π/4 Y-axis tilt',ctrl:'π/4 Y-axis rotation, modelling Rabi oscillation — the cleanest coherent qubit drive. Nudges charge without adding a complex phase.'},
+  CNOT:   {label:'CNOT',short:'entangle two qubits',ctrl:'Conditional X: flips target if control |1⟩. Forms a correlated Bell pair — a strike on one bleeds onto the other (no faster-than-light control; only the correlation is shared).'},
+  MEASURE:{label:'Measure',short:'collapse to eigenstate',ctrl:'Projective Z-basis measurement. Collapses |ψ⟩ to |0⟩ or |1⟩ and stabilizes the unit (coherence +12).'},
 };
 
 // ═══════════════════════════════════════════════════════
@@ -1024,6 +1024,15 @@ const QPhysics = (() => {
   }
 
   const charge      = r => Math.max(0, Math.min(1, (1 - r.z) / 2));   // P(|1⟩)=ρ11
+  // QB-5 — defensive interference. A GUARDing unit is measured in the X-basis,
+  // so its chance of being caught excited (a CRITICAL) is P(|−⟩) = (1 − x)/2,
+  // where x is the Bloch x-component set by the relative phase φ (Z/S/T) and θ.
+  // This makes phase mechanically real: |+⟩ (x=+1) is crit-immune, |−⟩ (x=−1)
+  // is fully exposed, |0⟩/|1⟩ (x=0) are a coin flip.
+  const guardCritProb = pureOrBloch => {
+    const r = ('z' in pureOrBloch) ? pureOrBloch : blochFromPure(pureOrBloch);
+    return Math.max(0, Math.min(1, (1 - r.x) / 2));
+  };
   const radius      = r => Math.sqrt(r.x*r.x + r.y*r.y + r.z*r.z);    // |r|: 1 pure, 0 mixed
   const purity      = r => (1 + Math.min(1, radius(r)**2)) / 2;       // Tr(ρ²) ∈ [½,1]
   const coherenceL1 = r => Math.sqrt(r.x*r.x + r.y*r.y);              // 2|ρ01| transverse coherence
@@ -1137,7 +1146,7 @@ const QPhysics = (() => {
     return { pass:passed===tests.length, tests };
   }
 
-  return { blochFromPure, pureFromBloch, charge, radius, purity, coherenceL1,
+  return { blochFromPure, pureFromBloch, charge, guardCritProb, radius, purity, coherenceL1,
            lindbladStep, gateBloch, gateMatrix, rhoFromBloch, blochFromRho,
            measure, timesFromRate, diagnose, selfTest };
 })();
@@ -1700,10 +1709,14 @@ function attack(attacker, target) {
   }
   // Mages hurl a spell blast at the target.
   if (attacker.owner==='black') GAME.fx.push({ x:target.px, y:target.py, fi:0, ft:0 });
-  const tm = measureState(target.state);
+  // QB-5 — a GUARDing unit is measured in the X-basis (apply H, then a Z-basis
+  // measurement): whether it is caught excited (a CRITICAL) depends on the
+  // relative phase φ it set up. |+⟩ is crit-immune, |−⟩ is fully exposed.
+  // Non-guarding units take the ordinary Z-basis measurement.
+  const tm = target.guarding ? measureState(GATES.H(target.state))
+                             : measureState(target.state);
   target.state = tm.state; refreshSuperpos(target);
-  // Guarding units cannot take criticals (they collapsed to |0⟩ defensively).
-  const crit = tm.collapsed===1 && !target.guarding;
+  const crit = tm.collapsed===1;
   const dmg  = crit?2:1;
   if (crit) {
     GAME.shake = Math.max(GAME.shake, 16);
@@ -2583,9 +2596,10 @@ function openGateMenu(unit) {
   }));
   opts.push({label:'[C] Entangle (CNOT)', short:GATE_INFO.CNOT.short,   action:'CNOT'});
   opts.push({label:'[M] Measure',          short:GATE_INFO.MEASURE.short, action:'MEASURE'});
-  // Guardians get a GUARD ability: collapse to |0⟩ defensively, immune to crits.
+  // Guardians get a GUARD ability: brace in the X-basis — relative phase (Z/S/T)
+  // decides the crit. Reach |+⟩ to be crit-immune; |−⟩ leaves you fully exposed.
   if (unit.role==='guardian')
-    opts.push({label:'[G] GUARD',          short:'collapse to |0⟩, crit-immune 1 turn', action:'GUARD'});
+    opts.push({label:'[G] GUARD',          short:'brace in X-basis — phase decides the crit', action:'GUARD'});
   opts.push({label:'[·] End turn',          short:'',                     action:'SKIP'});
   GAME.gateMenu={ piece:unit, options:opts };
   GAME._menuHover=-1;
@@ -2614,10 +2628,9 @@ function handleGateClick(mx,my) {
           GAME.cnotMode=true; GAME.cnotControl=piece;
           logEv('Entangle mode: click an adjacent unit to form a Bell link. [ESC] to cancel.','quantum'); break;
         case 'GUARD':
-          piece.guarding=true;
-          piece.state=blochToState(0,0); refreshSuperpos(piece);
+          piece.guarding=true; refreshSuperpos(piece);
           piece.coherence=Math.min(piece.maxCoh, piece.coherence+8);
-          logEv(`GUARD: ${coord(piece.row,piece.col)} collapses to |0⟩ — immune to criticals this turn.`,'quantum');
+          logEv(`GUARD: ${coord(piece.row,piece.col)} braces in the X-basis — a strike measures it as |±⟩; phase decides the crit (${(QPhysics.guardCritProb(piece.state)*100)|0}% crit risk).`,'quantum');
           spawn(piece.px,piece.py,'#8b7dff',12); sfxGate('Z'); endTurn(); break;
         default:
           applyGate(piece, opt.action); endTurn();
@@ -2784,9 +2797,9 @@ document.addEventListener('keydown', e => {
     GAME.gateMenu=null;
     if (gateName==='MEASURE') { applyMeasure(piece); endTurn(); }
     else if (gateName==='GUARD' && piece.role==='guardian') {
-      piece.guarding=true; piece.state=blochToState(0,0); refreshSuperpos(piece);
+      piece.guarding=true; refreshSuperpos(piece);
       piece.coherence=Math.min(piece.maxCoh,piece.coherence+8);
-      logEv(`GUARD: ${coord(piece.row,piece.col)} collapses to |0⟩ — crit-immune this turn.`,'quantum');
+      logEv(`GUARD: ${coord(piece.row,piece.col)} braces in the X-basis — phase decides the crit (${(QPhysics.guardCritProb(piece.state)*100)|0}% crit risk).`,'quantum');
       spawn(piece.px,piece.py,'#8b7dff',12); sfxGate('Z'); endTurn();
     } else { applyGate(piece, gateName); endTurn(); }
     return;
@@ -3079,8 +3092,8 @@ function _executeVoteWinner(action, piece) {
   } else if (action === 'MEASURE') {
     applyMeasure(piece); endTurn();
   } else if (action === 'GUARD' && piece.role === 'guardian') {
-    piece.guarding=true; piece.state=blochToState(0,0); refreshSuperpos(piece);
-    logEv('GUARD activated by crowd vote.','quantum'); sfxGate('Z'); endTurn();
+    piece.guarding=true; refreshSuperpos(piece);
+    logEv('GUARD activated by crowd vote — braces in the X-basis.','quantum'); sfxGate('Z'); endTurn();
   } else {
     applyGate(piece, action); endTurn();
   }
@@ -3789,9 +3802,10 @@ function openTutorial() {
   <tr><th>Pulse</th><th>Effect</th></tr>
   <tr><td>X</td><td>|0⟩→|1⟩ — full charge, guaranteed next strike.</td></tr>
   <tr><td>H</td><td>|0⟩→|+⟩ — ~50% charge, a flexible gamble.</td></tr>
-  <tr><td>S / T / Z</td><td>Phase rotations — fine-tune charge / set up combos.</td></tr>
+  <tr><td>S / T / Z</td><td>Relative-phase rotations (+π/2 · +π/4 · +π). Don't change charge or a normal strike — but a phase-loaded GUARD interferes in the X-basis: reach |+⟩ to be crit-immune, |−⟩ to be exposed.</td></tr>
   <tr><td>Rx / Ry</td><td>±45° rotations — partial charge in one step.</td></tr>
 </table>
+<p style="opacity:.85"><b>GUARD (guardians):</b> braces in the <b>X-basis</b> instead of collapsing to |0⟩. An incoming strike measures the unit as |±⟩, so the relative phase you set with H/S/T/Z decides the crit: a |+⟩ guard is crit-immune, a |0⟩ guard is a coin flip, a |−⟩ guard is fully exposed. Phase finally pays off.</p>
 
 <h3>⚛ DECOHERENCE (Lindblad T1 / T2)</h3>
 <p>Real qubits don't bleed charge linearly — they decay <b>exponentially</b>. QuBlitz evolves every unit with the exact solution of the <b>Lindblad master equation</b>: excited charge relaxes toward |0⟩ as <b>e<sup>−t/T₁</sup></b> (amplitude damping) while superposition coherence fades as <b>e<sup>−t/T₂</sup></b> (dephasing, with T₂ ≤ 2T₁). On the Bloch sphere the state vector <b>contracts inward</b> as it mixes. So load up and strike <b>soon</b> — charge halves every couple of turns; don't charge a unit that can't reach a target. A fully decohered unit collapses to |0⟩.</p>

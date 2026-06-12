@@ -153,8 +153,8 @@ with st.sidebar:
         "ATTACK":      "Strike an adjacent enemy. Hit chance = your charge |β|². On a hit, an enemy caught in |1⟩ takes a CRITICAL (2 dmg). You then discharge to |0⟩.",
         "X  (charge)": "|0⟩→|1⟩ — full charge, a guaranteed next strike.",
         "H  (gamble)": "|0⟩→|+⟩ — ~50% charge. A flexible coin-flip strike.",
-        "S / T":       "Phase rotations about Z (90° / 45°) — fine-tune charge and set up combos.",
-        "Z  (Pauli-Z)":"180° about Z — phase flip.",
+        "S / T":       "Relative-phase rotations about Z (90° / 45°). They don't change charge or a normal strike — but a phase-loaded GUARD interferes in the X-basis, where phase decides the crit.",
+        "Z  (Pauli-Z)":"180° about Z — phase flip (|+⟩↔|−⟩). Flips a safe X-basis GUARD into an exposed one.",
         "Y  (Pauli-Y)":"π about Y — bit-flip + phase-flip.",
         "Rx / Ry":     "±45° rotations — partial charge in a single pulse.",
         "CNOT":        "Entangle two ADJACENT units (friend or foe). A hit on one bleeds 1 onto the other.",
@@ -298,9 +298,9 @@ Every action is a **unitary** rotation of a qubit's state — a control pulse, e
 |---|---|---|
 | **X** | `[[0,1],[1,0]]` | |0⟩↔|1⟩ — full charge, guaranteed strike |
 | **H** | `1/√2 [[1,1],[1,-1]]` | |0⟩→|+⟩ — ~50% charge, a gamble |
-| **S** | `[[1,0],[0,i]]` | 90° about Z — phase / fine-tune |
-| **T** | `[[1,0],[0,e^{iπ/4}]]` | 45° about Z — fine phase control |
-| **Z** | `[[1,0],[0,-1]]` | 180° about Z — phase flip |
+| **S** | `[[1,0],[0,i]]` | 90° about Z — relative phase (matters under an X-basis GUARD) |
+| **T** | `[[1,0],[0,e^{iπ/4}]]` | 45° about Z — relative phase (matters under an X-basis GUARD) |
+| **Z** | `[[1,0],[0,-1]]` | 180° about Z — phase flip |0⟩↔... |+⟩↔|−⟩ |
 
 Gates are *reversible* and preserve |α|²+|β|² = 1.
     """)
