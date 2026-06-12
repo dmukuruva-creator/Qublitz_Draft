@@ -774,12 +774,6 @@ function sfxDecohere() {
   g.gain.exponentialRampToValueAtTime(0.0001, c.currentTime + 0.22);
   s.start(); s.stop(c.currentTime + 0.22);
 }
-function sfxTunnel() {
-  [740,587,494,370].forEach((f,i) => setTimeout(()=>beep(f,'triangle',0.08,0.14), i*40));
-}
-function sfxCheck() {
-  beep(740,'square',0.06,0.24); setTimeout(()=>beep(988,'square',0.07,0.18), 80);
-}
 function sfxGate(name) {
   const f = {H:523,X:392,Y:440,Z:349,S:494,T:587,Rx:330,Ry:370,CNOT:659,MEASURE:262};
   beep(f[name]||440,'triangle',0.11,0.18);
@@ -796,9 +790,6 @@ function sfxCrit() {
 }
 function sfxWin() {
   [392,494,587,784,988].forEach((f,i)=>setTimeout(()=>beep(f,'triangle',0.17,0.30),i*120));
-}
-function sfxPromotion() {
-  [392,494,587,784,988,1175].forEach((f,i)=>setTimeout(()=>beep(f,'triangle',0.14,0.25),i*88));
 }
 function sfxBootBeep(f) { beep(f,'triangle',0.04,0.07); }
 
@@ -836,36 +827,6 @@ function syncCellCSS() {
 }
 syncCellCSS();
 
-// DOM overlay for legacy compatibility — no longer used by the bot (canvas tweens handle it).
-function animateDomMove(spriteUrl, fromCell, toCell, ms=400) {
-    return new Promise((resolve) => {
-      const boardEl = document.getElementById('game-canvas');
-      if (!boardEl) return resolve();
-      const rect = boardEl.getBoundingClientRect();
-      const overlay = document.createElement('div');
-      overlay.className = 'piece-fly';
-      overlay.style.width = overlay.style.height = `${CELL}px`;
-      overlay.style.backgroundImage = `url(${spriteUrl || ''})`;
-      // compute start/end in pixels relative to viewport
-      const sx = rect.left + fromCell.x * CELL;
-      const sy = rect.top  + fromCell.y * CELL;
-      const tx = rect.left + toCell.x * CELL;
-      const ty = rect.top  + toCell.y * CELL;
-      overlay.style.transform = `translate3d(${sx}px, ${sy}px, 0)`;
-      document.body.appendChild(overlay);
-      // force layout then animate via transition
-      requestAnimationFrame(() => {
-        overlay.style.transition = `transform ${ms}ms linear`;
-        overlay.style.transform = `translate3d(${tx}px, ${ty}px, 0)`;
-        // small bobbing to feel like walking
-        overlay.style.animation = 'walk 420ms steps(2) infinite';
-        setTimeout(() => {
-          overlay.remove();
-          resolve();
-        }, ms);
-      });
-    });
-  }
 
 // Biome toggle: stores preference in localStorage and toggles body class.
 function initBiomeToggle() {
@@ -971,11 +932,6 @@ function fmtState(s) {
 // ═══════════════════════════════════════════════════════
 // QUBIT BATTLE — Bloch vector + "charge" (excited-state amplitude)
 // ═══════════════════════════════════════════════════════
-// The unit Bloch vector (x,y,z) of a pure state.
-function blochVec(state) {
-  const {theta, phi} = stateToBloch(state);
-  return [Math.sin(theta)*Math.cos(phi), Math.sin(theta)*Math.sin(phi), Math.cos(theta)];
-}
 // "Charge" = P(|1⟩) = how likely/strong a unit's strike is (Born rule).
 function charge(unit) { return C.norm2(unit.state.beta); }
 // Faction palette (used everywhere a unit's side needs a color).
@@ -3031,9 +2987,6 @@ function _updateVoteBadge() {
 // ═══════════════════════════════════════════════════════
 // REPLAY — serialize move log to clipboard
 // ═══════════════════════════════════════════════════════
-function recordMove(type, data) {
-  GAME.moveLog.push({t:GAME.turnCount, turn:GAME.turn, type, ...data});
-}
 function copyReplay() {
   try {
     const s=btoa(JSON.stringify(GAME.moveLog));
@@ -3098,9 +3051,6 @@ function _setupConn(conn,role){
   });
   conn.on('close',()=>logEv('Peer disconnected.','system'));
 }
-function _syncMove(data){
-  if(_peerConn&&_peerConn.open) _peerConn.send({type:'move',...data});
-}
 
 // ═══════════════════════════════════════════════════════
 // BACKGROUND PARTICLE SYSTEM
@@ -3153,23 +3103,6 @@ function _drawPed(p,t){
   bgCtx.shadowBlur=0;
 }
 
-function _drawCar(p,t){
-  const s=p.s, x=Math.round(p.x), y=Math.round(p.y);
-  bgCtx.fillStyle=`rgba(${p.col},0.45)`;
-  bgCtx.shadowColor=`rgba(${p.col},0.5)`; bgCtx.shadowBlur=8;
-  bgCtx.fillRect(x, y, s*7, s*2.4);              // body
-  bgCtx.fillRect(x+s*1.4, y-s*1.4, s*4, s*1.6);  // cabin
-  bgCtx.shadowBlur=0;
-  bgCtx.fillStyle='rgba(16,20,36,0.85)';         // wheels
-  bgCtx.fillRect(x+s,     y+s*2.2, s*1.2, s*0.9);
-  bgCtx.fillRect(x+s*4.8, y+s*2.2, s*1.2, s*0.9);
-  const front=p.dir>0?x+s*6.6:x; const rear=p.dir>0?x:x+s*6.6;
-  bgCtx.fillStyle='rgba(255,255,200,0.9)'; bgCtx.shadowColor='#fff'; bgCtx.shadowBlur=7; // headlight
-  bgCtx.fillRect(front, y+s*0.7, s*0.6, s*0.8);
-  bgCtx.fillStyle='rgba(255,70,70,0.95)'; bgCtx.shadowColor='#ff3030'; bgCtx.shadowBlur=9; // tail-light
-  bgCtx.fillRect(rear,  y+s*0.7, s*0.6, s*0.8);
-  bgCtx.shadowBlur=0;
-}
 
 function animateBg() {
   const W=bgCanvas.width, H=bgCanvas.height;
