@@ -734,6 +734,8 @@ body::before {
 <script>
 'use strict';
 
+const QB_VERSION = 'v1.1';   // physics-engine release: exact Lindblad T₁/T₂ decoherence
+
 // ═══════════════════════════════════════════════════════
 // AUDIO ENGINE  (Web Audio API, lazy-init on first click)
 // ═══════════════════════════════════════════════════════
@@ -849,7 +851,9 @@ function initBiomeToggle() {
   });
   tb.appendChild(btn);
 }
-window.addEventListener('load', initBiomeToggle);
+// Biome toggle retired — the board is now a procedural quantum lattice, so the
+// grass/snow art toggle no longer applies. (initBiomeToggle kept for reference.)
+void initBiomeToggle;
 
 // ═══════════════════════════════════════════════════════
 // PIXEL-ART BIOME ART  (embedded tileset visualizations)
@@ -983,6 +987,167 @@ const GATE_INFO = {
 };
 
 // ═══════════════════════════════════════════════════════
+// QPhysics — open-quantum-system engine (Lindblad T1 / T2)
+// ═══════════════════════════════════════════════════════
+// A standalone, unit-tested physics core, separable from the game UI (per the
+// QuBlitz critique: replace the ad-hoc decoherence with a physically-motivated,
+// verifiable model — recs #1, #2, #6). It models a single qubit as a 2×2 density
+// matrix ρ and evolves it under the EXACT analytical solution of the Lindblad
+// master equation for amplitude damping (T1 relaxation toward the ground state
+// |0⟩) plus pure dephasing (T2). No HTML dependencies — callable + testable on
+// its own (window.QPhysics / runDecoherenceDiagnostic()).
+//
+// Bloch convention (matches blochToState/stateToBloch and the Bloch renderer):
+//   r=(x,y,z), z=+1 ↔ |0⟩ (north), z=−1 ↔ |1⟩ (south).
+//   ρ = ½[[1+z, x−iy],[x+iy, 1−z]]  ⇒  ρ00=(1+z)/2, ρ11=(1−z)/2.
+//   x = 2·Re(ρ01),  y = −2·Im(ρ01),  z = ρ00−ρ11,  with ρ01 = α·conj(β).
+//   charge ≡ P(|1⟩) = ρ11 = (1−z)/2.
+//
+// Exact Lindblad solution over one step dt (relaxation toward |0⟩):
+//   x(t)=x₀·e^(−dt/T2),  y(t)=y₀·e^(−dt/T2),  z(t)=1+(z₀−1)·e^(−dt/T1).
+// The physical constraint T2 ≤ 2·T1 is enforced.
+const QPhysics = (() => {
+  const cConj = a => ({ r:a.r, i:-a.i });
+
+  // pure spinor {alpha,beta} → Bloch vector {x,y,z}
+  function blochFromPure(s) {
+    const r01 = C.mul(s.alpha, cConj(s.beta));     // ρ01 = α·β*
+    return { x: 2*r01.r, y: -2*r01.i, z: C.norm2(s.alpha) - C.norm2(s.beta) };
+  }
+
+  // Bloch vector → a pure spinor on the same z & azimuth. Charge (=(1−z)/2) and
+  // direction are preserved exactly; this feeds the game's pure-state code paths.
+  function pureFromBloch(r) {
+    const theta = Math.acos(Math.max(-1, Math.min(1, r.z)));   // cosθ = z
+    const phi = Math.atan2(r.y, r.x);
+    return { alpha:{r:Math.cos(theta/2), i:0}, beta:C.fromPolar(Math.sin(theta/2), phi) };
+  }
+
+  const charge      = r => Math.max(0, Math.min(1, (1 - r.z) / 2));   // P(|1⟩)=ρ11
+  const radius      = r => Math.sqrt(r.x*r.x + r.y*r.y + r.z*r.z);    // |r|: 1 pure, 0 mixed
+  const purity      = r => (1 + Math.min(1, radius(r)**2)) / 2;       // Tr(ρ²) ∈ [½,1]
+  const coherenceL1 = r => Math.sqrt(r.x*r.x + r.y*r.y);              // 2|ρ01| transverse coherence
+
+  // One exact Lindblad step toward the ground state |0⟩.
+  function lindbladStep(r, { T1, T2, dt = 1 }) {
+    T1 = Math.max(1e-6, T1);
+    T2 = Math.max(1e-6, Math.min(T2, 2 * T1));     // enforce T2 ≤ 2·T1
+    const eT2 = Math.exp(-dt / T2), eT1 = Math.exp(-dt / T1);
+    return { x: r.x * eT2, y: r.y * eT2, z: 1 + (r.z - 1) * eT1 };
+  }
+
+  // ── density-matrix layer (unitary gates + self-tests) ──
+  const rhoFromBloch = r =>
+    [[{r:(1+r.z)/2,i:0}, {r:r.x/2,i:-r.y/2}],
+     [{r:r.x/2,i:r.y/2}, {r:(1-r.z)/2,i:0}]];
+  const blochFromRho = rho =>
+    ({ x: 2*rho[0][1].r, y: -2*rho[0][1].i, z: rho[0][0].r - rho[1][1].r });
+  // 2×2 unitary of a named game gate, derived from GATES (single source of truth):
+  // U = [ GATE(|0⟩) | GATE(|1⟩) ] as columns.
+  function gateMatrix(name) {
+    const g = GATES[name]; if (!g) return null;
+    const c0 = g({alpha:{r:1,i:0}, beta:{r:0,i:0}});
+    const c1 = g({alpha:{r:0,i:0}, beta:{r:1,i:0}});
+    return [[c0.alpha, c1.alpha], [c0.beta, c1.beta]];
+  }
+  const matMul = (A,B) => {
+    const o = [[null,null],[null,null]];
+    for (let i=0;i<2;i++) for (let j=0;j<2;j++)
+      o[i][j] = C.add(C.mul(A[i][0],B[0][j]), C.mul(A[i][1],B[1][j]));
+    return o;
+  };
+  const dagger = U => [[cConj(U[0][0]), cConj(U[1][0])],
+                       [cConj(U[0][1]), cConj(U[1][1])]];
+  // Apply a unitary gate to a Bloch vector via ρ → UρU† (valid for mixed states).
+  function gateBloch(r, name) {
+    const U = gateMatrix(name); if (!U) return r;
+    return blochFromRho(matMul(matMul(U, rhoFromBloch(r)), dagger(U)));
+  }
+  // Born-rule projective measurement in the Z basis.
+  const measure = r => Math.random() < charge(r)
+    ? { outcome:1, bloch:{x:0,y:0,z:-1} } : { outcome:0, bloch:{x:0,y:0,z:1} };
+
+  // Map the game's coarse decoherence rate to physical T1/T2 (in turns).
+  function timesFromRate(decoRate) {
+    const dr = Math.max(0.25, decoRate || 1);
+    const T1 = 10 / dr;          // amplitude damping: charge relaxes ~e^(−t/T1)
+    const T2 = 0.75 * T1;        // dephasing slightly faster (T2 ≤ 2·T1 ✓)
+    return { T1, T2 };
+  }
+
+  // ── falsifiability harness (critique rec #2) ──
+  // Prepare a unit in |1⟩, evolve N turns, fit charge-vs-turns to an exponential
+  // and to a line. A physical model ⇒ R²_exp ≈ 1 ≫ R²_lin, and the fitted T1
+  // recovers the input T1.
+  function linregR2(xs, ys) {
+    const n = xs.length;
+    const mx = xs.reduce((a,b)=>a+b,0)/n, my = ys.reduce((a,b)=>a+b,0)/n;
+    let sxy=0, sxx=0, syy=0;
+    for (let i=0;i<n;i++){ const dx=xs[i]-mx, dy=ys[i]-my; sxy+=dx*dy; sxx+=dx*dx; syy+=dy*dy; }
+    const slope = sxx ? sxy/sxx : 0;
+    let ssRes=0; for (let i=0;i<n;i++){ const f=slope*xs[i]+(my-slope*mx); ssRes+=(ys[i]-f)**2; }
+    return { slope, r2: syy ? 1 - ssRes/syy : 1 };
+  }
+  function diagnose({ decoRate = 2, turns = 20 } = {}) {
+    const { T1, T2 } = timesFromRate(decoRate);
+    let r = { x:0, y:0, z:-1 };                  // start fully excited |1⟩
+    const t=[], q=[], lnq=[];
+    for (let k=0;k<=turns;k++){
+      const c = charge(r); t.push(k); q.push(c);
+      if (c > 1e-9) lnq.push(Math.log(c));
+      r = lindbladStep(r, { T1, T2, dt:1 });
+    }
+    const expFit = linregR2(t.slice(0, lnq.length), lnq);   // ln(q) vs t
+    const linFit = linregR2(t, q);                          // q vs t
+    const report = {
+      model:'Lindblad amplitude damping', decoRate, T1, T2,
+      R2_exponential:+expFit.r2.toFixed(5), R2_linear:+linFit.r2.toFixed(5),
+      T1_input:+T1.toFixed(3), T1_recovered:+(expFit.slope?-1/expFit.slope:Infinity).toFixed(3),
+      verdict: expFit.r2 > linFit.r2 ? 'EXPONENTIAL (physical) ✓' : 'LINEAR (non-physical) ✗',
+      charge_by_turn: q.map(v=>+v.toFixed(4)),
+    };
+    if (typeof console!=='undefined' && console.table)
+      console.table({ R2_exp:report.R2_exponential, R2_lin:report.R2_linear,
+                      T1_in:report.T1_input, T1_fit:report.T1_recovered, verdict:report.verdict });
+    return report;
+  }
+
+  function selfTest() {
+    const approx=(a,b,e=1e-9)=>Math.abs(a-b)<=e;
+    const Z0={x:0,y:0,z:1};
+    const hp=gateBloch(Z0,'H');
+    const T1=5,T2=3;
+    const r1=lindbladStep({x:0,y:0,z:-1},{T1,T2,dt:1});   // |1⟩ → one step
+    const rp=lindbladStep({x:1,y:0,z:0},{T1,T2,dt:1});    // |+⟩ → one step
+    const clamp=lindbladStep({x:1,y:0,z:0},{T1:2,T2:99,dt:1});
+    const tests=[
+      ['H|0⟩→|+⟩ (z=0,x=1)', approx(hp.z,0)&&approx(hp.x,1)],
+      ['X|0⟩→|1⟩ (z=−1)',     approx(gateBloch(Z0,'X').z,-1)],
+      ['Z preserves z',        approx(gateBloch(Z0,'Z').z,1)],
+      ['charge(|1⟩)=1',        approx(charge({x:0,y:0,z:-1}),1)],
+      ['charge(|+⟩)=½',        approx(charge(hp),0.5)],
+      ['charge relaxes e^(−1/T1)', approx(charge(r1),Math.exp(-1/T1))],
+      ['transverse decays e^(−1/T2)', approx(coherenceL1(rp),Math.exp(-1/T2))],
+      ['T2 clamped to 2·T1',   clamp.x<=Math.exp(-1/(2*2))+1e-9],
+    ];
+    const passed=tests.filter(([,v])=>v).length;
+    const fails=tests.filter(([,v])=>!v).map(([n])=>n);
+    (passed===tests.length?console.log:console.error)
+      (`QPhysics self-test: ${passed}/${tests.length} passed`+(fails.length?` — FAILED: ${fails.join('; ')}`:' ✓'));
+    return { pass:passed===tests.length, tests };
+  }
+
+  return { blochFromPure, pureFromBloch, charge, radius, purity, coherenceL1,
+           lindbladStep, gateBloch, gateMatrix, rhoFromBloch, blochFromRho,
+           measure, timesFromRate, diagnose, selfTest };
+})();
+if (typeof window !== 'undefined') {
+  window.QPhysics = QPhysics;
+  window.runDecoherenceDiagnostic = o => QPhysics.diagnose(o);
+  try { QPhysics.selfTest(); } catch (e) { console.error('QPhysics self-test threw', e); }
+}
+
+// ═══════════════════════════════════════════════════════
 // PIXEL ART SPRITES  (7 cols × 9 rows bitmaps)
 // ═══════════════════════════════════════════════════════
 const SPRITES = {
@@ -1083,6 +1248,7 @@ function createUnit(owner, row, col, walkIn=false, role='warrior') {
   return {
     owner, row, col, role,
     state:         blochToState(0, 0),   // |0⟩
+    bloch:         { x:0, y:0, z:1 },     // open-system Bloch vector (z=+1 ↔ |0⟩)
     hp:            role==='guardian' ? MAX_HP+1 : MAX_HP,
     maxHp:         role==='guardian' ? MAX_HP+1 : MAX_HP,
     moveRange:     role==='guardian' ? Math.max(1,MOVE_RANGE-1) : MOVE_RANGE,
@@ -1367,26 +1533,57 @@ function selectPiece(unit) {
   GAME.gateMenu  = null;
   sfxSelect();
   updateSelInfo(unit);
+  // Pre-move Sage (critique rec #3): advise WHILE the player deliberates, before
+  // they commit — using their selection-to-confirm window as compute time, so
+  // the AI can actually influence the decision instead of only narrating it.
+  maybePreMoveSage(unit);
+}
+
+// Fires an advisory when a human selects one of their own units. Throttled,
+// no-op without an API key (degrades to the local Sage tips). Skips bot/attract.
+let _preMoveSageFor = null;
+function maybePreMoveSage(unit) {
+  const isHumanTurn = !((GAME.mode==='vsBot' && GAME.turn===GAME.botColor) || GAME.mode==='attract');
+  if (!isHumanTurn || !_sageKey() || GAME.phase==='gameover') return;
+  const key = `${unit.id}@${GAME.turnCount}`;
+  if (_preMoveSageFor === key) return;              // already advised this unit this turn
+  _preMoveSageFor = key;
+  const foes = adjacentEnemies(unit).map(e=>`${coord(e.row,e.col)}(${Math.round(charge(e)*100)}%)`).join(', ') || 'none adjacent';
+  const trigger = `PRE-MOVE DELIBERATION: the player has SELECTED their unit ${coord(unit.row,unit.col)} `
+    + `(charge ${Math.round(charge(unit)*100)}%, ${unit.inSuperpos?'in superposition':'eigenstate'}, `
+    + `coherence ${Math.round(unit.coherence)}%) and is deciding what to do before committing. `
+    + `Adjacent enemies: ${foes}. Reachable tiles: ${GAME.reachable.length}. `
+    + `Recommend the single best action (which gate, attack, measure, move, or hold) and WHY, in 1–2 sentences, before they move.`;
+  setTimeout(() => { if (GAME.selected===unit) callSageAI(trigger).then(ok => { if (!ok) renderSage(); }); }, 120);
 }
 
 const coord = (r,c) => `${String.fromCharCode(97+c)}${GRID-r}`;
 
-// Decoherence each turn (T1 relaxation): every unit loses a little coherence and
-// its Bloch vector decays toward |0⟩ — so charge bleeds away if you don't strike.
-// A fully relaxed unit drops to ground state, its charge lost.
-function applyDecoherence() {
-  GAME.pieces.forEach(u => {
-    u.coherence = Math.max(0, u.coherence - (GAME.decoRate*0.4 + Math.random()*1.0));
+// Keep a unit's open-system Bloch vector in sync after any *coherent* operation
+// (gate / measurement / discharge) — a coherent state is pure, so |r|=1.
+function syncBloch(u){ if (u && u.state) u.bloch = QPhysics.blochFromPure(u.state); }
 
-    let {theta, phi} = stateToBloch(u.state);
-    const relax = (1 - u.coherence/100) * 0.14;     // decay toward |0⟩ (north pole)
-    theta += (0 - theta) * relax;
-    phi   += (Math.random()-0.5) * relax;
-    u.state = blochToState(theta, phi);
+// Decoherence each turn — now the EXACT solution of the Lindblad master equation
+// (QPhysics), not an ad-hoc linear drain. Excited charge relaxes toward |0⟩ as
+// e^(−t/T1) (amplitude damping) and the Bloch vector contracts inward as the
+// state mixes; the displayed "coherence" resource bleeds exponentially at the
+// T2 rate. Plot charge-vs-turns and it is exponential (R² ≈ 1) — verify with
+// runDecoherenceDiagnostic(). So charge really does bleed if you don't strike.
+function applyDecoherence() {
+  const { T1, T2 } = QPhysics.timesFromRate(GAME.decoRate);
+  const cohTau = 12 / Math.max(0.25, GAME.decoRate);   // coherence-bar time constant (turns)
+  GAME.pieces.forEach(u => {
+    if (!u.bloch) u.bloch = QPhysics.blochFromPure(u.state);
+    u.bloch = QPhysics.lindbladStep(u.bloch, { T1, T2, dt:1 });
+    // Project the relaxed (possibly mixed) state back onto a pure spinor so the
+    // rest of the engine — combat charge, Bloch arrow, superposition readout —
+    // sees it. Charge = (1−z)/2 is preserved exactly by the projection.
+    u.state = QPhysics.pureFromBloch(u.bloch);
+    u.coherence = Math.max(0, u.coherence * Math.exp(-1/cohTau) - Math.random()*0.4);
 
     if (u.coherence < 6) {
-      u.state = blochToState(0,0); u.coherence = 22;
-      logEv(`RELAX [T1]: ${coord(u.row,u.col)} lost coherence and decayed to |0⟩ — charge gone.`,'decohere');
+      u.state = blochToState(0,0); u.bloch = { x:0, y:0, z:1 }; u.coherence = 22;
+      logEv(`RELAX [T1]: ${coord(u.row,u.col)} fully decohered → collapsed to |0⟩, charge gone.`,'decohere');
       spawn(u.col*CELL+CELL/2, u.row*CELL+CELL/2,'#ffa83c',8);
       sfxDecohere();
     }
@@ -1401,6 +1598,7 @@ function propagateEntanglement(cell, gateName) {
   if (!partner) { cell.entangledWith=null; return; }
   if (!GATES[gateName]) return;
   partner.state = normalizeState(GATES[gateName](partner.state));
+  syncBloch(partner);
   partner.coherence = Math.max(0, partner.coherence-5);
   logEv(`ENTANGLEMENT: ${coord(partner.row,partner.col)} co-driven by [${gateName}] via `+
     `Bell correlation with ${coord(cell.row,cell.col)}.`,'quantum');
@@ -1410,6 +1608,7 @@ function propagateEntanglement(cell, gateName) {
 function applyGate(unit, gateName) {
   const gate = GATES[gateName]; if (!gate) return;
   unit.state     = normalizeState(gate(unit.state));
+  syncBloch(unit);
   // Quantum well boosts coherence instead of draining it.
   const onWell = TERRAIN[unit.row*GRID+unit.col]==='well';
   unit.coherence = onWell ? Math.min(unit.maxCoh, unit.coherence+4) : Math.max(0, unit.coherence-5);
@@ -1426,7 +1625,7 @@ function applyGate(unit, gateName) {
 
 function applyMeasure(unit) {
   const meas=measureState(unit.state);
-  unit.state=meas.state; unit.inSuperpos=false;
+  unit.state=meas.state; syncBloch(unit); unit.inSuperpos=false;
   unit.coherence=Math.min(unit.maxCoh, unit.coherence+12);
   logEv(`MEASURE: ${coord(unit.row,unit.col)} collapses to |${meas.collapsed}⟩ and stabilizes (coherence +12).`,'measure');
   spawn(unit.col*CELL+CELL/2, unit.row*CELL+CELL/2,'#f5b73c',14);
@@ -1488,7 +1687,7 @@ function attack(attacker, target) {
   if (fdx) attacker.facing = fdx<0 ? -1 : 1;
   playOnce(attacker, 'attack');
   // The strike expends the unit's excitation — it returns to |0⟩, discharged.
-  attacker.state = blochToState(0,0); refreshSuperpos(attacker);
+  attacker.state = blochToState(0,0); syncBloch(attacker); refreshSuperpos(attacker);
 
   if (!fired) {
     logEv(`MISFIRE: ${coord(attacker.row,attacker.col)} measured |0⟩ (P(hit) was ${(pAtt*100)|0}%) — no discharge.`,'info');
@@ -1729,85 +1928,71 @@ function alternateBiomeImg(){ return isSnowBiome() ? (imgGrassReady ? imgGrass :
 // ── Board ──────────────────────────────────────────────
 function drawBoard() {
   ctx.imageSmoothingEnabled=false;
+  const hy=(GRID-1)*CELL, vc=BOARD/2;
 
-  // Draw the active biome as the battlefield ground — NO dark scrim so
-  // the pixel art shows through clearly, like a real 2D game world.
-  const bImg = activeBiomeImg();
-  if (bImg) {
-    ctx.drawImage(bImg, 0,0, bImg.width, bImg.height, 0,0, BOARD, BOARD);
-  } else {
-    ctx.fillStyle='#1a2e18'; ctx.fillRect(0,0,BOARD,BOARD);
+  // ── Quantum field ground — deep navy with a soft central glow (matches the
+  // UI chrome). Replaces the RPG biome so the board reads as a quantum lattice. ──
+  const bg=ctx.createLinearGradient(0,0,0,BOARD);
+  bg.addColorStop(0,'#0a0f24'); bg.addColorStop(0.5,'#0b1430'); bg.addColorStop(1,'#0a0f24');
+  ctx.fillStyle=bg; ctx.fillRect(0,0,BOARD,BOARD);
+  const fieldPulse=0.5+0.5*Math.sin(_t*0.02);
+  const glow=ctx.createRadialGradient(vc,vc,BOARD*0.04,vc,vc,BOARD*0.62);
+  glow.addColorStop(0,`rgba(47,224,208,${0.05+0.02*fieldPulse})`);
+  glow.addColorStop(0.6,'rgba(139,125,255,0.045)');
+  glow.addColorStop(1,'rgba(0,0,0,0)');
+  ctx.fillStyle=glow; ctx.fillRect(0,0,BOARD,BOARD);
+
+  // ── Faction camps: energized home-row strips (knights teal / mages magenta). ──
+  const camp=(y,rgb)=>{ const g=ctx.createLinearGradient(0,y,0,y+CELL);
+    g.addColorStop(0,`rgba(${rgb},0.18)`); g.addColorStop(1,`rgba(${rgb},0.03)`);
+    ctx.fillStyle=g; ctx.fillRect(0,y,BOARD,CELL); };
+  camp(0,'255,77,157');            // top — MAGES
+  camp(hy,'47,224,208');           // bottom — KNIGHTS
+
+  // ── Quantum lattice: grid lines + glowing nodes at every intersection. ──
+  ctx.strokeStyle='rgba(124,140,230,0.15)'; ctx.lineWidth=1;
+  for (let i=0;i<=GRID;i++){
+    ctx.beginPath(); ctx.moveTo(0,i*CELL+0.5); ctx.lineTo(BOARD,i*CELL+0.5); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(i*CELL+0.5,0); ctx.lineTo(i*CELL+0.5,BOARD); ctx.stroke();
+  }
+  const nodePulse=0.5+0.5*Math.sin(_t*0.045);
+  ctx.fillStyle=`rgba(124,140,230,${0.16+0.10*nodePulse})`;
+  for (let r=0;r<=GRID;r++) for (let c=0;c<=GRID;c++){
+    ctx.beginPath(); ctx.arc(c*CELL,r*CELL,1.1,0,2*π); ctx.fill();
   }
 
-  // Semi-transparent tile grid — just enough to guide the eye without hurting
-  // the art. Alternate biome tint on home rows for clear camp distinction.
-  const aImg = alternateBiomeImg();
-  const hy=(GRID-1)*CELL;
-  ctx.font="8px 'Press Start 2P',monospace";
-  for (let r=0; r<GRID; r++) {
-    for (let c=0; c<GRID; c++) {
-      const x=c*CELL, y=r*CELL;
-      // Home-row strips get the other biome's texture for visual contrast.
-      if ((r===0 || r===GRID-1) && aImg) {
-        ctx.save(); ctx.globalAlpha=0.52;
-        ctx.drawImage(aImg,
-          Math.floor((c/(GRID))*aImg.width), 0, Math.ceil(aImg.width/GRID), aImg.height,
-          x, y, CELL, CELL);
-        ctx.restore();
-      }
-      // Grid lines — slightly stronger so cells are legible on busy art.
-      ctx.strokeStyle='rgba(255,255,255,0.18)'; ctx.lineWidth=1;
-      ctx.strokeRect(x+0.5,y+0.5,CELL-1,CELL-1);
-      // Coordinates
-      ctx.fillStyle='rgba(240,248,255,0.70)';
-      ctx.textAlign='left'; ctx.textBaseline='top';
-      if (c===0) ctx.fillText(GRID-r, x+5, y+4);
-      if (r===GRID-1) {
-        ctx.textAlign='right'; ctx.textBaseline='bottom';
-        ctx.fillText('abcdefgh'[c], x+CELL-5, y+CELL-4);
-      }
-    }
-  }
-  ctx.textAlign='left'; ctx.textBaseline='alphabetic';
-
-  // Quantum well tiles — glowing teal floor tiles that boost coherence.
-  const wellPulse = 0.5+0.5*Math.sin(_t*0.07);
+  // ── Terrain cells: barriers (impassable "vacuum gaps") + quantum wells. ──
+  const wellPulse=0.5+0.5*Math.sin(_t*0.07);
   Object.entries(TERRAIN).forEach(([k,type])=>{
-    if (type!=='well') return;
-    const idx=parseInt(k), wr=Math.floor(idx/GRID), wc=idx%GRID;
-    const wx=wc*CELL, wy=wr*CELL;
-    ctx.fillStyle=`rgba(63,224,138,${0.08*wellPulse})`;
-    ctx.fillRect(wx,wy,CELL,CELL);
-    ctx.strokeStyle=`rgba(63,224,138,${0.3*wellPulse})`;
-    ctx.lineWidth=1.5; ctx.shadowColor='#3fe08a'; ctx.shadowBlur=6*wellPulse;
-    ctx.strokeRect(wx+2,wy+2,CELL-4,CELL-4); ctx.shadowBlur=0;
-    ctx.fillStyle=`rgba(63,224,138,${0.6*wellPulse})`;
-    ctx.font="7px 'Press Start 2P',monospace"; ctx.textAlign='center';
-    ctx.fillText('⚛',wx+CELL/2,wy+CELL/2+3); ctx.textAlign='left';
+    const idx=parseInt(k), tr=Math.floor(idx/GRID), tc=idx%GRID, x=tc*CELL, y=tr*CELL;
+    if (type==='tree') {                 // impassable barrier — a dark, hatched gap
+      ctx.fillStyle='rgba(6,9,20,0.82)'; ctx.fillRect(x+2,y+2,CELL-4,CELL-4);
+      ctx.strokeStyle='rgba(124,140,230,0.28)'; ctx.lineWidth=1;
+      ctx.strokeRect(x+3.5,y+3.5,CELL-7,CELL-7);
+      ctx.save(); ctx.beginPath(); ctx.rect(x+2,y+2,CELL-4,CELL-4); ctx.clip();
+      ctx.strokeStyle='rgba(124,140,230,0.14)';
+      for (let i=-CELL;i<CELL;i+=7){ ctx.beginPath(); ctx.moveTo(x+i,y); ctx.lineTo(x+i+CELL,y+CELL); ctx.stroke(); }
+      ctx.restore();
+    } else if (type==='well') {          // coherence booster — glowing teal cell
+      ctx.fillStyle=`rgba(63,224,138,${0.10*wellPulse})`; ctx.fillRect(x,y,CELL,CELL);
+      ctx.strokeStyle=`rgba(63,224,138,${0.42*wellPulse})`; ctx.lineWidth=1.5;
+      ctx.shadowColor='#3fe08a'; ctx.shadowBlur=8*wellPulse;
+      ctx.strokeRect(x+3,y+3,CELL-6,CELL-6); ctx.shadowBlur=0;
+      ctx.fillStyle=`rgba(63,224,138,${0.7*wellPulse})`;
+      ctx.font="9px 'Press Start 2P',monospace"; ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillText('⚛',x+CELL/2,y+CELL/2); ctx.textAlign='left'; ctx.textBaseline='alphabetic';
+    }
   });
 
-  // Faction camp highlight — translucent tints over home rows.
-  ctx.fillStyle='rgba(47,224,208,0.18)';  ctx.fillRect(0,hy,BOARD,CELL);
-  ctx.fillStyle='rgba(255,77,157,0.14)';  ctx.fillRect(0,0,BOARD,CELL);
+  // ── Rank/file coordinates (crisp, low-key). ──
+  ctx.font="8px 'Press Start 2P',monospace"; ctx.fillStyle='rgba(174,184,230,0.5)';
+  for (let r=0;r<GRID;r++){ ctx.textAlign='left'; ctx.textBaseline='top'; ctx.fillText(GRID-r, 4, r*CELL+4); }
+  for (let c=0;c<GRID;c++){ ctx.textAlign='right'; ctx.textBaseline='bottom'; ctx.fillText('abcdefgh'[c], c*CELL+CELL-4, BOARD-4); }
+  ctx.textAlign='left'; ctx.textBaseline='alphabetic';
 
-  // Scenery decor (trees/rocks/flowers) placed in the margins.
-  if (imgTilesReady) {
-    DECOR.forEach(d=>{
-      const s=DECOR_SRC[d.k]; if(!s) return;
-      const cx=(d.cf*(GRID-1)+0.5)*CELL, cy=(d.rf*(GRID-1)+0.5)*CELL;
-      const scale=(d.k==='tree'?CELL*1.10:CELL*0.62)/s.sw;
-      const w=s.sw*scale, h=s.sh*scale;
-      // Subtle ground shadow to seat the decor in the world.
-      ctx.fillStyle='rgba(0,0,0,0.18)';
-      ctx.beginPath(); ctx.ellipse(cx, cy+h*0.36, w*0.32, h*0.10, 0,0,2*π); ctx.fill();
-      ctx.drawImage(imgTiles, s.sx,s.sy,s.sw,s.sh, cx-w/2, cy-h*0.55, w, h);
-    });
-  }
-
-  // Soft edge vignette — darkens corners only, leaving the centre pristine.
-  const vc=BOARD/2;
-  const vg=ctx.createRadialGradient(vc,vc,BOARD*0.36,vc,vc,BOARD*0.76);
-  vg.addColorStop(0,'rgba(0,0,0,0)'); vg.addColorStop(1,'rgba(0,0,0,0.30)');
+  // ── Soft edge vignette. ──
+  const vg=ctx.createRadialGradient(vc,vc,BOARD*0.40,vc,vc,BOARD*0.78);
+  vg.addColorStop(0,'rgba(0,0,0,0)'); vg.addColorStop(1,'rgba(2,4,12,0.42)');
   ctx.fillStyle=vg; ctx.fillRect(0,0,BOARD,BOARD);
 }
 
@@ -2308,10 +2493,11 @@ function drawBloch() {
   bx.beginPath(); bx.arc(cx,cy+R,3,0,2*π); bx.fill(); bx.shadowBlur=0;
 
   const piece=GAME.selected; if (!piece) return;
-  const {theta,phi}=stateToBloch(piece.state);
-  const vx=Math.sin(theta)*Math.cos(phi);
-  const vy=Math.sin(theta)*Math.sin(phi);
-  const vz=Math.cos(theta);
+  // Read the open-system Bloch vector: a coherent state sits on the sphere
+  // surface (|r|=1); a decohered (mixed) state contracts inward (|r|<1) — the
+  // visible signature of Lindblad relaxation.
+  const b=piece.bloch || QPhysics.blochFromPure(piece.state);
+  const vx=b.x, vy=b.y, vz=b.z;
   const sx=cx+R*(vx*0.7+vy*0.3);
   const sy=cy-R*vz;
 
@@ -2739,10 +2925,14 @@ function startTurnTimer() {
     if (GAME.timerLeft <= 0) {
       stopTurnTimer();
       logEv("⏱ TIME'S UP! Charge bleeds hard — decoherence spike.",'decohere');
-      // Penalty: apply extra decoherence this turn
+      // Penalty: a decoherence spike — three turns' worth of Lindblad evolution
+      // applied at once (charge bleeds toward |0⟩), plus a coherence hit.
+      const { T1, T2 } = QPhysics.timesFromRate(GAME.decoRate);
       GAME.pieces.filter(p=>p.owner===GAME.turn).forEach(u=>{
-        const {theta,phi}=stateToBloch(u.state);
-        u.state=blochToState(theta*0.55,phi); u.coherence=Math.max(0,u.coherence-18);
+        if (!u.bloch) u.bloch = QPhysics.blochFromPure(u.state);
+        u.bloch = QPhysics.lindbladStep(u.bloch, { T1, T2, dt:3 });
+        u.state = QPhysics.pureFromBloch(u.bloch);
+        u.coherence = Math.max(0, u.coherence-18);
         refreshSuperpos(u);
       });
       if (GAME.gateMenu) GAME.gateMenu=null;
@@ -2875,7 +3065,7 @@ function _executeVoteWinner(action, piece) {
     // Auto-target the weakest adjacent enemy — no manual click required.
     const target = foes.sort((a,b)=>a.hp-b.hp)[0];
     logEv(`CROWD VOTED: ATTACK → auto-targeting ${coord(target.row,target.col)}.`,'quantum');
-    doAttack(piece, target);
+    attack(piece, target);
     endTurn();
   } else if (action === 'CNOT') {
     // Auto-entangle the first adjacent enemy, or nearest ally if no enemies adjacent.
@@ -3109,23 +3299,11 @@ function animateBg() {
   bgCtx.clearRect(0,0,W,H);
   const t=Date.now()*0.001;
 
-  // Background uses the SAME biome as the board (single toggleable biome).
-  // The board itself renders at full resolution — here we show it at viewport
-  // scale as an atmospheric backdrop, with a moderate dim (not a hard scrim)
-  // so the pixel-art reads as a natural world rather than a black stage.
-  bgCtx.imageSmoothingEnabled=false;
-  const bgImg = activeBiomeImg();
-  if (bgImg) {
-    const scale=Math.max(W/bgImg.width, H/bgImg.height)*1.22;
-    const iw=bgImg.width*scale, ih=bgImg.height*scale;
-    const ox=-(iw-W)*(0.5+0.45*Math.sin(t*0.018));
-    const oy=-(ih-H)*(0.5+0.45*Math.cos(t*0.014));
-    bgCtx.drawImage(bgImg, 0,0, bgImg.width, bgImg.height, ox,oy, iw,ih);
-    // Moderate atmospheric dim so panels/UI stays readable without killing the art.
-    bgCtx.fillStyle='rgba(5,9,20,0.44)'; bgCtx.fillRect(0,0,W,H);
-  } else {
-    bgCtx.fillStyle='#0a1218'; bgCtx.fillRect(0,0,W,H);
-  }
+  // Quantum-field ambiance: a deep navy base with drifting glow blobs and a
+  // faint lattice — the atmospheric backdrop for the arena (no RPG biome art).
+  const base=bgCtx.createLinearGradient(0,0,0,H);
+  base.addColorStop(0,'#070a16'); base.addColorStop(0.5,'#0a0f22'); base.addColorStop(1,'#070a16');
+  bgCtx.fillStyle=base; bgCtx.fillRect(0,0,W,H);
 
   // Soft drifting glow blobs for depth.
   bgParts.forEach(p=>{
@@ -3139,13 +3317,12 @@ function animateBg() {
     bgCtx.fillStyle=g; bgCtx.beginPath(); bgCtx.arc(p.x,p.y,p.r,0,π*2); bgCtx.fill();
   });
 
-  // NPC wanderers crossing the scene, wrapping at the edges.
-  bgNPCs.forEach(p=>{
-    p.x += p.dir*p.spd;
-    const pad=70;
-    if (p.x<-pad) p.x=W+pad; if (p.x>W+pad) p.x=-pad;
-    _drawPed(p,t);
-  });
+  // Faint far lattice — a slowly drifting grid of dim nodes, evoking a qubit array.
+  const sp=64, off=(t*4)%sp;
+  bgCtx.fillStyle='rgba(124,140,230,0.05)';
+  for (let x=-sp+off; x<W+sp; x+=sp) for (let y=-sp+off; y<H+sp; y+=sp) {
+    bgCtx.fillRect(x, y, 1.4, 1.4);
+  }
 
   requestAnimationFrame(animateBg);
 }
@@ -3409,12 +3586,101 @@ function runBoot() {
 // ═══════════════════════════════════════════════════════
 // MENU + TUTORIAL MODALS
 // ═══════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════
+// PHYSICS LAB — surfaces the verified QPhysics engine as a
+// first-class, inspectable feature (capability + formality).
+// ═══════════════════════════════════════════════════════
+function openPhysicsLab() {
+  const { T1, T2 } = QPhysics.timesFromRate(GAME.decoRate);
+  const sel = GAME.selected;
+  let unitBlock = `<p style="color:var(--wood);font-size:6px">Select one of your units on the board to inspect its live density matrix here.</p>`;
+  if (sel) {
+    const b = sel.bloch || QPhysics.blochFromPure(sel.state);
+    const rho = QPhysics.rhoFromBloch(b);
+    const ch = QPhysics.charge(b), pur = QPhysics.purity(b), coh = QPhysics.coherenceL1(b);
+    const fmt = z => (z>=0?' ':'') + z.toFixed(3);
+    unitBlock = `
+<p style="color:var(--teal);font-size:7px;margin:4px 0">UNIT ${coord(sel.row,sel.col)} — live state ρ</p>
+<pre style="color:var(--ink-2);font-size:8px;line-height:1.5;background:#0a0f22;border:1px solid var(--border);border-radius:4px;padding:8px;margin:4px 0;overflow:auto">ρ = [ ${fmt(rho[0][0].r)}        ${fmt(rho[0][1].r)}${rho[0][1].i<0?'−':'+'}${Math.abs(rho[0][1].i).toFixed(3)}i ]
+    [ ${fmt(rho[1][0].r)}${rho[1][0].i<0?'−':'+'}${Math.abs(rho[1][0].i).toFixed(3)}i   ${fmt(rho[1][1].r)}      ]</pre>
+<p style="color:var(--dim);font-size:6px;margin:2px 0">
+  charge P(|1⟩) = <b style="color:var(--red)">${(ch*100).toFixed(1)}%</b> ·
+  purity Tr(ρ²) = <b style="color:var(--gold)">${pur.toFixed(3)}</b> ·
+  coherence 2|ρ₀₁| = <b style="color:var(--teal)">${coh.toFixed(3)}</b>
+</p>`;
+  }
+  document.getElementById('modal-content').innerHTML = `
+<h2>🔬 PHYSICS LAB</h2>
+<p style="text-align:center;color:var(--dim);font-size:6px;margin:-8px 0 12px">Open-quantum-system engine · Lindblad master equation · unit-tested</p>
+
+<h3>THE MODEL</h3>
+<p style="color:var(--dim);font-size:7px;line-height:1.7">Every unit is a single qubit whose state ρ evolves under the <b style="color:var(--teal)">Lindblad master equation</b> for amplitude damping (T₁) plus dephasing (T₂):</p>
+<pre style="color:var(--gold);font-size:8px;line-height:1.6;text-align:center;background:#0a0f22;border:1px solid var(--border);border-radius:4px;padding:10px;margin:6px 0">dρ/dt = −(i/ℏ)[H,ρ] + Σ γₖ( Lₖ ρ Lₖ† − ½{Lₖ†Lₖ, ρ} )</pre>
+<p style="color:var(--dim);font-size:7px;line-height:1.7">Each turn we apply its <b>exact</b> solution toward |0⟩: charge relaxes as <b style="color:var(--red)">e<sup>−t/T₁</sup></b>, transverse coherence as <b style="color:var(--teal)">e<sup>−t/T₂</sup></b> (with T₂ ≤ 2T₁). At the current rate (${GAME.decoRate}/turn): <b style="color:var(--gold)">T₁ = ${T1.toFixed(1)}</b>, <b style="color:var(--gold)">T₂ = ${T2.toFixed(1)}</b> turns.</p>
+
+<h3>FALSIFIABILITY TEST</h3>
+<p style="color:var(--dim);font-size:7px;line-height:1.6">A unit prepared in |1⟩, left to decohere. Physical decay is exponential, <i>not</i> linear — the test fits both and reports R².</p>
+<canvas id="diag-canvas" width="360" height="190" style="width:100%;max-width:360px;display:block;margin:8px auto;background:#0a0f22;border:1px solid var(--border);border-radius:4px"></canvas>
+<p id="diag-readout" style="text-align:center;color:var(--dim);font-size:7px;margin:4px 0"></p>
+
+<h3>LIVE STATE INSPECTOR</h3>
+${unitBlock}
+
+<hr style="border-color:var(--border);margin:10px 0">
+<p style="color:var(--wood);font-size:6px;line-height:1.6">Verify in the browser console: <b style="color:var(--teal)">runDecoherenceDiagnostic()</b> · <b style="color:var(--teal)">QPhysics.selfTest()</b>. Physics engine has no UI dependencies — it is independently testable. Modelled after TLS-defect decoherence studied at the <b>Fitzpatrick Lab, Dartmouth College</b>.</p>
+<button class="btn" style="margin-top:8px" onclick="openMenu()">◀ BACK TO MENU</button>`;
+  document.getElementById('modal-overlay').classList.add('show');
+  drawDecoherenceDiagram(GAME.decoRate);
+}
+
+// Plots charge-vs-turn for a |1⟩ unit: the physical (exponential) decay as a
+// curve+points, the linear best-fit for contrast, and the R² of each — the
+// falsifiability argument, rendered in-game rather than only in the console.
+function drawDecoherenceDiagram(decoRate) {
+  const cv = document.getElementById('diag-canvas'); if (!cv) return;
+  const g = cv.getContext('2d'); const W = cv.width, H = cv.height;
+  const rep = QPhysics.diagnose({ decoRate, turns: 24 });
+  const data = rep.charge_by_turn, N = data.length - 1;
+  const PADL = 30, PADB = 22, PADT = 12, PADR = 8;
+  const x = t => PADL + (W - PADL - PADR) * (t / N);
+  const y = q => PADT + (H - PADT - PADB) * (1 - q);
+  g.clearRect(0, 0, W, H);
+  // axes + gridlines
+  g.strokeStyle = 'rgba(140,150,200,0.25)'; g.lineWidth = 1; g.font = "6px 'Press Start 2P',monospace";
+  g.fillStyle = 'rgba(207,214,238,0.65)';
+  for (let q = 0; q <= 1; q += 0.25) { g.beginPath(); g.moveTo(PADL, y(q)); g.lineTo(W - PADR, y(q)); g.stroke(); g.fillText((q).toFixed(2), 2, y(q) + 3); }
+  g.fillText('0', PADL - 2, H - PADB + 12); g.fillText(String(N) + ' turns', W - PADR - 42, H - PADB + 12);
+  g.fillText('charge', 2, PADT - 3);
+  // linear best-fit line (for contrast — visibly wrong)
+  const n = data.length; let mx = 0, my = 0; for (let i = 0; i < n; i++) { mx += i; my += data[i]; } mx /= n; my /= n;
+  let sxy = 0, sxx = 0; for (let i = 0; i < n; i++) { sxy += (i - mx) * (data[i] - my); sxx += (i - mx) * (i - mx); }
+  const slope = sxx ? sxy / sxx : 0, intc = my - slope * mx;
+  g.strokeStyle = '#ff5a72'; g.setLineDash([4, 3]); g.lineWidth = 1.5; g.beginPath();
+  g.moveTo(x(0), y(Math.max(0, Math.min(1, intc)))); g.lineTo(x(N), y(Math.max(0, Math.min(1, slope * N + intc)))); g.stroke(); g.setLineDash([]);
+  // exponential (physical) decay curve
+  g.strokeStyle = '#2fe0d0'; g.lineWidth = 2; g.beginPath();
+  data.forEach((q, t) => { t === 0 ? g.moveTo(x(t), y(q)) : g.lineTo(x(t), y(q)); }); g.stroke();
+  // data points
+  g.fillStyle = '#8b7dff'; data.forEach((q, t) => { g.beginPath(); g.arc(x(t), y(q), 2, 0, 2 * Math.PI); g.fill(); });
+  const ro = document.getElementById('diag-readout');
+  if (ro) ro.innerHTML = `<b style="color:#2fe0d0">exponential R² = ${rep.R2_exponential.toFixed(4)}</b> &nbsp;≫&nbsp; <b style="color:#ff5a72">linear R² = ${rep.R2_linear.toFixed(4)}</b> &nbsp;·&nbsp; fitted T₁ = ${rep.T1_recovered.toFixed(1)} (input ${rep.T1_input.toFixed(1)}) &nbsp;·&nbsp; <b style="color:var(--gold)">${rep.verdict}</b>`;
+}
+
 function openMenu() {
   scheduleAttract();
   const diffs=['EASY','MEDIUM','HARD'];
   document.getElementById('modal-content').innerHTML=`
 <h2>◈ QUBLITZ ◈</h2>
-<p style="text-align:center;color:var(--dim);margin:-10px 0 18px;font-size:7px;">Qubit Battle Arena — charge, close in, collapse the enemy</p>
+<p style="text-align:center;color:var(--dim);margin:-10px 0 10px;font-size:7px;">Qubit Battle Arena — charge, close in, collapse the enemy</p>
+
+<div style="background:linear-gradient(135deg,rgba(47,224,208,0.10),rgba(139,125,255,0.08));border:1px solid var(--border);border-radius:6px;padding:9px 11px;margin:0 0 14px">
+  <p style="color:var(--gold);font-family:var(--pixel);font-size:7px;margin:0 0 6px">⚡ PLAY IN 30 SECONDS</p>
+  <p style="color:var(--ink-2);font-size:7px;line-height:1.7;margin:0">
+    <b style="color:var(--teal)">1. CHARGE</b> — tap a unit, fire a gate (X = 100% charge, H = 50%).<br>
+    <b style="color:var(--teal)">2. STRIKE</b> — move beside a foe and ATTACK; hit chance = your charge (Born rule).<br>
+    <b style="color:var(--teal)">3. BEAT THE CLOCK</b> — charge decays exponentially each turn. Strike before it bleeds away. Last army standing wins.
+  </p>
+</div>
 
 <button class="btn" style="background:linear-gradient(135deg,rgba(47,224,208,0.18),rgba(139,125,255,0.14));border-color:var(--teal)"
   onclick="closeModal();resetGame('vsBot');GAME.difficulty=parseInt(document.getElementById('diff-sel')?document.getElementById('diff-sel').value:1)||1">▶ PLAY vs BOT (1P)</button>
@@ -3431,6 +3697,7 @@ function openMenu() {
 <hr style="border-color:var(--border);margin:12px 0">
 <button class="btn" onclick="openCampaign()">🎓 TRAINING PROGRAMS (3 missions)</button>
 <button class="btn" onclick="closeModal();openTutorial()">📜 BATTLE MANUAL</button>
+<button class="btn" style="border-color:var(--gold);color:var(--gold)" onclick="openPhysicsLab()">🔬 PHYSICS LAB — inspect the real engine</button>
 <hr style="border-color:var(--border);margin:12px 0">
 
 <h3>SETTINGS</h3>
@@ -3479,12 +3746,16 @@ function openMenu() {
   <button class="btn" style="width:auto;padding:5px 10px;font-size:6px;white-space:nowrap"
     onclick="localStorage.setItem('qb_api_key',document.getElementById('claude-key-inp').value);_updateClaudeBadge();beep(523,'triangle',0.05,0.08);this.textContent='SAVED ✓';setTimeout(()=>this.textContent='SAVE',1500)">SAVE</button>
 </div>
-<p style="color:var(--wood);font-size:5px;margin-bottom:6px;">Stored in browser localStorage only. Sent only to api.anthropic.com. Uses claude-haiku-4-5 for real-time play.</p>
+<p style="color:var(--wood);font-size:6px;margin-bottom:6px;">Stored in browser localStorage only. Sent only to api.anthropic.com. Uses claude-haiku-4-5 for real-time play.</p>
 <hr style="border-color:var(--border);margin:6px 0">
 ${leaderboardHTML()}
 <p style="color:var(--wood);font-size:6px;text-align:center;margin-top:10px;">
   Every unit is a qubit · Guardians [G] resist criticals · Charge → strike.<br>
   Warriors attack, Guardians tank. Eliminate the enemy army.
+</p>
+<p style="color:var(--wood);font-size:6px;text-align:center;margin-top:8px;opacity:.8;line-height:1.6">
+  QUBLITZ ${QB_VERSION} · Lindblad T₁/T₂ physics engine (unit-tested)<br>
+  Built by David Mukuruva · Fitzpatrick Lab, Dartmouth College
 </p>`;
   document.getElementById('modal-overlay').classList.add('show');
 }
@@ -3522,8 +3793,9 @@ function openTutorial() {
   <tr><td>Rx / Ry</td><td>±45° rotations — partial charge in one step.</td></tr>
 </table>
 
-<h3>⚛ DECOHERENCE (T1 relaxation)</h3>
-<p>Each turn every unit loses a little coherence and its state <b>relaxes back toward |0⟩</b> — charge bleeds away. So load up and strike <b>soon</b>; don't charge a unit that can't reach a target this turn. A fully relaxed unit drops to |0⟩.</p>
+<h3>⚛ DECOHERENCE (Lindblad T1 / T2)</h3>
+<p>Real qubits don't bleed charge linearly — they decay <b>exponentially</b>. QuBlitz evolves every unit with the exact solution of the <b>Lindblad master equation</b>: excited charge relaxes toward |0⟩ as <b>e<sup>−t/T₁</sup></b> (amplitude damping) while superposition coherence fades as <b>e<sup>−t/T₂</sup></b> (dephasing, with T₂ ≤ 2T₁). On the Bloch sphere the state vector <b>contracts inward</b> as it mixes. So load up and strike <b>soon</b> — charge halves every couple of turns; don't charge a unit that can't reach a target. A fully decohered unit collapses to |0⟩.</p>
+<p style="opacity:.72;font-size:.92em">Verify it yourself: open the browser console and run <code>runDecoherenceDiagnostic()</code> — it fits charge-vs-turns to an exponential and a line and prints R² for each (exponential ≈ 1.000 ≫ linear), recovering the input T₁. <code>QPhysics.selfTest()</code> checks the gate &amp; decoherence math against analytic values.</p>
 
 <h3>🔗 ENTANGLEMENT &amp; 🔍 MEASURE</h3>
 <p><b>Entangle (CNOT)</b> links two <b>adjacent</b> units (friend or foe) into a Bell link — a hit on one bleeds <b>1 damage onto the other</b>. Entangle two enemies for splash value. <b>Measure</b> collapses your unit to an eigenstate and restores coherence (+12) — discharge a dangerously-exposed unit, or stabilize one.</p>
