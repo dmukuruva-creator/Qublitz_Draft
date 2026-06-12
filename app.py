@@ -111,8 +111,10 @@ iframe {
 # ──────────────────────────────────────────────────────────────
 GAME_HTML_PATH = Path(__file__).parent / "quantum_chess.html"
 
+# Cache keyed on the file's mtime so editing quantum_chess.html during dev
+# serves fresh content instead of a stale cached copy (HY-1).
 @st.cache_data(show_spinner=False)
-def load_game_html() -> str:
+def load_game_html(_mtime: float) -> str:
     if not GAME_HTML_PATH.exists():
         return (
             "<p style='color:#ff5a72;font-family:monospace;padding:20px'>"
@@ -121,7 +123,14 @@ def load_game_html() -> str:
     return GAME_HTML_PATH.read_text(encoding="utf-8")
 
 
-GAME_HTML = load_game_html()
+def _game_html_mtime() -> float:
+    try:
+        return GAME_HTML_PATH.stat().st_mtime
+    except OSError:
+        return 0.0
+
+
+GAME_HTML = load_game_html(_game_html_mtime())
 
 
 # ──────────────────────────────────────────────────────────────
@@ -236,7 +245,7 @@ st.divider()
 
 # ── GAME EMBED ───────────────────────────────────────────────
 # Height: title(48) + ui(820, sage overlaid on canvas) + log(68) + padding ≈ 960
-st.components.v1.html(GAME_HTML, height=960, scrolling=False)
+st.components.v1.html(GAME_HTML, height=1100, scrolling=True)
 
 st.divider()
 
