@@ -1949,21 +1949,57 @@ async function doBotMove() {
 
   updateSelInfo(u);
 
-  const target = adjacentEnemies(u).sort((a,b)=>a.hp-b.hp)[0];
-  let _botGate = (GAME.difficulty>=2 && Math.random()<0.35) ? 'H' : 'X';
-  if (target && charge(u) > 0.6) {
-    GAME.botLastReason = `Bot strikes ${coord(target.row,target.col)} — charge ${(charge(u)*100)|0}%, Born rule: P(hit) = |β|².`;
+  // ── Action selection — uses the full action set, scaled by difficulty so
+  //    players see (and get punished by) MEASURE, CNOT, GUARD and phase. ──
+  const diff   = GAME.difficulty;                 // 0 easy · 1 medium · 2 hard
+  const myChg  = charge(u);
+  const adjFoes = adjacentEnemies(u);
+  const target = adjFoes.sort((a,b)=>a.hp-b.hp)[0];
+  // An adjacent enemy that is itself charged can crit u next turn.
+  const threat = adjFoes.some(f => charge(f) > 0.5);
+  const advanced = [0, 0.45, 0.8][diff];          // chance to reach for a smart play
+
+  // 1) Take a strong shot if we have one.
+  if (target && myChg > 0.6) {
+    GAME.botLastReason = `Bot strikes ${coord(target.row,target.col)} — charge ${(myChg*100)|0}%, Born rule: P(hit) = |β|².`;
     attack(u, target);
-  } else if (charge(u) < 0.6) {
-    GAME.botLastReason = _botGate==='H'
-      ? `Bot applies H — entering |+⟩ superposition (50% charge). Risky but fast.`
-      : `Bot charges with X gate — flips state to |1⟩ for a guaranteed hit next turn.`;
-    applyGate(u, _botGate);
+
+  // 2) Guardian under threat → brace in the X-basis. Hard bots set up |+⟩ with H
+  //    first (next turn) but a bare guard already halves the crit risk.
+  } else if (u.role==='guardian' && threat && diff>=1 && Math.random()<advanced) {
+    u.guarding = true; refreshSuperpos(u);
+    u.coherence = Math.min(u.maxCoh, u.coherence+8);
+    GAME.botLastReason = `Bot GUARDS ${coord(u.row,u.col)} — bracing in the X-basis (${(QPhysics.guardCritProb(u.state)*100)|0}% crit risk) against the adjacent threat.`;
+    sfxGate('Z');
+
+  // 3) MEASURE-discharge a dangerously exposed unit: in superposition, charged,
+  //    and threatened — collapse now to (maybe) drop to a safe |0⟩.
+  } else if (diff>=1 && threat && u.inSuperpos && myChg>0.4 && !target && Math.random()<advanced) {
+    GAME.botLastReason = `Bot MEASURES ${coord(u.row,u.col)} — discharging a unit about to be crit (collapse to an eigenstate).`;
+    applyMeasure(u);
+
+  // 4) CNOT-link an adjacent enemy into a Bell pair so the bot's next strike
+  //    splashes — hard bots only, and only when not about to be self-splashed.
+  } else if (diff>=2 && !u.entangledWith && target && myChg < 0.6 && !threat && Math.random()<0.4) {
+    GAME.botLastReason = `Bot uses CNOT on ${coord(target.row,target.col)} — forming a Bell pair so a later strike bleeds onto its partner.`;
+    applyCNOT(u, target);
+
+  // 5) Can't finish a kill — charge up. X for a sure |1⟩, or gamble on H
+  //    (superposition) when the bot wants to act fast.
+  } else if (myChg < 0.6) {
+    const gate = (diff>=1 && !target && Math.random()<advanced) ? 'H' : 'X';
+    GAME.botLastReason = gate==='H'
+      ? `Bot applies H to ${coord(u.row,u.col)} — entering |+⟩ superposition (~50% charge). A fast gamble.`
+      : `Bot charges ${coord(u.row,u.col)} with X — flipping to |1⟩ for a guaranteed strike next turn.`;
+    applyGate(u, gate);
+
+  // 6) Charged and adjacent — take the shot.
   } else if (target) {
-    GAME.botLastReason = `Bot strikes ${coord(target.row,target.col)} — unit was charged, measuring the enemy.`;
+    GAME.botLastReason = `Bot strikes ${coord(target.row,target.col)} — measuring the enemy at ${(myChg*100)|0}% charge.`;
     attack(u, target);
+
   } else {
-    GAME.botLastReason = `Bot charges with X — it can't reach an enemy yet, building up |1⟩.`;
+    GAME.botLastReason = `Bot charges ${coord(u.row,u.col)} with X — no enemy in reach yet, building toward |1⟩.`;
     applyGate(u, 'X');
   }
 
