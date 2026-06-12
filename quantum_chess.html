@@ -1044,6 +1044,63 @@ const QPhysics = (() => {
      [{r:r.x/2,i:r.y/2}, {r:(1-r.z)/2,i:0}]];
   const blochFromRho = rho =>
     ({ x: 2*rho[0][1].r, y: -2*rho[0][1].i, z: rho[0][0].r - rho[1][1].r });
+  // ── 2-qubit Bell pair (QB-6) ──────────────────────────────────────────────
+  // A shared 4-amplitude state [c00,c01,c10,c11] for an entangled pair. This is
+  // the physically-correct model: measuring one half collapses both with
+  // correlated outcomes, and a LOCAL single-qubit gate on one half leaves the
+  // partner's marginal statistics unchanged (no-communication theorem). The old
+  // game code applied a gate to the partner directly — the #1 entanglement
+  // misconception — which this replaces.
+  const Bell = (() => {
+    const inv2 = 1 / Math.SQRT2;
+    // |Φ+⟩ = (|00⟩ + |11⟩)/√2 — the pair CNOT produces from |+⟩⊗|0⟩.
+    const phiPlus = () => [ {r:inv2,i:0}, {r:0,i:0}, {r:0,i:0}, {r:inv2,i:0} ];
+
+    // P(qubit `which` = |1⟩), marginalising over the partner.
+    const marginalP1 = (a, which) =>
+      which === 0 ? C.norm2(a[2]) + C.norm2(a[3])   // |10⟩,|11⟩
+                  : C.norm2(a[1]) + C.norm2(a[3]);   // |01⟩,|11⟩
+
+    // Apply a 2×2 unitary to one qubit (tensor with identity on the other).
+    function applyLocal(a, which, U) {
+      const [[u00,u01],[u10,u11]] = U;
+      const out = a.slice();
+      if (which === 0) {
+        out[0] = C.add(C.mul(u00,a[0]), C.mul(u01,a[2]));
+        out[2] = C.add(C.mul(u10,a[0]), C.mul(u11,a[2]));
+        out[1] = C.add(C.mul(u00,a[1]), C.mul(u01,a[3]));
+        out[3] = C.add(C.mul(u10,a[1]), C.mul(u11,a[3]));
+      } else {
+        out[0] = C.add(C.mul(u00,a[0]), C.mul(u01,a[1]));
+        out[1] = C.add(C.mul(u10,a[0]), C.mul(u11,a[1]));
+        out[2] = C.add(C.mul(u00,a[2]), C.mul(u01,a[3]));
+        out[3] = C.add(C.mul(u10,a[2]), C.mul(u11,a[3]));
+      }
+      return out;
+    }
+
+    // Measure qubit `which`; return {outcome, partnerOutcome, amps} where amps is
+    // the renormalised post-measurement state. `rand` is injectable for tests.
+    function measure(a, which, rand = Math.random) {
+      const p1 = marginalP1(a, which);
+      const outcome = rand() < p1 ? 1 : 0;
+      const keep = i => {
+        const bit = which === 0 ? (i >> 1) & 1 : i & 1;   // i: 0..3 → bits b0 b1
+        return bit === outcome;
+      };
+      let norm = 0;
+      const out = a.map((amp, i) => keep(i) ? amp : {r:0,i:0});
+      out.forEach(amp => { norm += C.norm2(amp); });
+      const s = norm > 1e-12 ? 1/Math.sqrt(norm) : 0;
+      const amps = out.map(amp => C.scale(amp, s));
+      // Partner outcome is whatever the collapsed state now assigns it.
+      const partnerOutcome = marginalP1(amps, which === 0 ? 1 : 0) > 0.5 ? 1 : 0;
+      return { outcome, partnerOutcome, amps };
+    }
+
+    return { phiPlus, marginalP1, applyLocal, measure };
+  })();
+
   // 2×2 unitary of a named game gate, derived from GATES (single source of truth):
   // U = [ GATE(|0⟩) | GATE(|1⟩) ] as columns.
   function gateMatrix(name) {
@@ -1140,7 +1197,7 @@ const QPhysics = (() => {
   }
 
   return { blochFromPure, pureFromBloch, charge, guardCritProb, radius, purity, coherenceL1,
-           lindbladStep, gateBloch, gateMatrix, rhoFromBloch, blochFromRho,
+           lindbladStep, gateBloch, gateMatrix, rhoFromBloch, blochFromRho, Bell,
            measure, timesFromRate, diagnose, selfTest };
 })();
 if (typeof window !== 'undefined') {
@@ -1257,6 +1314,7 @@ function createUnit(owner, row, col, walkIn=false, role='warrior') {
     coherence:     100,
     maxCoh:        100,
     entangledWith: null,
+    bell:          null,   // shared 2-qubit Bell state ref when entangled (QB-6)
     inSuperpos:    false,
     guarding:      false,   // GUARD ability active this turn
     id:            `u${_uid++}`,
@@ -1590,18 +1648,38 @@ function applyDecoherence() {
   });
 }
 
-// Entangled cells are driven together: a pulse on one also drives its partner.
+// QB-6 — a LOCAL gate on one half of a Bell pair updates the shared 2-qubit
+// amplitude state but must NOT alter the partner's local statistics (the
+// no-communication theorem). We update the shared state only; the partner's
+// per-unit state and marginal are untouched.
 function propagateEntanglement(cell, gateName) {
-  if (!cell.entangledWith) return;
-  const partner = GAME.pieces.find(p=>p.id===cell.entangledWith);
-  if (!partner) { cell.entangledWith=null; return; }
-  if (!GATES[gateName]) return;
-  partner.state = normalizeState(GATES[gateName](partner.state));
-  syncBloch(partner);
-  partner.coherence = Math.max(0, partner.coherence-5);
-  logEv(`ENTANGLEMENT: ${coord(partner.row,partner.col)} co-driven by [${gateName}] via `+
-    `Bell correlation with ${coord(cell.row,cell.col)}.`,'quantum');
-  spawn(partner.col*CELL+CELL/2, partner.row*CELL+CELL/2,'#c05070',8);
+  const bell = cell.bell;
+  if (!bell || !GATES[gateName]) return;
+  const U = QPhysics.gateMatrix(gateName);
+  if (!U) return;
+  bell.amps = QPhysics.Bell.applyLocal(bell.amps, bell.q[cell.id], U);
+}
+
+const _EIGEN = b => b ? {alpha:{r:0,i:0},beta:{r:1,i:0}}
+                      : {alpha:{r:1,i:0},beta:{r:0,i:0}};
+
+// Collapse an entangled unit AND its partner with correlated outcomes drawn
+// from the shared Bell state, then break the link (measurement destroys it).
+// Returns the measured unit's collapsed bit, or null if it wasn't entangled.
+function collapseEntangledPair(unit) {
+  const bell = unit.bell;
+  if (!bell) return null;
+  const partner = GAME.pieces.find(p => p.bell === bell && p !== unit);
+  const res = QPhysics.Bell.measure(bell.amps, bell.q[unit.id]);
+  unit.state = _EIGEN(res.outcome); syncBloch(unit); refreshSuperpos(unit);
+  if (partner) {
+    partner.state = _EIGEN(res.partnerOutcome); syncBloch(partner); refreshSuperpos(partner);
+    logEv(`CORRELATED COLLAPSE: ${coord(unit.row,unit.col)}→|${res.outcome}⟩ forces `+
+      `${coord(partner.row,partner.col)}→|${res.partnerOutcome}⟩ via the Bell pair.`,'quantum');
+    partner.bell = null; partner.entangledWith = null;
+  }
+  unit.bell = null; unit.entangledWith = null;
+  return res.outcome;
 }
 
 function applyGate(unit, gateName) {
@@ -1623,10 +1701,14 @@ function applyGate(unit, gateName) {
 }
 
 function applyMeasure(unit) {
-  const meas=measureState(unit.state);
-  unit.state=meas.state; syncBloch(unit); unit.inSuperpos=false;
+  // QB-6 — if entangled, measuring this unit collapses BOTH halves with
+  // correlated outcomes drawn from the shared Bell state.
+  const collapsed = unit.bell ? collapseEntangledPair(unit)
+                              : measureState(unit.state).collapsed;
+  if (!unit.bell) { unit.state = _EIGEN(collapsed); syncBloch(unit); }
+  unit.inSuperpos=false;
   unit.coherence=Math.min(unit.maxCoh, unit.coherence+12);
-  logEv(`MEASURE: ${coord(unit.row,unit.col)} collapses to |${meas.collapsed}⟩ and stabilizes (coherence +12).`,'measure');
+  logEv(`MEASURE: ${coord(unit.row,unit.col)} collapses to |${collapsed}⟩ and stabilizes (coherence +12).`,'measure');
   spawn(unit.col*CELL+CELL/2, unit.row*CELL+CELL/2,'#f5b73c',14);
   sfxGate('MEASURE');
   const el=document.getElementById('cnt-MEASURE');
@@ -1635,6 +1717,11 @@ function applyMeasure(unit) {
 
 function applyCNOT(ctrl, tgt) {
   ctrl.entangledWith=tgt.id; tgt.entangledWith=ctrl.id;
+  // Shared 4-amplitude Bell state |Φ+⟩ — the single source of truth for the
+  // pair's correlations (QB-6). q maps each unit id to its qubit index (0/1).
+  const bell = { amps: QPhysics.Bell.phiPlus(), q: {} };
+  bell.q[ctrl.id] = 0; bell.q[tgt.id] = 1;
+  ctrl.bell = bell; tgt.bell = bell;
   GAME.entanglCount++;
   logEv(`ENTANGLE: ${coord(ctrl.row,ctrl.col)} ⊗ ${coord(tgt.row,tgt.col)} — Bell link formed. `+
     `A hit on one bleeds onto the other.`,'gate');
@@ -1658,7 +1745,7 @@ function destroyUnit(u) {
   spawn(u.px, u.py, '#ffa83c', 14);
   GAME.shake = Math.max(GAME.shake, 18);
   GAME.pieces = GAME.pieces.filter(p=>p!==u);
-  GAME.pieces.forEach(p=>{ if(p.entangledWith===u.id) p.entangledWith=null; });
+  GAME.pieces.forEach(p=>{ if(p.entangledWith===u.id){ p.entangledWith=null; p.bell=null; } });
   if (GAME.selected===u) GAME.selected=null;
 }
 
@@ -1707,6 +1794,15 @@ function attack(attacker, target) {
                              : measureState(target.state);
   target.state = tm.state; refreshSuperpos(target);
   const crit = tm.collapsed===1;
+  // QB-6 — measuring an entangled target collapses its partner with a
+  // correlated outcome (|Φ+⟩ ⇒ same bit), then the entanglement is destroyed.
+  if (target.bell) {
+    const bp = GAME.pieces.find(p => p.bell === target.bell && p !== target);
+    if (bp) {
+      bp.state = _EIGEN(tm.collapsed); syncBloch(bp); refreshSuperpos(bp);
+      logEv(`CORRELATED COLLAPSE: ${coord(bp.row,bp.col)} → |${tm.collapsed}⟩ via the Bell pair.`,'quantum');
+    }
+  }
   const dmg  = crit?2:1;
   if (crit) {
     GAME.shake = Math.max(GAME.shake, 16);
@@ -1731,6 +1827,8 @@ function attack(attacker, target) {
     logEv(`ENTANGLED SPLASH: ${coord(partner.row,partner.col)} shares 1 damage via Bell link.`,'quantum');
     damageUnit(partner, 1);
   }
+  // Measurement destroyed the entanglement — break the link on both halves.
+  if (target.bell) { if (partner) { partner.bell=null; partner.entangledWith=null; } target.bell=null; target.entangledWith=null; }
   const _splash = partner ? ` (Bell link splashed 1 dmg to ${coord(partner.row,partner.col)})` : '';
   const _atTrig = crit
     ? `CRITICAL HIT: ${coord(attacker.row,attacker.col)} measured ${coord(target.row,target.col)} in |1⟩ — 2 dmg${_splash}`
@@ -3018,11 +3116,16 @@ const CAMPAIGN_MISSIONS = [
   },
   {
     title:'MISSION 3 — BELL PAIR TRAP',
-    intro:'Two enemy Mages share a Bell entanglement. Hit one and the other suffers splash damage. Identify the entangled pair and strike both in one move using CNOT.',
-    winText:'Entanglement weaponized! Bell pairs propagate measurement — Einstein called it spooky action at a distance.',
+    intro:'Two enemy Mages share a Bell pair |Φ+⟩. Measuring one collapses BOTH to the same correlated outcome — but neither half can signal the other (local moves on one never change the other\'s odds). Exploit the shared collapse to break the pair.',
+    winText:'Entanglement understood! A Bell measurement reveals a pre-shared correlation — not spooky control. You cannot send a message through it; you can only read the matching outcome.',
     setup(game) {
       const mages = game.pieces.filter(p=>p.owner==='black').slice(0,2);
-      if (mages.length===2){ mages[0].entangledWith=mages[1].id; mages[1].entangledWith=mages[0].id; }
+      if (mages.length===2){
+        mages[0].entangledWith=mages[1].id; mages[1].entangledWith=mages[0].id;
+        const bell = { amps: QPhysics.Bell.phiPlus(), q: {} };
+        bell.q[mages[0].id]=0; bell.q[mages[1].id]=1;
+        mages[0].bell=bell; mages[1].bell=bell;
+      }
     },
   },
 ];

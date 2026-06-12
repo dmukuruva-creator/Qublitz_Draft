@@ -68,5 +68,36 @@ assert('|1⟩ guard is a coin flip           → 50%', approxP(gcp({ x: 0, y: 0,
 assert('phase-aware |+⟩ guard beats naive |0⟩ guard',
   gcp({ x: 1, y: 0, z: 0 }) < gcp({ x: 0, y: 0, z: 1 }));
 
+// ── QB-6: real 2-qubit Bell pair (correlated collapse + no-communication) ──
+console.log('\n--- QB-6 Bell pair (entanglement) ---');
+const Bell = QPhysics.Bell;
+
+// |Φ+⟩ marginals are 50/50 on each qubit.
+assert('Bell |Φ+⟩ marginal P1(q0) = 0.5', approx(Bell.marginalP1(Bell.phiPlus(), 0), 0.5));
+assert('Bell |Φ+⟩ marginal P1(q1) = 0.5', approx(Bell.marginalP1(Bell.phiPlus(), 1), 0.5));
+
+// Measuring one half forces the partner to the SAME outcome (perfect correlation).
+{
+  let correlated = true;
+  for (const r of [0.1, 0.9, 0.49, 0.51, 0.0, 0.999]) {
+    const res = Bell.measure(Bell.phiPlus(), 0, () => r);
+    if (res.outcome !== res.partnerOutcome) correlated = false;
+  }
+  assert('measuring q0 collapses q1 to the correlated outcome', correlated);
+}
+
+// No-communication: a LOCAL gate on q0 must not change q1's marginal.
+{
+  const X = QPhysics.gateMatrix('X');
+  const H = QPhysics.gateMatrix('H');
+  const Z = QPhysics.gateMatrix('Z');
+  let invariant = true;
+  for (const U of [X, H, Z]) {
+    const after = Bell.applyLocal(Bell.phiPlus(), 0, U);
+    if (!approx(Bell.marginalP1(after, 1), 0.5)) invariant = false;
+  }
+  assert('local gate on q0 leaves q1 marginal unchanged (no-communication)', invariant);
+}
+
 console.log(fail === 0 ? '\nALL CHECKS PASSED ✓' : `\n${fail} CHECK(S) FAILED ✗`);
 process.exit(fail === 0 ? 0 : 1);
