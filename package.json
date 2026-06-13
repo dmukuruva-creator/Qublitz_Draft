@@ -1,0 +1,9 @@
+{
+  "name": "qublitz",
+  "version": "1.1.0",
+  "private": true,
+  "description": "QuBlitz — a quantum qubit-battle arena (canonical app: quantum_chess.html).",
+  "scripts": {
+    "test": "node tests/qphysics.test.js"
+  }
+}
