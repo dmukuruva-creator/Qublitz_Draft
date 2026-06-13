@@ -26,3 +26,6 @@ modern_musician_template/
 
 # Poster build artifact: 3.5M base64-embedded HTML; the *.pdf outputs are the deliverables (already ignored)
 QuBlitz_Poster_TechniGala26.html
+
+# Screenshots — non-code assets, kept out of git
+screenshots/
