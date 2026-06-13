@@ -1625,7 +1625,7 @@ function selectPiece(unit) {
 let _preMoveSageFor = null;
 function maybePreMoveSage(unit) {
   const isHumanTurn = !((GAME.mode==='vsBot' && GAME.turn===GAME.botColor) || GAME.mode==='attract');
-  if (!isHumanTurn || !_sageKey() || GAME.phase==='gameover') return;
+  if (!isHumanTurn || !_sageEnabled() || GAME.phase==='gameover') return;
   const key = `${unit.id}@${GAME.turnCount}`;
   if (_preMoveSageFor === key) return;              // already advised this unit this turn
   _preMoveSageFor = key;
@@ -3574,12 +3574,19 @@ function toggleAdvisor() {
 // ═══════════════════════════════════════════════════════
 let _sageAILastCall = 0;
 
-function _sageKey() { return localStorage.getItem('qb_api_key') || ''; }
+// QB-9 — the Anthropic key is NEVER collected or stored client-side. Sage AI is
+// served through a rate-limited server proxy that holds the key (see
+// sage_proxy.py, or any endpoint the deployment injects as window.QB_SAGE_PROXY,
+// e.g. the Streamlit wrapper). With no proxy configured, the AI Sage is simply
+// disabled and the heuristic Sage keeps playing — no key prompt, no exfil risk.
+const SAGE_PROXY_URL = (typeof window!=='undefined' && window.QB_SAGE_PROXY)
+  ? String(window.QB_SAGE_PROXY) : '';
+function _sageEnabled() { return !!SAGE_PROXY_URL; }
 
 function _updateClaudeBadge() {
   const b = document.getElementById('claude-badge');
   if (!b) return;
-  b.style.display = _sageKey() ? 'inline' : 'none';
+  b.style.display = _sageEnabled() ? 'inline' : 'none';
   b.textContent = '✦ Claude AI';
 }
 
@@ -3599,10 +3606,9 @@ function _buildGameState(trigger) {
 }
 
 async function callSageAI(trigger) {
-  const key = _sageKey();
-  if (!key || GAME.phase === 'gameover' || GAME.attractMode) return false;
+  if (!_sageEnabled() || GAME.phase === 'gameover' || GAME.attractMode) return false;
   const now = Date.now();
-  if (now - _sageAILastCall < 4000) return false; // max 1 call per 4s
+  if (now - _sageAILastCall < 4000) return false; // client-side throttle (server also rate-limits)
   _sageAILastCall = now;
 
   const badge = document.getElementById('claude-badge');
@@ -3610,25 +3616,17 @@ async function callSageAI(trigger) {
   startTypewriter('⚛ Sage reads the quantum field...');
 
   try {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
+    // The proxy holds the API key and the system prompt server-side; the client
+    // only sends the game state. No key ever touches the browser (QB-9).
+    const res = await fetch(SAGE_PROXY_URL, {
       method: 'POST',
-      headers: {
-        'x-api-key': key,
-        'anthropic-version': '2023-06-01',
-        'content-type': 'application/json',
-        'anthropic-dangerous-allow-browser': 'true'
-      },
-      body: JSON.stringify({
-        model: 'claude-haiku-4-5-20251001',
-        max_tokens: 110,
-        system: 'You are the Sage, a cryptic quantum oracle advising a player in QuBlitz — a tactical battle game where qubit units fight via quantum gates.\nGates: H=superposition |+⟩ (50% charge), X=flip to |1⟩ (100% charge), Z/S/T=phase rotations, CNOT=Bell pair entanglement, MEASURE=wavefunction collapse & stabilize.\nCombat (Born rule): charge=P(|1⟩). Attacking fires with probability=charge; target caught in |1⟩=CRITICAL (2 dmg), in |0⟩=1 dmg. Attacker discharges to |0⟩. Entangled units share damage via Bell link. Decoherence bleeds charge each turn. Guardian units [G] resist criticals.\nGive ONE sharp tactical insight in exactly 1-2 short sentences. Use quantum terminology naturally (|0⟩, |1⟩, superposition, Born rule, decoherence, Bell pair). Name units by grid coordinate. Be specific and tactical. Be slightly wise and cryptic. No lists, no headers, no emoji.',
-        messages: [{ role: 'user', content: _buildGameState(trigger) }]
-      })
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ state: _buildGameState(trigger) })
     });
     if (badge) { badge.style.display = 'inline'; badge.textContent = '✦ Claude AI'; }
     if (!res.ok) return false;
     const data = await res.json();
-    const text = data.content?.[0]?.text?.trim();
+    const text = (data.text || data.content?.[0]?.text || '').trim();
     if (text) { startTypewriter(text); return true; }
   } catch(e) {
     if (badge) { _updateClaudeBadge(); }
@@ -3848,15 +3846,7 @@ function openMenu() {
     id="vote-btn" onclick="GAME.voteMode=!GAME.voteMode;this.textContent=GAME.voteMode?'ON ✓':'OFF';_updateVoteBadge();">${GAME.voteMode?'ON ✓':'OFF'}</button>
 </p>
 <hr style="border-color:var(--border);margin:6px 0">
-<p style="color:var(--dim);font-size:7px;margin-bottom:4px;">🤖 Claude AI Sage — LLM quantum insights (Anthropic API key):</p>
-<div style="display:flex;gap:6px;align-items:center;margin-bottom:4px">
-  <input type="password" id="claude-key-inp" placeholder="sk-ant-api..."
-    value="${_sageKey()}"
-    style="flex:1;background:#0c1226;border:1px solid var(--border);color:var(--teal);font-family:var(--pixel);font-size:6px;padding:5px 8px;border-radius:4px;min-width:0">
-  <button class="btn" style="width:auto;padding:5px 10px;font-size:6px;white-space:nowrap"
-    onclick="localStorage.setItem('qb_api_key',document.getElementById('claude-key-inp').value);_updateClaudeBadge();beep(523,'triangle',0.05,0.08);this.textContent='SAVED ✓';setTimeout(()=>this.textContent='SAVE',1500)">SAVE</button>
-</div>
-<p style="color:var(--wood);font-size:6px;margin-bottom:6px;">Stored in browser localStorage only. Sent only to api.anthropic.com. Uses claude-haiku-4-5 for real-time play.</p>
+<p style="color:var(--dim);font-size:7px;margin-bottom:6px;">🤖 Claude AI Sage — LLM quantum insights are served through a rate-limited server proxy that holds the key. ${_sageEnabled() ? '<span style="color:var(--teal)">Connected ✓</span>' : 'Not configured for this build (the standalone file ships without a server; the heuristic Sage still plays).'}</p>
 <hr style="border-color:var(--border);margin:6px 0">
 ${leaderboardHTML()}
 <p style="color:var(--wood);font-size:6px;text-align:center;margin-top:10px;">

@@ -9,6 +9,8 @@ st.components.v1.html. The HTML file is fully self-contained (no external assets
 beyond Google Fonts) so it deploys cleanly on Streamlit Cloud.
 """
 
+import json
+
 import streamlit as st
 from pathlib import Path
 
@@ -245,7 +247,26 @@ st.divider()
 
 # ── GAME EMBED ───────────────────────────────────────────────
 # Height: title(48) + ui(820, sage overlaid on canvas) + log(68) + padding ≈ 960
-st.components.v1.html(GAME_HTML, height=1100, scrolling=True)
+#
+# QB-9 — the AI Sage uses a server-held Anthropic key, never a client key. If a
+# proxy URL is configured for this deployment (env QB_SAGE_PROXY_URL or a
+# Streamlit secret), inject it so the embedded game can reach it. Otherwise the
+# heuristic Sage plays and no key is ever requested from the user.
+def _sage_proxy_url() -> str:
+    import os
+    url = os.environ.get("QB_SAGE_PROXY_URL", "")
+    if not url:
+        try:
+            url = st.secrets.get("QB_SAGE_PROXY_URL", "")  # type: ignore[attr-defined]
+        except Exception:
+            url = ""
+    return url or ""
+
+_proxy = _sage_proxy_url()
+_inject = (
+    f"<script>window.QB_SAGE_PROXY={json.dumps(_proxy)};</script>" if _proxy else ""
+)
+st.components.v1.html(_inject + GAME_HTML, height=1100, scrolling=True)
 
 st.divider()
 
