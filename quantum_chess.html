@@ -1625,7 +1625,10 @@ function selectPiece(unit) {
 let _preMoveSageFor = null;
 function maybePreMoveSage(unit) {
   const isHumanTurn = !((GAME.mode==='vsBot' && GAME.turn===GAME.botColor) || GAME.mode==='attract');
-  if (!isHumanTurn || !_sageEnabled() || GAME.phase==='gameover') return;
+  if (!isHumanTurn || GAME.phase==='gameover') return;
+  // No LLM proxy configured → the heuristic Sage is now selection-aware
+  // (analyzePosition leads with advice for GAME.selected), so render it.
+  if (!_sageEnabled()) { renderSage(); return; }
   const key = `${unit.id}@${GAME.turnCount}`;
   if (_preMoveSageFor === key) return;              // already advised this unit this turn
   _preMoveSageFor = key;
@@ -3515,6 +3518,40 @@ function analyzePosition() {
   const foes = GAME.pieces.filter(p=>p.owner!==me);
   const tips = [];
   if (!mine.length || !foes.length) return [{p:1,text:'The battle is decided.',type:'info'}];
+
+  // ── Selection-aware coaching (heuristic pre-move advice) ──────────────
+  // When the player has a unit selected, lead with specific, concept-linked
+  // guidance for THAT unit — the offline counterpart to the LLM pre-move Sage.
+  const sel = GAME.selected;
+  if (sel && sel.owner === me) {
+    const c    = charge(sel);
+    const cp   = (c * 100) | 0;
+    const here = coord(sel.row, sel.col);
+    const adj  = adjacentEnemies(sel);
+    const gcrit = Math.round(QPhysics.guardCritProb(sel.state) * 100);  // X-basis crit = (1−x)/2
+
+    if (adj.length && c >= 0.6) {
+      const tgt = adj.slice().sort((a,b)=>a.hp-b.hp)[0];
+      tips.push({p:24,type:'danger',text:`${here} sits at ${cp}% charge beside ${coord(tgt.row,tgt.col)} — ATTACK now: by the Born rule your hit probability equals the charge, and a foe caught in |1⟩ takes a CRITICAL (2 dmg).`});
+    } else if (adj.length && c < 0.35) {
+      tips.push({p:23,type:'warn',text:`${here} is in range but only ${cp}% charged — apply X (→|1⟩, 100%) or H (→|+⟩, 50%) first; attacking now fires with just ${cp}% probability and then discharges to |0⟩.`});
+    } else if (!adj.length && c >= 0.6) {
+      tips.push({p:22,type:'quantum',text:`${here} is charged ${cp}% but no enemy is adjacent — close in this turn: idle charge relaxes as e^(−t/T₁), so a stored hit bleeds away while you wait.`});
+    } else if (!adj.length && c < 0.35) {
+      tips.push({p:18,type:'gate',text:`${here} is at ${cp}% — use the quiet turn to load it (X or H) and advance, so it arrives at an enemy already charged.`});
+    }
+
+    const partner = sel.entangledWith && GAME.pieces.find(p=>p.id===sel.entangledWith);
+    if (partner) {
+      tips.push({p:16,type:'quantum',text:`${here} is in a Bell pair with ${coord(partner.row,partner.col)} — a strike on either bleeds onto both, and MEASURING one collapses the partner to the correlated outcome (no faster-than-light signalling, only shared correlation).`});
+    }
+
+    if (sel.guarding) {
+      tips.push({p:15,type:gcrit>50?'warn':'gate',text:`${here} is GUARDing — it is read in the X-basis, so its crit risk is ${gcrit}% = (1−x)/2. ${gcrit>50?'It is near |−⟩ and exposed — apply Z (or two S) to flip toward |+⟩ and make it crit-immune.':'It is near |+⟩ — well braced; phase is doing real defensive work here.'}`});
+    } else if (adj.some(e=>charge(e)>0.4)) {
+      tips.push({p:14,type:'info',text:`${here} faces a live threat — GUARD braces it in the X-basis, but the phase decides the crit. Rotate toward |+⟩ (Z/S/T) first; right now a GUARD would sit at ${gcrit}% crit risk.`});
+    }
+  }
 
   // A charged unit already adjacent to a foe → strike now.
   const ready = mine.find(u=>charge(u)>0.6 && adjacentEnemies(u).length);

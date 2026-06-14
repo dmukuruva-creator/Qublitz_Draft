@@ -42,9 +42,11 @@ SYSTEM_PROMPT = (
     "to |0⟩. Entangled units collapse together and share splash via the Bell link. "
     "Decoherence bleeds charge each turn. A GUARDing unit is measured in the X-basis, so "
     "its phase decides the crit (|+⟩ safe, |−⟩ exposed).\n"
-    "Give ONE sharp tactical insight in 1-2 short sentences. Use quantum terminology "
-    "naturally. Name units by grid coordinate. Be specific, tactical, slightly cryptic. "
-    "No lists, no headers, no emoji."
+    "Give ONE sharp recommendation in 1-2 short sentences, and always name the quantum "
+    "WHY — the principle in play (Born rule: P(hit)=charge; T1/T2 relaxation; the X-basis "
+    "GUARD phase where crit risk=(1-x)/2; Bell-pair correlation) — so the player learns the "
+    "mechanic, not just the move. Name units by grid coordinate. Be specific and tactical, "
+    "lightly cryptic. No lists, no headers, no emoji."
 )
 
 _hits: dict[str, deque[float]] = {}
