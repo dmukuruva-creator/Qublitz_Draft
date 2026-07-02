@@ -3963,8 +3963,9 @@ function openPhysicsLab() {
 <pre style="color:var(--gold);font-size:11px;line-height:1.6;text-align:center;background:#0a0f22;border:1px solid var(--border);border-radius:4px;padding:10px;margin:6px 0">dρ/dt = −(i/ℏ)[H,ρ] + Σ γₖ( Lₖ ρ Lₖ† − ½{Lₖ†Lₖ, ρ} )</pre>
 <p style="color:var(--dim);font-size:11px;line-height:1.7">Each turn we apply its <b>exact</b> solution toward |0⟩: charge relaxes as <b style="color:var(--red)">e<sup>−t/T₁</sup></b>, transverse coherence as <b style="color:var(--teal)">e<sup>−t/T₂</sup></b> (with T₂ ≤ 2T₁). At the current rate (${GAME.decoRate}/turn): <b style="color:var(--gold)">T₁ = ${T1.toFixed(1)}</b>, <b style="color:var(--gold)">T₂ = ${T2.toFixed(1)}</b> turns.</p>
 
-<h3>FALSIFIABILITY TEST</h3>
-<p style="color:var(--dim);font-size:11px;line-height:1.6">A unit prepared in |1⟩, left to decohere. Physical decay is exponential, <i>not</i> linear — the test fits both and reports R².</p>
+<h3>ENGINE SELF-TEST: DECAY IS EXPONENTIAL, NOT LINEAR</h3>
+<p style="color:var(--dim);font-size:11px;line-height:1.6">A unit prepared in |1⟩, left to decohere. The engine's own generated data is fit against an exponential model and a linear model to confirm the <i>implementation</i> matches the exponential decay the Lindblad equation prescribes.</p>
+<p style="color:var(--wood);font-size:10px;line-height:1.6;margin:2px 0 6px">This validates the implementation against the model; the model itself is standard open-quantum-systems physics (the Lindblad master equation) — it is not an empirical measurement against a real physical qubit.</p>
 <canvas id="diag-canvas" width="360" height="190" style="width:100%;max-width:360px;display:block;margin:8px auto;background:#0a0f22;border:1px solid var(--border);border-radius:4px"></canvas>
 <p id="diag-readout" style="text-align:center;color:var(--dim);font-size:11px;margin:4px 0"></p>
 
