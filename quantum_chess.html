@@ -3624,16 +3624,35 @@ function analyzePosition() {
   return tips.sort((a,b)=>b.p-a.p).slice(0,3);
 }
 
+// UX-2 — speaker label for the Sage dialogue bar. Bot commentary gets its own
+// "BOT (difficulty)" speaker, distinct from the player-facing SAGE label, so
+// it never reads as the redundant/wrong "BOT: Bot ...".
+const SAGE_SPEAKER_DEFAULT = '⬟ THE SAGE · QUANTUM ADVISOR';
+const DIFF_LABEL = ['EASY','MEDIUM','HARD'];
+function setSageSpeaker(label) {
+  const nameEl = document.getElementById('sage-bar-name');
+  if (!nameEl) return;
+  // Preserve the Claude badge child element (appended inside sage-bar-name).
+  const badge = document.getElementById('claude-badge');
+  nameEl.textContent = label;
+  if (badge) nameEl.appendChild(badge);
+}
+
 // Update the Sage dialogue bar (always visible) and the optional expanded tips panel.
 function renderSage() {
   // If the bot just explained a move, show that first (fades after one call).
   if (GAME.botLastReason) {
-    startTypewriter('BOT: ' + GAME.botLastReason);
+    const diffLabel = DIFF_LABEL[GAME.difficulty] || DIFF_LABEL[1];
+    setSageSpeaker(`◆ BOT (${diffLabel})`);
+    // Reason text already reads naturally on its own (e.g. "Bot strikes E4…");
+    // the speaker label above now carries "BOT", so don't prefix it again.
+    startTypewriter(GAME.botLastReason);
     GAME.botLastReason = '';
     const bar = document.getElementById('sage-bar');
     if (bar) bar.classList.remove('urgent');
     return;
   }
+  setSageSpeaker(SAGE_SPEAKER_DEFAULT);
   const tips = analyzePosition();
   const bar  = document.getElementById('sage-bar');
   const btn  = document.querySelector('.btn-sage');
