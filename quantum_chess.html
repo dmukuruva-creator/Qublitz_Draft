@@ -181,6 +181,17 @@ canvas { display: block; cursor: pointer; }
   .panel { max-width: 800px; width: 100%; order: 2; }
   #canvas-wrap { order: 1; }
 }
+/* UX-3 — tablet breakpoint. Nothing previously fired between 1100px and
+   560px, so the sage-bar footer row (hotkey legend + EXPLAIN + TEACH + MORE)
+   had no rule forcing it to wrap or shrink at ~768px and its flex children
+   overlapped into garbled text (e.g. "EXPLAIN JEACH"). Wrap the row onto
+   multiple lines and drop the long hotkey legend (least essential — the
+   actions are still reachable via click) so the action controls stay legible. */
+@media (max-width: 900px) {
+  #sage-bar-footer { flex-wrap: wrap; row-gap: 4px; }
+  #sage-bar-hotkey { display: none; }
+  #sage-bar-controls { flex: 1 1 auto; justify-content: flex-end; flex-wrap: wrap; row-gap: 4px; }
+}
 @media (max-width: 560px) {
   #ui { padding: 6px 6px 0; gap: 8px; }
   #canvas-wrap { padding-bottom: 72px; }
