@@ -1047,7 +1047,7 @@ const GATES = {
 
 const GATE_INFO = {
   H: {label:'Hadamard',short:'|0⟩↔|+⟩ superposition',ctrl:'π rotation around (X+Z)/√2. Creates maximum superposition — equal |0⟩/|1⟩ amplitude. Drives qubit to Bloch equator.'},
-  X: {label:'Pauli-X',short:'|0⟩↔|1⟩ bit-flip NOT',ctrl:'π rotation around X-axis. Full population inversion. The quantum NOT gate — foundational to error correction.'},
+  X: {label:'Pauli-X',short:'|0⟩↔|1⟩ bit-flip NOT',ctrl:'π rotation around X-axis. Full population inversion. The quantum NOT gate — foundational to error correction. In-game this is "full charge," but |1⟩ is the excited state — in a real lab it\'s fragile, which is exactly why it decays.'},
   Y: {label:'Pauli-Y',short:'bit-flip + phase flip',ctrl:'π rotation around Y-axis. Applies both bit-flip and phase-flip: α↦−iβ, β↦iα.'},
   Z: {label:'Pauli-Z',short:'phase flip |+⟩↔|−⟩',ctrl:'π rotation around Z-axis. Flips the sign of the |1⟩ amplitude (φ→φ+π), which swaps |+⟩↔|−⟩. Phase is invisible to charge and a Z-basis strike, but flips a safe X-basis GUARD into an exposed one.'},
   S: {label:'S Phase',short:'+π/2 relative phase',ctrl:'90° Z-axis rotation. Multiplies |1⟩ by i (φ→φ+π/2). Chain two S gates to get Z. Sets up the relative phase that decides a GUARD\'s X-basis crit odds.'},
@@ -1055,7 +1055,7 @@ const GATE_INFO = {
   Rx:{label:'Rx(π/4)',short:'π/4 X-axis tilt',ctrl:'π/4 X-axis rotation, modelling Larmor spin precession. Tilts the qubit toward the equator, adjusting both charge and the X-basis phase.'},
   Ry:{label:'Ry(π/4)',short:'π/4 Y-axis tilt',ctrl:'π/4 Y-axis rotation, modelling Rabi oscillation — the cleanest coherent qubit drive. Nudges charge without adding a complex phase.'},
   CNOT:   {label:'CNOT',short:'entangle two qubits',ctrl:'Conditional X: flips target if control |1⟩. Forms a correlated Bell pair — a strike on one bleeds onto the other (no faster-than-light control; only the correlation is shared).'},
-  MEASURE:{label:'Measure',short:'collapse to eigenstate',ctrl:'Projective Z-basis measurement. Collapses |ψ⟩ to |0⟩ or |1⟩ and stabilizes the unit (coherence +12).'},
+  MEASURE:{label:'Measure',short:'collapse to eigenstate',ctrl:'Projective Z-basis measurement. Collapses |ψ⟩ to |0⟩ or |1⟩ and stabilizes the unit (coherence +12). "Discharging" to |0⟩ is a game-mechanic reward, not a physical one — |0⟩ is simply the low-energy ground state a real qubit relaxes to anyway; |1⟩ is high-energy and short-lived by nature.'},
 };
 
 // ═══════════════════════════════════════════════════════
@@ -1902,7 +1902,7 @@ function attack(attacker, target) {
     GAME.shake = Math.max(GAME.shake, 8);
   }
   logEv(`STRIKE: ${coord(attacker.row,attacker.col)} → ${coord(target.row,target.col)} for ${dmg}`+
-    `${crit?' (CRITICAL — target caught in |1⟩!)':''}.`,'capture');
+    `${crit?' (CRITICAL — target caught in |1⟩, the fragile excited state!)':''}.`,'capture');
   spawn(attacker.px, attacker.py, FACTION[attacker.owner].col, 8);
   const partner = target.entangledWith && GAME.pieces.find(p=>p.id===target.entangledWith);
   // Flash the entanglement beam when a hit propagates.
@@ -2063,7 +2063,7 @@ async function doBotMove() {
   // 3) MEASURE-discharge a dangerously exposed unit: in superposition, charged,
   //    and threatened — collapse now to (maybe) drop to a safe |0⟩.
   } else if (diff>=1 && threat && u.inSuperpos && myChg>0.4 && !target && Math.random()<advanced) {
-    GAME.botLastReason = `Bot MEASURES ${coord(u.row,u.col)} — discharging a unit about to be crit (collapse to an eigenstate).`;
+    GAME.botLastReason = `Bot MEASURES ${coord(u.row,u.col)} — discharging out of the fragile |1⟩ excited state before it gets crit (collapse to an eigenstate).`;
     applyMeasure(u);
 
   // 4) CNOT-link an adjacent enemy into a Bell pair so the bot's next strike
@@ -2078,7 +2078,7 @@ async function doBotMove() {
     const gate = (diff>=1 && !target && Math.random()<advanced) ? 'H' : 'X';
     GAME.botLastReason = gate==='H'
       ? `Bot applies H to ${coord(u.row,u.col)} — entering |+⟩ superposition (~50% charge). A fast gamble.`
-      : `Bot charges ${coord(u.row,u.col)} with X — flipping to |1⟩ for a guaranteed strike next turn.`;
+      : `Bot charges ${coord(u.row,u.col)} with X — flipping to |1⟩ for a guaranteed strike next turn (it won't stay there long — |1⟩ decays fast).`;
     applyGate(u, gate);
 
   // 6) Charged and adjacent — take the shot.
@@ -2828,7 +2828,7 @@ function updateSelInfo(unit) {
   document.getElementById('sel-xbasis').innerHTML=
     `<span>x=${_b.x.toFixed(2)}</span><span>GUARD ${_gc}%</span>`;
   document.getElementById('sel-hint').textContent=
-    `Charge = strike chance (P(|1⟩)). Use X to charge toward |1⟩, H for a 50% gamble, MEASURE to discharge & stabilize. After attacking, the unit drops to |0⟩.`;
+    `Charge = strike chance (P(|1⟩)). Use X to charge toward |1⟩, H for a 50% gamble, MEASURE to discharge & stabilize. Note: |1⟩ is the excited state — being IN it is what makes a unit fragile (it decays and can crit), not a state you'd want to sit in. After attacking, the unit drops to |0⟩, the ground state.`;
   // QB-8 — announce the selection and, on the very first selection, show a
   // one-time "click again for actions" onboarding hint.
   const st = document.getElementById('a11y-status');
@@ -3624,7 +3624,7 @@ function analyzePosition() {
 
     if (adj.length && c >= 0.6) {
       const tgt = adj.slice().sort((a,b)=>a.hp-b.hp)[0];
-      tips.push({p:24,type:'danger',short:`${here} → ATTACK ${coord(tgt.row,tgt.col)} (${cp}% charge).`,text:`${here} sits at ${cp}% charge beside ${coord(tgt.row,tgt.col)} — ATTACK now: by the Born rule your hit probability equals the charge, and a foe caught in |1⟩ takes a CRITICAL (2 dmg).`});
+      tips.push({p:24,type:'danger',short:`${here} → ATTACK ${coord(tgt.row,tgt.col)} (${cp}% charge).`,text:`${here} sits at ${cp}% charge beside ${coord(tgt.row,tgt.col)} — ATTACK now: by the Born rule your hit probability equals the charge, and a foe caught in |1⟩ — the fragile excited state — takes a CRITICAL (2 dmg).`});
     } else if (adj.length && c < 0.35) {
       tips.push({p:23,type:'warn',short:`${here} → charge first (X/H), only ${cp}%.`,text:`${here} is in range but only ${cp}% charged — apply X (→|1⟩, 100%) or H (→|+⟩, 50%) first; attacking now fires with just ${cp}% probability and then discharges to |0⟩.`});
     } else if (!adj.length && c >= 0.6) {
@@ -3653,11 +3653,11 @@ function analyzePosition() {
   }
   // Adjacent but uncharged → charge first.
   const weakAdj = mine.find(u=>charge(u)<0.3 && adjacentEnemies(u).length);
-  if (weakAdj) tips.push({p:8,text:`${coord(weakAdj.row,weakAdj.col)} is in range but uncharged — apply X to load it toward |1⟩ before you strike.`,type:'warn'});
+  if (weakAdj) tips.push({p:8,text:`${coord(weakAdj.row,weakAdj.col)} is in range but uncharged — apply X to load it toward |1⟩ (the excited state) before you strike; it won't stay charged long once there.`,type:'warn'});
 
   // My charged unit sitting next to a live enemy → exposed to a critical.
   const exposed = mine.find(u=>charge(u)>0.6 && adjacentEnemies(u).some(e=>charge(e)>0.4));
-  if (exposed) tips.push({p:7,text:`${coord(exposed.row,exposed.col)} is charged beside a live enemy — a unit caught in |1⟩ takes a CRITICAL. Strike, retreat, or MEASURE to discharge.`,type:'warn'});
+  if (exposed) tips.push({p:7,text:`${coord(exposed.row,exposed.col)} is charged beside a live enemy — a unit caught in |1⟩ (the fragile excited state) takes a CRITICAL. Strike, retreat, or MEASURE to discharge.`,type:'warn'});
 
   // Finish a low-HP enemy.
   const low = foes.filter(f=>f.hp<=1).sort((a,b)=>a.hp-b.hp)[0];
@@ -3668,7 +3668,7 @@ function analyzePosition() {
   foes.forEach(a=>foes.forEach(b=>{ if(a!==b && !combo && adjacent(a,b)) combo=[a,b]; }));
   if (combo) tips.push({p:4,text:`Enemies at ${coord(combo[0].row,combo[0].col)} & ${coord(combo[1].row,combo[1].col)} stand adjacent — entangle them so one strike bleeds onto both.`,type:'quantum'});
 
-  tips.push({p:2,text:`Charge bleeds away each turn (T1 relaxation) — load up and strike soon. Keep idle units in |0⟩ so they're not caught exposed.`,type:'info'});
+  tips.push({p:2,text:`Charge bleeds away each turn (T1 relaxation) — that's |1⟩ being the fragile excited state, not a bug. Load up and strike soon. Keep idle units in |0⟩ (the stable ground state) so they're not caught exposed.`,type:'info'});
 
   return tips.sort((a,b)=>b.p-a.p).slice(0,3);
 }
@@ -3784,14 +3784,14 @@ function explainSelected() {
   const gc = Math.round(QPhysics.guardCritProb(u.state) * 100);
   const here = coord(u.row, u.col);
   let basis;
-  if (ch >= 95)      basis = '|1⟩ (excited — fully charged)';
-  else if (ch <= 5)  basis = '|0⟩ (ground — discharged)';
+  if (ch >= 95)      basis = '|1⟩ (excited — fully charged, but fragile: it decays and can be caught in a critical)';
+  else if (ch <= 5)  basis = '|0⟩ (ground — discharged and stable)';
   else if (b.x >  0.85) basis = '|+⟩ (equal superposition along +X)';
   else if (b.x < -0.85) basis = '|−⟩ (equal superposition along −X)';
   else               basis = 'a superposition of |0⟩ and |1⟩';
   const advice = ch < 50
-    ? 'Apply X to drive it toward |1⟩, or H for a |+⟩ guard.'
-    : 'Well charged — close in and strike before T₁ relaxation bleeds it away.';
+    ? 'Apply X to drive it toward |1⟩ for a guaranteed strike (remember: |1⟩ is high-energy and short-lived), or H for a |+⟩ guard.'
+    : 'Well charged — close in and strike before T₁ relaxation bleeds it away; the excited state doesn\'t last.';
   startTypewriter(`${here} is in ${basis}: charge P(|1⟩)=${ch}% (your hit chance), Bloch x=${b.x.toFixed(2)} so a GUARD here would sit at ${gc}% crit. ${advice}`);
 }
 
@@ -4024,7 +4024,7 @@ function openMenu() {
   <p style="color:var(--ink-2);font-size:11px;line-height:1.7;margin:0">
     <b style="color:var(--teal)">1. CHARGE</b> — tap a unit, fire a gate (X = 100% charge, H = 50%).<br>
     <b style="color:var(--teal)">2. STRIKE</b> — move beside a foe and ATTACK; hit chance = your charge (Born rule).<br>
-    <b style="color:var(--teal)">3. BEAT THE CLOCK</b> — charge decays exponentially each turn. Strike before it bleeds away. Last army standing wins.
+    <b style="color:var(--teal)">3. BEAT THE CLOCK</b> — charge decays exponentially each turn, because |1⟩ is the fragile, high-energy excited state — that's why it decays, not a game penalty. Strike before it bleeds away. Last army standing wins.
   </p>
 </div>
 
@@ -4104,19 +4104,19 @@ function openTutorial() {
 <p>Click one of <b>your</b> units. Green dots show where it can <b>move</b> (range ${MOVE_RANGE}, blocked by other units). Click a tile to move, or click the unit to stay put — then an <b>action menu</b> opens: Attack, a charge pulse, Entangle, Measure, or End turn. A red ring marks enemies in strike range; click one to attack directly. One unit acts per turn. Keys: [A] attack, [H/X/Y/Z/S/T] charge, [R]/[Shift+R] Ry/Rx, [M] measure, [C] entangle, [Space] end, [ESC] cancel.</p>
 
 <h3>▸ COMBAT — CHARGE &amp; MEASURE</h3>
-<p>A unit's <b>charge</b> is its |1⟩ amplitude, P(|1⟩). To attack you must be <b>adjacent</b> to an enemy. The strike is a <b>measurement</b> of your unit (Born rule):</p>
+<p>A unit's <b>charge</b> is its |1⟩ amplitude, P(|1⟩). To attack you must be <b>adjacent</b> to an enemy. The strike is a <b>measurement</b> of your unit (Born rule). Note on the physics: |1⟩ is the <i>excited</i> state — in a real lab it's fragile, which is exactly why it decays (that's the in-game "charge bleeds away" clock); |0⟩ is simply the ground state a real qubit relaxes to. "Charge" is a game-mechanic reward for being excited, not a claim that the excited state is physically special or safe.</p>
 <table>
   <tr><th>Your charge</th><th>Result of attacking</th></tr>
   <tr><td>|1⟩ (100%)</td><td>Always fires — a guaranteed hit. But you discharge to |0⟩ and are left exposed.</td></tr>
   <tr><td>|+⟩ (≈50%)</td><td>A coin-flip gamble — fire or misfire.</td></tr>
   <tr><td>|0⟩ (0%)</td><td>Cannot strike — charge up first.</td></tr>
 </table>
-<p>When a strike fires, the <b>target is measured too</b>: if it's caught in |1⟩ it takes a <b>CRITICAL (2 dmg)</b>, otherwise 1. Either way your attacker collapses to |0⟩. <b>Defense:</b> keep idle units near |0⟩ so they're not caught charged.</p>
+<p>When a strike fires, the <b>target is measured too</b>: if it's caught in |1⟩ — the fragile excited state — it takes a <b>CRITICAL (2 dmg)</b>, otherwise 1. Either way your attacker collapses to |0⟩. <b>Defense:</b> keep idle units near |0⟩ so they're not caught charged and exposed — sitting in |1⟩ is inherently risky, not a state to camp in.</p>
 
 <h3>▸ CHARGING (control pulses)</h3>
 <table>
   <tr><th>Pulse</th><th>Effect</th></tr>
-  <tr><td>X</td><td>|0⟩→|1⟩ — full charge, guaranteed next strike.</td></tr>
+  <tr><td>X</td><td>|0⟩→|1⟩ — full charge, guaranteed next strike. |1⟩ is the excited state: high-energy and short-lived, which is why it decays fast.</td></tr>
   <tr><td>H</td><td>|0⟩→|+⟩ — ~50% charge, a flexible gamble.</td></tr>
   <tr><td>S / T / Z</td><td>Relative-phase rotations (+π/2 · +π/4 · +π). Don't change charge or a normal strike — but a phase-loaded GUARD interferes in the X-basis: reach |+⟩ to be crit-immune, |−⟩ to be exposed.</td></tr>
   <tr><td>Rx / Ry</td><td>±45° rotations — partial charge in one step.</td></tr>
@@ -4131,7 +4131,7 @@ function openTutorial() {
 <p><b>Entangle (CNOT)</b> links two <b>adjacent</b> units (friend or foe) into a Bell link — a hit on one bleeds <b>1 damage onto the other</b>. Entangle two enemies for splash value. <b>Measure</b> collapses your unit to an eigenstate and restores coherence (+12) — discharge a dangerously-exposed unit, or stabilize one.</p>
 
 <h3>🎨 READING THE BOARD</h3>
-<p>Units glow in their faction color — <b style="color:#2fe0d0">cyan</b> vs <b style="color:#ff4d9d">magenta</b>; the glow turns <b style="color:#ff5a72">hot red</b> as a unit charges toward |1⟩. <b>Green pips</b> above = HP; the bottom bar = charge. The state dot reads green |0⟩ (safe) · cyan superposition · red |1⟩ (charged). The Sage NPC beside the board calls out the best play each turn.</p>
+<p>Units glow in their faction color — <b style="color:#2fe0d0">cyan</b> vs <b style="color:#ff4d9d">magenta</b>; the glow turns <b style="color:#ff5a72">hot red</b> as a unit charges toward |1⟩ — physically, the fragile excited state, not a "power level." <b>Green pips</b> above = HP; the bottom bar = charge. The state dot reads green |0⟩ (safe, ground state) · cyan superposition · red |1⟩ (charged, but short-lived). The Sage NPC beside the board calls out the best play each turn.</p>
 `;
   document.getElementById('modal-overlay').classList.add('show');
 }
