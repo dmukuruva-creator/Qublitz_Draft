@@ -244,6 +244,22 @@ body.biome-snow {
   font-family: var(--body); font-weight: 600;
 }
 .srow .val { font-family: var(--pixel); font-size:11px; color: var(--green); }
+.srow span, .srow > * { min-width: 0; }
+.srow-label {
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  flex-shrink: 0; margin-right: 8px;
+}
+/* UX-1 — X-basis row: label + two value fields (x= and GUARD%) that must
+   never visually collide. Wraps to a second line at narrow widths instead
+   of overlapping; each field keeps its own nowrap run so digits never split. */
+.srow-xbasis {
+  flex-wrap: wrap; row-gap: 2px; column-gap: 8px;
+}
+.srow-xbasis .val {
+  display: flex; flex-wrap: wrap; justify-content: flex-end;
+  gap: 2px 10px; flex: 1 1 auto; min-width: 0;
+}
+.srow-xbasis .val span { white-space: nowrap; }
 
 /* Coherence bar */
 .cbar {
@@ -295,7 +311,7 @@ body.biome-snow {
 
 #sel-eq {
   font-size:11px; color: var(--teal);
-  word-break: break-all; min-height: 16px; margin-bottom: 4px;
+  overflow-wrap: break-word; word-break: normal; min-height: 16px; margin-bottom: 4px;
   font-family: var(--pixel); line-height: 1.7;
 }
 #sel-hint {
@@ -723,7 +739,10 @@ body::before {
         <div class="srow">HP <span class="val" id="sel-theta">—</span></div>
         <div class="srow">Charge <span class="val" id="sel-phi">—</span></div>
         <div class="srow">Coherence <span class="val" id="sel-coh">—</span></div>
-        <div class="srow" title="Bloch x sets a GUARD's crit risk = (1−x)/2">X-basis <span class="val" id="sel-xbasis">—</span></div>
+        <div class="srow srow-xbasis" title="Bloch x sets a GUARD's crit risk = (1−x)/2">
+          <span class="srow-label">X-basis</span>
+          <span class="val" id="sel-xbasis">—</span>
+        </div>
         <canvas id="bloch-canvas" width="100" height="100"
           style="display:block;margin:7px auto;border:1px solid rgba(90,80,204,0.40);border-radius:50%;background:radial-gradient(circle at 40% 35%, #1c2440, #0a0f22);box-shadow:0 4px 16px rgba(0,0,0,0.50);"></canvas>
         <div id="sel-hint"></div>
@@ -2740,18 +2759,25 @@ function updateSelInfo(unit) {
     document.getElementById('sel-phi').textContent='—';
     document.getElementById('sel-coh').textContent='—';
     document.getElementById('sel-xbasis').textContent='—';
+    document.getElementById('sel-eq').removeAttribute('title');
     document.getElementById('sel-hint').textContent='';
     drawBloch(); return;
   }
   const ch=charge(unit);
   document.getElementById('sel-name').textContent=`${coord(unit.row,unit.col)} · ${FACTION[unit.owner].name}`;
-  document.getElementById('sel-eq').textContent=fmtState(unit.state);
+  const _eqText=fmtState(unit.state);
+  const _eqEl=document.getElementById('sel-eq');
+  _eqEl.textContent=_eqText;
+  _eqEl.title=_eqText; // UX-1 — full ψ readable via tooltip if it ever needs to truncate at narrow widths
   document.getElementById('sel-theta').textContent=`${unit.hp}/${unit.maxHp}`;
   document.getElementById('sel-phi').textContent=`${(ch*100)|0}%`;
   document.getElementById('sel-coh').textContent=unit.coherence.toFixed(0)+'%';
   const _b=unit.bloch || QPhysics.blochFromPure(unit.state);
   const _gc=Math.round(QPhysics.guardCritProb(unit.state)*100);
-  document.getElementById('sel-xbasis').textContent=`x=${_b.x.toFixed(2)} · GUARD ${_gc}%`;
+  // UX-1 — x= and GUARD% are separate nowrap spans (not one crammed string) so
+  // they can wrap onto their own line at narrow widths instead of colliding.
+  document.getElementById('sel-xbasis').innerHTML=
+    `<span>x=${_b.x.toFixed(2)}</span><span>GUARD ${_gc}%</span>`;
   document.getElementById('sel-hint').textContent=
     `Charge = strike chance (P(|1⟩)). Use X to charge toward |1⟩, H for a 50% gamble, MEASURE to discharge & stabilize. After attacking, the unit drops to |0⟩.`;
   // QB-8 — announce the selection and, on the very first selection, show a
