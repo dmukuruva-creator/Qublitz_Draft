@@ -2616,18 +2616,33 @@ function roundRect(x,y,w,h,r){
 function drawTurnBanner() {
   const isW=GAME.turn==='white';
   const col=isW?'47,224,208':'255,77,157';
-  const g=ctx.createLinearGradient(0,0,BOARD,0);
+  const text=`${FACTION[GAME.turn].name} TO MOVE  |  KNIGHTS ${aliveCount('white')} – ${aliveCount('black')} MAGES  |  TURN ${GAME.turnCount+1}/${GAME.turnCap}`;
+  ctx.font="bold 6px 'Press Start 2P',monospace";
+
+  // UX-4 — the banner sits in the row-0 strip and previously only had a
+  // low-alpha (0.18) gradient wash behind it, so it visibly overprinted
+  // row-0 unit sprites instead of occluding them. Measure the text and draw
+  // an opaque backing plate sized to it (not the full board width) before
+  // the text, so it reads cleanly without blanking out the whole top row.
+  const textW = ctx.measureText(text).width;
+  const padX = 14, bandH = 18;
+  const bandW = Math.min(BOARD, textW + padX*2);
+  const bandX = (BOARD - bandW) / 2;
+  ctx.fillStyle = 'rgba(4,6,20,0.86)';
+  ctx.fillRect(bandX, 0, bandW, bandH);
+
+  // Subtle faction-colored wash + hairline, kept inside the opaque plate.
+  const g=ctx.createLinearGradient(bandX,0,bandX+bandW,0);
   g.addColorStop(0,'transparent');
-  g.addColorStop(0.5,`rgba(${col},0.18)`);
+  g.addColorStop(0.5,`rgba(${col},0.28)`);
   g.addColorStop(1,'transparent');
-  ctx.fillStyle=g; ctx.fillRect(0,0,BOARD,18);
+  ctx.fillStyle=g; ctx.fillRect(bandX,0,bandW,bandH);
+  ctx.strokeStyle=`rgba(${col},0.35)`; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(bandX,bandH-0.5); ctx.lineTo(bandX+bandW,bandH-0.5); ctx.stroke();
+
   ctx.textAlign='center';
   ctx.fillStyle=`rgb(${col})`;
-  ctx.font="bold 6px 'Press Start 2P',monospace";
-    ctx.fillText(
-    `${FACTION[GAME.turn].name} TO MOVE  |  KNIGHTS ${aliveCount('white')} – ${aliveCount('black')} MAGES  |  TURN ${GAME.turnCount+1}/${GAME.turnCap}`,
-    BOARD/2,12
-  );
+  ctx.fillText(text, BOARD/2, 12);
   ctx.textAlign='left';
 }
 
