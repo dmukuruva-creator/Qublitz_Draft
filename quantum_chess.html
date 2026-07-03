@@ -1286,6 +1286,163 @@ if (typeof window !== 'undefined') {
 }
 
 // ═══════════════════════════════════════════════════════
+// BotAI — pure, DOM-free bot decision + combat-resolution engine (GD-1).
+// Mirrors doBotMove()'s move/action-selection logic and attack()'s combat
+// math exactly, but takes plain data in and returns a plain decision/result
+// out — no document.*, no canvas, no GAME global, no animation/sfx calls.
+// The in-browser doBotMove()/attack() call into this module so there is a
+// single source of truth for "what does the bot do" and "who gets crit".
+// This is what tests/bot_guard_harness.test.js extracts and drives headlessly.
+// ═══════════════════════════════════════════════════════
+const BotAI = (() => {
+  // A unit only needs: {row,col,owner,role,hp,state,bloch,guarding,
+  // inSuperpos,entangledWith,coherence,maxCoh,id} — the same shape createUnit()
+  // produces. charge()/QPhysics work off .state/.bloch, so this module doesn't
+  // need its own copy of qubit math.
+  const charge = u => QPhysics.charge(u.bloch || QPhysics.blochFromPure(u.state));
+
+  // ── Move-target scoring (mirrors the mine.forEach(u=>{...}) block in
+  // doBotMove): for one unit, score each reachable tile by proximity to the
+  // nearest foe and, if a foe would be adjacent from there, by charge/kill
+  // potential. Pure function of (unit, spots, foes, rndSpread, rng). ──
+  function scoreMoveSpots(unit, spots, foes, rndSpread, rng = Math.random) {
+    const pAtt = charge(unit);
+    let best = null, bestScore = -Infinity;
+    spots.forEach(s => {
+      let nearest = 99, adj = null;
+      foes.forEach(f => {
+        const d = Math.abs(f.row - s.row) + Math.abs(f.col - s.col);
+        if (d < nearest) nearest = d;
+        if (d === 1 && (!adj || f.hp < adj.hp)) adj = f;
+      });
+      let score = -nearest;
+      if (adj) {
+        score += 6 + pAtt * 9;
+        if (adj.hp <= 1 && pAtt > 0.5) score += 6;
+        if (pAtt < 0.2) score -= 3;
+      }
+      score += rng() * rndSpread;
+      if (score > bestScore) { bestScore = score; best = { spot: s, score }; }
+    });
+    return best;
+  }
+
+  // ── Target selection among adjacent enemies (GD-1). doBotMove() used to
+  // sort purely by lowest HP. A non-guarding target's crit chance on a hit
+  // is exactly its own charge (Z-basis measurement), so an X-only opponent —
+  // who is at high charge every time it's adjacent, about to take its own
+  // shot — is a free crit if struck first. On medium/hard, prefer a
+  // low-HP-and-highly-charged-and-not-guarding kill/crit over a merely
+  // low-HP one; this is what actually punishes "press X, walk over, attack"
+  // instead of relying solely on the 1-in-army guardian's GUARD. Falls back
+  // to plain lowest-HP on easy (diff 0) or when no target is more exposed. ──
+  function pickTarget(adjFoes, diff) {
+    if (!adjFoes.length) return undefined;
+    const byHp = adjFoes.slice().sort((a, b) => a.hp - b.hp);
+    if (diff < 1) return byHp[0];
+    const exposed = adjFoes.filter(f => !f.guarding && charge(f) > 0.6);
+    if (exposed.length) return exposed.slice().sort((a, b) => a.hp - b.hp)[0];
+    return byHp[0];
+  }
+
+  // ── Action-selection decision tree — mirrors doBotMove()'s numbered
+  // 1)-6) cascade exactly, PLUS the GD-1 policy addition: on medium/hard,
+  // a guardian facing a threat that is already phase-favorable (or for whom
+  // GUARD is simply the best available move) prefers GUARD over passively
+  // charging or taking a weak/no action. Returns a decision descriptor;
+  // never mutates its inputs. `advanced` = chance to reach for a smart play,
+  // same [0, 0.45, 0.8][diff] table as doBotMove(). `rng` is injectable for
+  // deterministic tests.
+  function chooseAction({ unit, target, threat, diff, rng = Math.random }) {
+    const myChg = charge(unit);
+    const advanced = [0, 0.45, 0.8][diff];
+    const gcrit = QPhysics.guardCritProb(unit.bloch || QPhysics.blochFromPure(unit.state));
+
+    // GD-1 — guard-preference gate: on medium/hard, a guardian under threat
+    // that is NOT about to land a strong hit itself, and whose current phase
+    // already makes GUARD cheap (crit risk <= 50%, i.e. at worst a coin flip
+    // — X-only opponents sit at exactly 50%, phase-managed ones sit near 0%),
+    // takes GUARD in preference to passively charging (step 5) or a no-op.
+    // This is inserted between the existing steps 4 and 5 so a genuine kill
+    // shot (step 1), an already-scheduled guard (step 2), a defensive MEASURE
+    // (step 3) and CNOT setup (step 4) all still take priority — GD-1 only
+    // fires when the bot would otherwise have fallen through to "charge up".
+    // `nearFoe` is broader than `threat`: any adjacent enemy can reach full
+    // charge and strike next turn (an X-only opponent goes from 0% to 100%
+    // in one gate), so a guardian standing next to ANY enemy — not only one
+    // already above 50% charge — has a live reason to brace rather than
+    // wait for the threat to fully materialize first.
+    const nearFoe = !!target;
+    const guardIsCheap = gcrit <= 0.5;
+    const preferGuard = unit.role === 'guardian' && (threat || nearFoe) && diff >= 1 &&
+      !unit.guarding && !(target && myChg > 0.6) && guardIsCheap;
+
+    if (target && myChg > 0.6) {
+      return { action: 'ATTACK', target, reason: 'strong-shot' };
+    } else if (unit.role === 'guardian' && (threat || nearFoe) && diff >= 1 && rng() < advanced) {
+      return { action: 'GUARD', reason: 'scheduled-guard' };
+    } else if (unit.role === 'guardian' && diff >= 1 && threat && myChg > 0.4 && myChg <= 0.6 && rng() < advanced) {
+      // GD-1 — bugfix + scope-narrow of the original "defensive MEASURE" step:
+      // (a) it was gated on `!target`, but `threat` already implies an
+      // adjacent enemy, which means `target` is (almost) always truthy too —
+      // so the branch was structurally near-dead. Gating on `myChg <= 0.6`
+      // instead (i.e. "not already taking the strong-shot at step 1") makes
+      // it reachable. (b) scoped to guardians: a warrior has no GUARD to
+      // fall back on, so discharging away its own charge purely because it's
+      // threatened is a pure tempo loss for it (the same trap a "camp in
+      // |+⟩ forever" policy falls into) — only a guardian, who can follow up
+      // with a cheap GUARD, comes out ahead by playing defensively here.
+      return { action: 'MEASURE', reason: 'defensive-measure' };
+    } else if (diff >= 2 && !unit.entangledWith && target && myChg < 0.6 && !threat && rng() < 0.4) {
+      return { action: 'CNOT', target, reason: 'setup-splash' };
+    } else if (preferGuard) {
+      return { action: 'GUARD', reason: 'guard-preferred (GD-1: cheap crit risk, no better play)' };
+    } else if (myChg < 0.6) {
+      // GD-1 — phase play (H) only pays for itself on a guardian, since
+      // GUARD is the only thing that turns phase into a defensive benefit;
+      // for a warrior, a coin-flip charge is a strictly worse choice than
+      // going straight for a guaranteed X charge, so restrict the "fast
+      // gamble" branch to guardians and always charge-up with X otherwise.
+      // For guardians specifically this is no longer a random "maybe" — a
+      // guardian with no adjacent target has nothing to lose by prepping
+      // |+⟩ now (deterministic on medium/hard), since it's directly setting
+      // up the GUARD counter-play rather than gambling on a faster strike.
+      const gate = unit.role === 'guardian'
+        ? ((diff >= 1 && !target) ? 'H' : 'X')
+        : 'X';
+      return { action: 'GATE', gate, reason: gate === 'H' ? 'fast-gamble' : 'charge-up' };
+    } else if (target) {
+      return { action: 'ATTACK', target, reason: 'take-the-shot' };
+    }
+    return { action: 'GATE', gate: 'X', reason: 'build-charge' };
+  }
+
+  // ── Combat resolution — pure port of attack()'s math (Born-rule fire roll,
+  // GUARD X-basis measurement, crit, damage, entangled-partner splash). Takes
+  // plain state, mutates nothing; returns a result descriptor the caller
+  // applies to its own unit objects (browser: real GAME.pieces; harness: a
+  // headless sim state). `rng()` drives the fire roll; `measureRng()` drives
+  // the target's collapse (both injectable for deterministic tests). ──
+  function resolveAttack(attacker, target, rng = Math.random) {
+    const pAtt = charge(attacker);
+    const fired = rng() < pAtt;
+    if (!fired) return { fired: false, pAtt };
+
+    // GUARD reads the target in the X-basis (apply H, then a Z-basis
+    // projective measurement) — exactly QB-5's defensive-interference rule.
+    const src = target.guarding ? GATES.H(target.state) : target.state;
+    const p1 = C.norm2(src.beta);
+    const collapsed = rng() < p1 ? 1 : 0;
+    const crit = collapsed === 1;
+    const dmg = crit ? 2 : 1;
+    return { fired: true, pAtt, crit, dmg, collapsed };
+  }
+
+  return { charge, scoreMoveSpots, pickTarget, chooseAction, resolveAttack };
+})();
+if (typeof window !== 'undefined') { window.BotAI = BotAI; }
+
+// ═══════════════════════════════════════════════════════
 // PIXEL ART SPRITES  (7 cols × 9 rows bitmaps)
 // ═══════════════════════════════════════════════════════
 const SPRITES = {
@@ -1854,8 +2011,13 @@ function damageUnit(u, dmg) {
 // If it fired, the target is measured too — an excited target is caught exposed
 // and takes a critical hit. Entangled targets bleed 1 onto their Bell partner.
 function attack(attacker, target) {
-  const pAtt  = charge(attacker);
-  const fired = Math.random() < pAtt;
+  // Fire roll + GUARD-aware target collapse are delegated to
+  // BotAI.resolveAttack (GD-1) — the same pure combat-resolution function
+  // tests/bot_guard_harness.test.js drives headlessly, so the in-browser
+  // game and the harness can never disagree about who gets crit.
+  const res  = BotAI.resolveAttack(attacker, target);
+  const pAtt = res.pAtt;
+  const fired = res.fired;
   // Face the target and swing/cast (the attack animation plays regardless).
   const fdx = target.col - attacker.col;
   if (fdx) attacker.facing = fdx<0 ? -1 : 1;
@@ -1877,9 +2039,10 @@ function attack(attacker, target) {
   // QB-5 — a GUARDing unit is measured in the X-basis (apply H, then a Z-basis
   // measurement): whether it is caught excited (a CRITICAL) depends on the
   // relative phase φ it set up. |+⟩ is crit-immune, |−⟩ is fully exposed.
-  // Non-guarding units take the ordinary Z-basis measurement.
-  const tm = target.guarding ? measureState(GATES.H(target.state))
-                             : measureState(target.state);
+  // Non-guarding units take the ordinary Z-basis measurement. The collapse
+  // outcome itself already happened inside BotAI.resolveAttack (res.collapsed)
+  // — apply the resulting eigenstate to the real target object here.
+  const tm = { collapsed: res.collapsed, state: _EIGEN(res.collapsed) };
   target.state = tm.state; refreshSuperpos(target);
   const crit = tm.collapsed===1;
   // QB-6 — measuring an entangled target collapses its partner with a
@@ -2001,25 +2164,13 @@ async function doBotMove() {
   const rnd = [6, 3, 1][GAME.difficulty];
   let best=null, bestScore=-Infinity;
 
+  // Move-target scoring is delegated to BotAI.scoreMoveSpots (GD-1) — a pure
+  // function of (unit, spots, foes, rndSpread) so it can run headlessly in
+  // tests/bot_guard_harness.test.js with no duplicated logic.
   mine.forEach(u=>{
     const spots = [{row:u.row,col:u.col}, ...reachableTiles(u)];
-    const pAtt  = charge(u);
-    spots.forEach(s=>{
-      let nearest=99, adj=null;
-      foes.forEach(f=>{
-        const d=Math.abs(f.row-s.row)+Math.abs(f.col-s.col);
-        if (d<nearest) nearest=d;
-        if (d===1 && (!adj || f.hp<adj.hp)) adj=f;
-      });
-      let score = -nearest;
-      if (adj) {
-        score += 6 + pAtt*9;
-        if (adj.hp<=1 && pAtt>0.5) score += 6;
-        if (pAtt < 0.2) score -= 3;
-      }
-      score += Math.random()*rnd;
-      if (score>bestScore) { bestScore=score; best={u, s}; }
-    });
+    const picked = BotAI.scoreMoveSpots(u, spots, foes, rnd);
+    if (picked && picked.score>bestScore) { bestScore=picked.score; best={u, s:picked.spot}; }
   });
 
   if (!best) { endTurn(); return; }
@@ -2038,56 +2189,52 @@ async function doBotMove() {
   updateSelInfo(u);
 
   // ── Action selection — uses the full action set, scaled by difficulty so
-  //    players see (and get punished by) MEASURE, CNOT, GUARD and phase. ──
+  //    players see (and get punished by) MEASURE, CNOT, GUARD and phase.
+  //    The decision itself is delegated to BotAI.chooseAction (GD-1) — a
+  //    pure function of (unit, target, threat, diff) — so the exact same
+  //    policy runs headlessly in tests/bot_guard_harness.test.js. ──
   const diff   = GAME.difficulty;                 // 0 easy · 1 medium · 2 hard
   const myChg  = charge(u);
   const adjFoes = adjacentEnemies(u);
-  const target = adjFoes.sort((a,b)=>a.hp-b.hp)[0];
+  // GD-1 — BotAI.pickTarget prefers a low-HP, highly-charged, non-guarding
+  // foe (a free crit) over plain lowest-HP on medium/hard, so a bot that
+  // gets the chance to strike first actually punishes X-spam.
+  const target = BotAI.pickTarget(adjFoes, diff);
   // An adjacent enemy that is itself charged can crit u next turn.
   const threat = adjFoes.some(f => charge(f) > 0.5);
-  const advanced = [0, 0.45, 0.8][diff];          // chance to reach for a smart play
 
-  // 1) Take a strong shot if we have one.
-  if (target && myChg > 0.6) {
-    GAME.botLastReason = `Bot strikes ${coord(target.row,target.col)} — charge ${(myChg*100)|0}%, Born rule: P(hit) = |β|².`;
-    attack(u, target);
+  const decision = BotAI.chooseAction({ unit: u, target, threat, diff });
 
-  // 2) Guardian under threat → brace in the X-basis. Hard bots set up |+⟩ with H
-  //    first (next turn) but a bare guard already halves the crit risk.
-  } else if (u.role==='guardian' && threat && diff>=1 && Math.random()<advanced) {
+  if (decision.action === 'ATTACK') {
+    GAME.botLastReason = decision.reason === 'strong-shot'
+      ? `Bot strikes ${coord(target.row,target.col)} — charge ${(myChg*100)|0}%, Born rule: P(hit) = |β|².`
+      : `Bot strikes ${coord(target.row,target.col)} — measuring the enemy at ${(myChg*100)|0}% charge.`;
+    attack(u, decision.target);
+
+  } else if (decision.action === 'GUARD') {
     u.guarding = true; refreshSuperpos(u);
     u.coherence = Math.min(u.maxCoh, u.coherence+8);
-    GAME.botLastReason = `Bot GUARDS ${coord(u.row,u.col)} — bracing in the X-basis (${(QPhysics.guardCritProb(u.state)*100)|0}% crit risk) against the adjacent threat.`;
+    GAME.botLastReason = decision.reason.startsWith('guard-preferred')
+      ? `Bot GUARDS ${coord(u.row,u.col)} — its phase already keeps X-basis crit risk low (${(QPhysics.guardCritProb(u.state)*100)|0}%), so bracing beats a passive charge.`
+      : `Bot GUARDS ${coord(u.row,u.col)} — bracing in the X-basis (${(QPhysics.guardCritProb(u.state)*100)|0}% crit risk) against the adjacent threat.`;
     sfxGate('Z');
 
-  // 3) MEASURE-discharge a dangerously exposed unit: in superposition, charged,
-  //    and threatened — collapse now to (maybe) drop to a safe |0⟩.
-  } else if (diff>=1 && threat && u.inSuperpos && myChg>0.4 && !target && Math.random()<advanced) {
+  } else if (decision.action === 'MEASURE') {
     GAME.botLastReason = `Bot MEASURES ${coord(u.row,u.col)} — discharging out of the fragile |1⟩ excited state before it gets crit (collapse to an eigenstate).`;
     applyMeasure(u);
 
-  // 4) CNOT-link an adjacent enemy into a Bell pair so the bot's next strike
-  //    splashes — hard bots only, and only when not about to be self-splashed.
-  } else if (diff>=2 && !u.entangledWith && target && myChg < 0.6 && !threat && Math.random()<0.4) {
-    GAME.botLastReason = `Bot uses CNOT on ${coord(target.row,target.col)} — forming a Bell pair so a later strike bleeds onto its partner.`;
-    applyCNOT(u, target);
+  } else if (decision.action === 'CNOT') {
+    GAME.botLastReason = `Bot uses CNOT on ${coord(decision.target.row,decision.target.col)} — forming a Bell pair so a later strike bleeds onto its partner.`;
+    applyCNOT(u, decision.target);
 
-  // 5) Can't finish a kill — charge up. X for a sure |1⟩, or gamble on H
-  //    (superposition) when the bot wants to act fast.
-  } else if (myChg < 0.6) {
-    const gate = (diff>=1 && !target && Math.random()<advanced) ? 'H' : 'X';
-    GAME.botLastReason = gate==='H'
-      ? `Bot applies H to ${coord(u.row,u.col)} — entering |+⟩ superposition (~50% charge). A fast gamble.`
-      : `Bot charges ${coord(u.row,u.col)} with X — flipping to |1⟩ for a guaranteed strike next turn (it won't stay there long — |1⟩ decays fast).`;
-    applyGate(u, gate);
+  } else if (decision.action === 'GATE' && decision.gate === 'H') {
+    GAME.botLastReason = `Bot applies H to ${coord(u.row,u.col)} — entering |+⟩ superposition (~50% charge). A fast gamble.`;
+    applyGate(u, 'H');
 
-  // 6) Charged and adjacent — take the shot.
-  } else if (target) {
-    GAME.botLastReason = `Bot strikes ${coord(target.row,target.col)} — measuring the enemy at ${(myChg*100)|0}% charge.`;
-    attack(u, target);
-
-  } else {
-    GAME.botLastReason = `Bot charges ${coord(u.row,u.col)} with X — no enemy in reach yet, building toward |1⟩.`;
+  } else { // decision.action === 'GATE', gate 'X' (charge-up or build-charge)
+    GAME.botLastReason = target
+      ? `Bot charges ${coord(u.row,u.col)} with X — flipping to |1⟩ for a guaranteed strike next turn (it won't stay there long — |1⟩ decays fast).`
+      : `Bot charges ${coord(u.row,u.col)} with X — no enemy in reach yet, building toward |1⟩.`;
     applyGate(u, 'X');
   }
 
