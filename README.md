@@ -60,9 +60,11 @@ not flavor — they are a real (unit-tested) open-quantum-system model:
   half collapses the partner to the correlated outcome, and the no-communication theorem is
   enforced: a local gate on one qubit never changes the other's marginal.
 
-For the full model (the Lindblad master equation, falsifiability/T₁-recovery diagnostics, and
-the cycle roadmap), see [`Project_Description.md`](Project_Description.md) and the in-game
-**Physics Lab** panel.
+For the full model (the Lindblad master equation, falsifiability/T₁-recovery diagnostics), see the
+in-game **Physics Lab** panel. Original project scoping and the latency audit that shaped the
+early cycles are preserved for historical reference in
+[`docs/Project_Description_ARCHIVE_2026-06.md`](docs/Project_Description_ARCHIVE_2026-06.md);
+current work is tracked in [`HANDOFF.md`](HANDOFF.md).
 
 ---
 
