@@ -68,26 +68,11 @@ current work is tracked in [`HANDOFF.md`](HANDOFF.md).
 
 ---
 
-## The Sage AI advisor (setup)
+## The Sage advisor
 
-The Sage is an in-game quantum oracle that gives short tactical advice. It is **optional** — the
-game runs fully without it (it falls back to local hard-coded tips). No API key is ever stored in
-the browser. To enable the live advisor, run the bundled proxy that holds *your* Anthropic key
-server-side:
-
-```bash
-ANTHROPIC_API_KEY=sk-ant-... python3 sage_proxy.py    # serves http://127.0.0.1:58744/sage
-```
-
-Then point the game at it before the page loads:
-
-```js
-window.QB_SAGE_PROXY = "http://127.0.0.1:58744/sage";
-```
-
-The Streamlit wrapper wires this automatically from `QB_SAGE_PROXY_URL` (env var) or
-`st.secrets["QB_SAGE_PROXY_URL"]`, so the key lives only on the server — never in client code or
-a committed file.
+The Sage is an in-game quantum oracle that gives short tactical advice. It runs entirely as a
+local heuristic (`analyzePosition` in `quantum_chess.html`) — there is no LLM, no proxy server,
+and no third-party API call anywhere in this project. No API key is ever needed or requested.
 
 ---
 
