@@ -1,11 +1,13 @@
 # Cycle state
 cycle: 03
 phase: ship
-waiting: BE-8's iCloud relocation (human action) — the other blocker, "upstream PR #28 clears",
-  is DONE: #27 and #28 both merged 2026-07-04, discovered stale here 2026-07-09 (see HANDOFF.md's
-  correction callout). Fork's local `main` fast-forwarded to `upstream/main` same day.
+waiting: nothing structural — BE-8's iCloud relocation is DONE (2026-07-11, user-authorized: both
+  repos + the linked worktree moved to ~/Developer/, verified via xattr to be outside iCloud
+  sync). Phase F's other former blocker, "upstream PR #28 clears", was already DONE (#27/#28
+  merged 2026-07-04). Remaining open items are per-task, not structural: UP-0 (needs user
+  approval to post), UP-2 (blocked on UP-0), push/merge go-ahead for PR-A/C/D/F.
 goals_locked: true
-last_updated: 2026-07-09
+last_updated: 2026-07-11
 note_cleanup_pass: |
   2026-07-06 — user requested "pressure-test, debug, clean up, final PR". Findings + actions
   (all in the game repo only; fork untouched, #27/#28 still open upstream):

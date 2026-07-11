@@ -907,24 +907,37 @@ classroom pilot; the rest are cheap and land alongside.*
   exit 1). Full `scripts/verify.sh` re-run on the fork: ruff ✓, vendor hash ✓, game physics ✓;
   `pytest` fails only on a pre-existing missing `qutip`/BLAS dependency in this environment,
   unrelated to this task (noted in the correction callout).
-- [~] **BE-8 — Repo/process hygiene (30 min + one HUMAN action).** **[Commit half already DONE,
-  discovered stale 2026-07-09 — same "re-check before trusting this file" lesson as the #27/#28
-  merge above.]** `git log --diff-filter=A -- CLAUDE.md HANDOFF.md .cycle/STATE.md` shows all of
-  `CLAUDE.md`, `HANDOFF.md`, `.cycle/`, and `docs/HANDOFF_v1_ARCHIVE_2026-07-02.md` were already
-  committed to the game repo in `e569bbf "docs: hygiene pass — organize planning docs, archive
-  stale content, commit institutional memory"` on **2026-07-07** — two days before this session,
-  never checked off here. `_arena_screenshots/` is also already in `.gitignore`. Confirmed via
-  `git status --short --untracked-files=all`: zero untracked planning files remain.
-  **Still genuinely open: the HUMAN action.** Move both working repos out of iCloud-synced paths
-  (or exclude them from sync) — the "name 2.ext" incident was a warning shot, and this session
-  independently found a *second* live recurrence (an empty `pages/_assets/tests 2/` directory in
-  the fork, deleted — see the correction callout above), so the underlying cause is still active,
-  not just historically true. **Deliberately not done by me:** moving directories on disk is a
-  disruptive, hard-to-reverse action outside what I'll do without being asked, and the doc
-  already flags it as a HUMAN step for exactly that reason — not a corner I'm cutting, an actual
-  boundary.
-  *Done when:* `git status` clean of untracked planning files (✓, confirmed); user confirms sync
-  exclusion (still open).
+- [x] **BE-8 — Repo/process hygiene (30 min + one HUMAN action).** **[DONE 2026-07-11 — the
+  human action is now also done, at the user's explicit request.]** Commit half was already done
+  (see the 2026-07-09 note preserved below). The HUMAN action — moving both working repos out of
+  iCloud-synced paths — was carried out this session, explicitly authorized by the user (prior
+  sessions correctly left it undone as outside what gets done without being asked):
+  - `~/Desktop/Academics/Projects/QuBlitz Project` → `~/Developer/QuBlitz Project`
+  - `~/Desktop/Academics/Projects/qublitz` → `~/Developer/qublitz`
+  - `~/Desktop/Academics/Projects/qublitz-fix-sage-refs` (linked worktree) → `~/Developer/qublitz-fix-sage-refs`
+  Confirmed via `xattr` that `~/Desktop` carries `com.apple.icloud.desktop` (the Desktop &
+  Documents sync feature) and `~/Developer` carries neither that tag nor a
+  `com.apple.file-provider-domain-id` — the new location is genuinely outside iCloud's reach, not
+  just a different-looking path. The linked worktree needed care: `git worktree move` can't
+  relocate a worktree out from under a main repo that's also moving, so it was cleanly detached
+  (`git worktree remove`, safe — the branch and its commit live in the shared object store, not
+  in the worktree directory), both repos were moved with plain `mv` (same volume, no venvs or
+  other absolute-path-baked artifacts present to break), then the worktree was re-added at the
+  new sibling path from the branch that was never at risk. Also found and fixed a real,
+  now-broken reference this move would otherwise have silently left behind: the fork's
+  `docs/PR_REVIEW_GUIDE.md` hardcoded the old absolute path to the canonical game file and the
+  screenshots dir in three places — updated to the new `~/Developer/...` path (committed
+  separately in the fork, `f1313c2a`).
+  *Verified:* `git status`/`git log -1`/`git worktree list` all correct in all three post-move
+  locations; `xattr -l` confirms neither new path carries any iCloud tag; a repo-wide grep for
+  the old `Desktop/Academics/Projects` path string returns zero hits in either repo.
+  *Done when:* `git status` clean of untracked planning files (✓); user confirms sync exclusion
+  (✓ — done this session).
+  **Prior (2026-07-09) note, preserved:** `git log --diff-filter=A -- CLAUDE.md HANDOFF.md
+  .cycle/STATE.md` showed all of `CLAUDE.md`, `HANDOFF.md`, `.cycle/`, and
+  `docs/HANDOFF_v1_ARCHIVE_2026-07-02.md` were already committed to the game repo in `e569bbf`
+  on 2026-07-07, never checked off here at the time. `_arena_screenshots/` was already
+  `.gitignore`d.
 - [x] **BE-9 — qutip latency: audit ONE page, then re-scope the claim (2h, fork).** **[DONE
   2026-07-09 — verdict: NO FURTHER WORK NEEDED, not "an afternoon" or "a cycle."]**
   **Premise correction, found while auditing:** "8 of 9 qutip pages" isn't accurate — checked
