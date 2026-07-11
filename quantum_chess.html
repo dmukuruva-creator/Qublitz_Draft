@@ -1631,11 +1631,27 @@ const BotAI = (() => {
     // fixes it: a unit next to an uncharged enemy now charges/attacks
     // freely, matching X-only's own tempo, and only turns defensive when
     // genuinely threatened.
+    // GD-1 TUNING (2026-07-11) — lowered from 0.6. Diagnostic instrumentation
+    // (see bot_guard_harness.test.js's tuning notes) found the punishment
+    // mechanic itself works exactly as designed — the bot's attacks land a
+    // crit 55% of the time vs X-only's own 16.5%, a real 3x edge — but the
+    // bot was firing 40% FEWER attack attempts than X-only overall (1527 vs
+    // 2537 across 200 games), because it waited for the same 0.6 charge bar
+    // X-only uses before ever taking a shot. A grid search over this
+    // threshold plus the guard-trigger rate and threat-detection bar found
+    // the win-rate is essentially flat across guard/threat tuning and moves
+    // only with this bar, plateauing across 0.40-0.50; 0.45 sits in the
+    // middle of that plateau. Net effect: X-only's loss rate to the Medium
+    // bot rose from 27.5% to 44.0% (bot's per-attack EV even went UP, from
+    // 0.79 to 1.04 expected damage/attempt, since the higher-volume,
+    // slightly-less-accurate attacks still land the same crit-rate
+    // advantage). Does not close GD-1's own 65% bar — the harness's own
+    // notes document why past that point.
     const guardIsCheap = gcrit <= 0.5;
     const preferGuard = threat && diff >= 1 &&
-      !unit.guarding && !(target && myChg > 0.6) && guardIsCheap;
+      !unit.guarding && !(target && myChg > 0.45) && guardIsCheap;
 
-    if (target && myChg > 0.6) {
+    if (target && myChg > 0.45) {
       return { action: 'ATTACK', target, reason: 'strong-shot' };
     } else if (threat && diff >= 1 && rng() < advanced) {
       return { action: 'GUARD', reason: 'scheduled-guard' };

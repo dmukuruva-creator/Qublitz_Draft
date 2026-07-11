@@ -495,5 +495,42 @@ assert('Mixed/phase-aware does not lose to pure X-only (GD-2 bar)', mixedDirectW
 // why that path was deliberately not pushed further this pass: two
 // additional bot-logic tweaks were tried live, one made things worse and
 // was reverted, consistent with "measure, don't guess" throughout this file).
+// GD-1 tuning note — 2026-07-11, root-caused via instrumentation, not another
+// guess. Built a one-off diagnostic (tallying attack attempts/fires/crits/
+// total damage per side across a batch) instead of continuing to blind-guess
+// chooseAction tweaks. Result: the punishment mechanic was ALREADY working —
+// the bot's attacks crit 55.1% of the time vs X-only's own 16.5%, a real 3x
+// edge — but the bot only fired 1527 attack attempts across 200 games vs
+// X-only's 2537 (40% fewer), because both sides shared the same 0.6
+// attack-readiness bar, and the bot additionally spent ~23% of its turns
+// guarding. Lowering the bot's own bar to 0.45 (X-only's stays at 0.6 —
+// it's the fixed baseline under test, not something to tune) let the bot
+// convert its per-attack edge into more total attempts: X-only's loss rate
+// rose from 27.5% to 44.0%, and the bot's own expected-damage-per-attempt
+// went UP too (0.79 -> 1.04), not down — more attacks AND better ones.
+// Before landing that, several other hypotheses were tested and DISPROVEN,
+// each backed by a real measurement, not assumption:
+//   - Guarding at low own-charge looks locally harmful (guardCritProb sits
+//     at a fixed 0.5 for any unit that's never phase-managed, so guarding
+//     below 0.5 charge nominally RAISES this unit's own exposure) — but
+//     since GATE X is a full flip, not incremental, the realistic
+//     alternative action would have SPIKED charge even higher and unguarded;
+//     gating guard on "only when it locally helps" measured WORSE (19-20%),
+//     confirmed by explicitly disabling low-charge guards.
+//   - More guarding, less guarding, HP-conditioned guarding, an
+//     always-guard-when-threatened variant, kill-priority targeting, and a
+//     matched pickTarget exposure bar were all tried and moved nothing (see
+//     the 3x5 and 3x6 grid sweeps run this session) — a systematic search
+//     over attack-threshold x guard-trigger-rate x threat-detection-bar
+//     found the X-only loss rate is FLAT across guard/threat tuning and
+//     moves only with the attack threshold, plateauing across 0.40-0.50.
+// GD-1's 65% bar is still not met (44.0%, up from 26-30%) — this now reads
+// as a genuine structural ceiling under "bot AI tuning" scope specifically,
+// not an under-explored parameter space: the grid search's flatness is
+// itself the evidence. Closing the rest would need a change outside that
+// scope (combat math like crit damage, unit HP/count, or turn economy
+// itself) — each of those affects PvP and single-player symmetrically, not
+// just this bot, so is deliberately left for a scoped decision rather than
+// bundled into an AI-only tuning pass.
 console.log(fail === 0 ? '\nALL CHECKS PASSED ✓' : `\n${fail} CHECK(S) FAILED ✗`);
 process.exit(fail === 0 ? 0 : 1);

@@ -1155,19 +1155,40 @@ so recurrence is expected until the HUMAN relocation action below actually happe
   Playwright)"** — verified functionally (no errors, correct value updates) but not with a
   precise timing measurement; see UP-4's note on why AppTest can't provide that number and why a
   live-browser timing harness is a heavier follow-up, not attempted here.
-- [ ] **UP-5 — Cold-start diet (PR-G; ~half day). Premise correction 2026-07-07:** `Sonify.py`
-  itself imports only `streamlit`/`numpy`/`PIL`/`plotly`/`json`/`os` — no `librosa`, `soundfile`,
-  or `bokeh`. Those live top-level in `utils/sonify.py` (`soundfile`) and
-  `utils/sound_to_image.py` (`soundfile` + `librosa`), and repo-wide grep found **neither utils
-  file imported anywhere** — they're currently dead code, not actually on any page's cold-start
-  path. No `bokeh` import exists anywhere in the repo (that part of the original finding doesn't
-  hold). Revised task: confirm whether `utils/sonify.py`/`utils/sound_to_image.py` are meant to
-  be wired into `Sonify.py` (in which case gate the imports lazily when they're added) or are
-  dead code to remove (needs UP-0 sign-off, per the no-removal rule) — either way the "top-level
-  import costs every visitor" framing was wrong as originally written; there is currently no
-  cold-start cost from this source to fix.
-  *Done when:* UP-4's cold-start number improves measurably; all pages still work
-  (fork `verify.sh` green).
+- [x] **UP-5 — Cold-start diet (PR-G; ~half day).** **[DONE 2026-07-11 — resolved by the user
+  making the wire-up-vs-delete call directly, rather than waiting on UP-0.]** Premise correction
+  (2026-07-07) stood: no cold-start cost existed to fix, since neither dead `utils/` file was
+  imported anywhere. Investigated both files on their merits rather than treating "wire up" as a
+  literal instruction: `utils/sonify.py`'s `generate_audio()` is labeled "placeholder logic" in
+  its own comment — a single mean-brightness sine tone plus a `NamedTemporaryFile(delete=False)`
+  leak per call — and is strictly worse than the row-based envelope+carrier synthesis
+  `Sonify.py` already built independently later. Wiring it in would have been a regression, so
+  it was removed instead (zero references anywhere, confirmed by grep before deletion).
+  `utils/sound_to_image.py` was different: a real, valuable one-off batch script (confirmed via
+  `utils/sound_files/*.wav` — the actual LIGO GW150914 recordings used to generate the
+  `sonify_images/GW150914_*.png` gallery entries by hand) that had just never become a live
+  feature. Extracted its core transform into `audio_to_image_array()`, added a third "Convert a
+  sound file" mode to `pages/Sonify.py` that runs it live and feeds the result straight through
+  the page's existing image→sound pipeline — a genuine sound↔image round trip, not just an
+  import fix. `librosa`/`soundfile` are lazy-imported only inside that new mode's branch, so the
+  other two (more commonly used) modes still pay zero cold-start cost for them — the original
+  finding's actual concern, honored for real this time.
+  **Caught a real bug during live testing, not shipped blind:** a long real-world clip (a
+  17KB mp3, 84,672 raw samples) crashed `st.image()` with `OSError: broken data stream when
+  writing image file` — traced to Streamlit's default JPEG encoder hard-failing above a
+  65,500px dimension. `audio_to_image_array()` now block-averages down to `max_cols=16384`
+  before tiling, matching the existing GW150914 gallery images' already-proven-safe width,
+  rather than using the raw sample count.
+  *Verified:* `ruff check .` clean; `pytest` (excluding the pre-existing qutip-blocked smoke
+  tests already established in BE-9/UP-1) — 13/15 passed, same 2 known failures, zero new ones;
+  Sonify's own page-smoke test passes individually. Live-tested in a throwaway venv against real
+  audio via Playwright: the LIGO WAV and the mp3 (post-fix) both convert correctly and flow
+  through the full existing pipeline (heatmap, FFT, audio playback); "Preloaded" and "Upload
+  your own" modes re-verified unaffected (regression check).
+  *Done when:* UP-4's cold-start number improves measurably; all pages still work — **superseded
+  by the actual outcome**: there was no cold-start cost to improve (confirmed 2026-07-07), so the
+  real done-when became "ship a live feature without reintroducing one," which the lazy-import
+  placement satisfies.
 
 ---
 
@@ -1207,7 +1228,7 @@ then-broken renderer. Revisit only after Phases A–D ship and the phone decisio
 
 | ID | One-line summary | Interaction with this batch |
 |---|---|---|
-| GD-1 (bar) | X-only should lose ≥65% vs Medium bot — at ~26–30% loss, tuning gap remains | untouched by FE work |
+| GD-1 (bar) | X-only should lose ≥65% vs Medium bot — **[re-tuned 2026-07-11: 27.5%→44.0%, see `tests/bot_guard_harness.test.js`'s own tuning note]**. Instrumented diagnosis found the crit-punishment mechanic already working (bot crits 55% of hits vs X-only's 16.5%) but the bot firing 40% fewer attack attempts overall (shared 0.6 attack-readiness bar + guard turns); lowered the bot's own bar to 0.45. A systematic grid search (attack-threshold × guard-rate × threat-bar) found the result is flat across guard/threat tuning — a real structural ceiling under AI-only scope, not an under-explored parameter | closing the rest needs a scoped decision outside "bot AI tuning" (combat math, unit count, or turn economy) since those affect PvP/human play too |
 | PED-1 | Label the Bloch sphere + first-selection tooltip | pairs with FE-13 |
 | PED-2 | Gate Log counter tooltips, single string source | FE-12 creates that source |
 | PED-3 | Notation ramp (first-use explainer chips) | after FE-6 makes text readable |
