@@ -4,6 +4,12 @@
   "private": true,
   "description": "QuBlitz — a quantum qubit-battle arena (canonical app: quantum_chess.html).",
   "scripts": {
-    "test": "node tests/qphysics.test.js"
+    "test": "node tests/qphysics.test.js",
+    "capture": "node tests/capture_responsive.js",
+    "live-check": "node tests/live_regression_check.js",
+    "playwright:install": "playwright install chromium"
+  },
+  "devDependencies": {
+    "playwright": "^1.61.1"
   }
 }
