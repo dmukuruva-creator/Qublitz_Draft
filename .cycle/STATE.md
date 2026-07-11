@@ -1,9 +1,11 @@
 # Cycle state
 cycle: 03
 phase: ship
-waiting: review/merge of the game-repo cleanup PR; fork still frozen until upstream PR #28 clears
+waiting: BE-8's iCloud relocation (human action) — the other blocker, "upstream PR #28 clears",
+  is DONE: #27 and #28 both merged 2026-07-04, discovered stale here 2026-07-09 (see HANDOFF.md's
+  correction callout). Fork's local `main` fast-forwarded to `upstream/main` same day.
 goals_locked: true
-last_updated: 2026-07-06
+last_updated: 2026-07-09
 note_cleanup_pass: |
   2026-07-06 — user requested "pressure-test, debug, clean up, final PR". Findings + actions
   (all in the game repo only; fork untouched, #27/#28 still open upstream):

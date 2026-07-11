@@ -18,10 +18,16 @@ superseded predecessor is preserved verbatim at `docs/HANDOFF_v1_ARCHIVE_2026-07
 | The game (Qublitz_Draft) | This folder (`QuBlitz Project/`) | https://github.com/dmukuruva-creator/Qublitz_Draft |
 | Main simulator (mvwf/qublitz) | Clone separately after forking | https://github.com/mvwf/qublitz |
 
-**Game repo branch situation:**
-- Currently on `handoff/qublitz` — this is the branch with all 10 HANDOFF improvements applied
-- `origin/main` is 10 commits behind — C01-T2 merges `handoff/qublitz` → `main` and pushes
-- Do not push directly from `handoff/qublitz`; merge to `main` first (fast-forward)
+**Game repo branch situation (updated 2026-07-10 — this had gone stale, see below):**
+- Currently on `arena-c03-fe` — this is PR-A per `HANDOFF.md`'s packaging plan (the C03
+  incentives/input batch + the Phase A–D display-contract remediation + BE-3/BE-4 riders),
+  2 commits ahead of `main`, not yet merged/pushed.
+- `handoff/qublitz` (the branch this section used to name as current) was merged into `main`
+  long ago — `main` is now ahead of it, not the other way around. Local `main` and the remote
+  `QuBlitz/main` are in sync (0 commits either direction) — there is no "N commits behind"
+  gap to close on `main` itself; the gap is `main` vs. the still-unmerged `arena-c03-fe`.
+- Do not push directly from `arena-c03-fe`; merge to `main` first (fast-forward), and per this
+  file's hard constraints, no push without an explicit user go-ahead.
 
 ## Gate-1 assumptions already confirmed by the user
 
@@ -58,6 +64,12 @@ Every PR against mvwf/qublitz must include:
 - Game runs standalone: open `quantum_chess.html` in Chrome
 - Game runs via Streamlit: `streamlit run app.py` (requires `pip install streamlit`)
 - Physics tests: `node tests/qphysics.test.js` (requires Node 20+)
-- Sage proxy: `ANTHROPIC_API_KEY=sk-ant-... python3 sage_proxy.py`
+- Sage advisor is a local heuristic only (`analyzePosition` in `quantum_chess.html`) — no proxy
+  server, no LLM, no Anthropic API dependency anywhere in this project (removed 2026-07-08).
+- Playwright + Chromium are installed permanently (2026-07-08): `playwright` is a devDependency
+  in `package.json` (`node_modules/` stays gitignored) and the Chromium binary is cached at
+  `~/Library/Caches/ms-playwright/`. Live browser checks (`tests/capture_responsive.js`, any
+  ad hoc rAF/DPR/contrast verification) no longer need an install step — just `npm install` if
+  `node_modules/` is missing, then run directly.
 - mvwf/qublitz requires Python 3.10+, venv recommended; `pip install -r requirements.txt`
   (qutip 4.7.6 needs BLAS; on macOS: `brew install openblas` if needed)
