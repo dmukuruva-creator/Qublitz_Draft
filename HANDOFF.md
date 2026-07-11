@@ -656,12 +656,38 @@ Golden rule: edit canonical first, test, then copy to the fork and run its gate.
   `tests/contrast_check.js` does a real Playwright DOM computed-style walk (not just a static
   hex-pair list) plus a curated canvas color-list pass; fails under 4.5:1 (3:1 for large/bold
   text) — cited by FE-7's note above.
-  (d) **Embedded capture:** one `capture_responsive.js` mode that screenshots the game *inside*
-  the running Streamlit fork page (the IN-4 machinery already proved this drivable) — layout
-  fixes verified in the real iframe container, not just `file://`. **Still open** — needs the
-  fork app running locally, out of scope for the game-repo-only Phase A/B pass that did (a)-(c).
+  (d) **Embedded capture:** ~~one `capture_responsive.js` mode~~ **[DONE 2026-07-11.]** Built as
+  its own script, `tests/capture_embedded.js` — a `capture_responsive.js` "mode" in spirit (same
+  screenshot/error-collection conventions) but a separate file, since it needs a live Streamlit
+  server (the fork's `streamlit run home.py`) rather than `file://`, which the rest of the suite
+  deliberately doesn't require. Takes the fork checkout path as an optional CLI arg (defaults to
+  the sibling-directory layout CLAUDE.md documents), skips cleanly if no fork checkout is found,
+  spawns the fork's own `streamlit` binary, waits for it to come up, then drives the real
+  `pages/QuBlitz_Arena.py` `st.components.v1.html` iframe with Playwright: confirms exactly one
+  iframe renders, its height matches the fork's own `_EMBED_HEIGHT` constant (read from the file,
+  not hardcoded, so it can't silently drift), starts a real match and moves a unit *inside* the
+  iframe (`page.frameLocator(...)`), and asserts the rendered game content doesn't clip past the
+  iframe's own bottom edge — the concrete version of the embed-height-drift concern BE-4/FE-10
+  keep naming in the abstract. Also turns IN-4's one-time rerun-persistence finding (documented
+  in prose in the v1 archive) into a standing regression check: triggers a real Streamlit rerun
+  via a sidebar `st.expander` click, then confirms the iframe's live log state ("Battle start")
+  survived — i.e. the iframe wasn't remounted.
+  **Caught and filtered one piece of real noise, not swallowed blind:** the fork's own
+  `/_stcore/health` and `/_stcore/host-config` endpoints 404 under a bare `streamlit run` outside
+  its normal reverse-proxy setup — confirmed via a raw network probe (exactly these two URLs, no
+  others), matching what BE-4's own live verification separately found and documented as
+  pre-existing/unrelated noise. Filtered by exact response URL + count, not by ignoring all
+  console errors, so a real embed failure still fails the run.
+  *Verified:* ran for real against the fork's `main` (2026-07-04 merge state, pre-PR-A/D/F/C) —
+  clean pass, iframe height matches 920px exactly, no clipping, iframe survives a rerun, zero
+  leaked Streamlit process after teardown (confirmed via `lsof`/`ps`). Screenshot
+  (`_arena_screenshots/embedded-1440px.png`) eyeballed: game renders correctly inside the real
+  page shell (sidebar nav, Dartmouth/FitzLab footer, the game canvas + gate menu + sage bar all
+  visible, no overlap). Incidentally also reconfirms BE-4's stale-Sage-proxy-message finding live
+  in the screenshot — `main` still shows the old "set QB_SAGE_PROXY_URL" copy, since that fix
+  lives on its own not-yet-merged branch (`fix-stale-sage-proxy-refs`), not a bug in this script.
   *Done when:* all four run in CI (or a documented local gate) and each Phase A–C task above
-  cites which check covers it. (a)-(c) satisfied; (d) blocks full completion.
+  cites which check covers it. **All four (a)-(d) now satisfied.**
 
 ---
 
