@@ -26,6 +26,22 @@
 // commit, but it now persists across sessions instead of being installed
 // and removed ad hoc each time.
 //
+// SUPPORTED_HEIGHT (FE-10, 2026-07-11): the game-viewport capture used to
+// derive height as width*1.6 (390px -> 624, ..., 1440px -> 2304). That's a
+// portrait-ish ratio that made sense for the old 390px phone-flow capture,
+// but at 1440px it manufactures a viewport no real desktop monitor has
+// (2304px tall) — a real 1440-wide monitor is usually *shorter* than 1440
+// (16:9/16:10 ≈ 810-900px), not 1.6x taller. FE-10's own board-void
+// measurement found this mattered: 18px deficit at a realistic 1440x900,
+// vs. 1172px at the script's old synthetic 1440x2304 — most of the
+// "void" earlier captures showed was the convention, not the layout.
+// A resized-but-not-shortened browser window (the common real case —
+// people narrow width more than height, or half-snap left/right) keeps
+// close to full monitor height regardless of width, so one fixed
+// realistic height across all supported widths is more representative
+// than scaling with width at all. 900px matches a common 16:10 laptop
+// panel and is exactly the height FE-10 already validated by hand.
+//
 // Run: node tests/capture_responsive.js
 'use strict';
 const path = require('path');
@@ -33,6 +49,7 @@ const fs = require('fs');
 
 const PHONE_WIDTHS = [390];
 const SUPPORTED_WIDTHS = [640, 768, 1024, 1440];
+const SUPPORTED_HEIGHT = 900;
 const OUT_DIR = path.join(__dirname, '..', '_arena_screenshots');
 const GAME_URL = 'file://' + path.join(__dirname, '..', 'quantum_chess.html');
 
@@ -78,7 +95,7 @@ async function capturePhoneGate(chromium, width) {
 async function captureWidth(chromium, width) {
   const browser = await chromium.launch();
   const ctx = await browser.newContext({
-    viewport: { width, height: Math.round(width * 1.6) },
+    viewport: { width, height: SUPPORTED_HEIGHT },
   });
   const page = await ctx.newPage();
   const errors = [];
@@ -125,11 +142,22 @@ async function captureWidth(chromium, width) {
     await page.waitForTimeout(150);
   }
 
+  // FE-10: the "board-void" measurement, made a standing informational
+  // check instead of a one-time DevTools reading. #root's own content
+  // height (not scrollHeight, which has a browser quirk of always being
+  // >= viewport height regardless of actual box height — see FE-10's note)
+  // vs. the viewport height tells us how much of the fixed-background page
+  // below the content is empty. Informational only (logged, not failed) —
+  // 80px is a soft target from the council's original screenshot critique,
+  // not a hard layout contract.
+  const rootHeight = await page.locator('#root').evaluate(el => el.getBoundingClientRect().height).catch(() => null);
+  const voidPx = rootHeight != null ? Math.max(0, SUPPORTED_HEIGHT - rootHeight) : null;
+
   fs.mkdirSync(OUT_DIR, { recursive: true });
   const file = path.join(OUT_DIR, `${width}px.png`);
   await page.screenshot({ path: file, fullPage: true });
   await browser.close();
-  return { width, file, errors };
+  return { width, file, errors, voidPx };
 }
 
 (async () => {
@@ -157,7 +185,8 @@ async function captureWidth(chromium, width) {
     const result = await captureWidth(chromium, w);
     const ok = result.errors.length === 0;
     if (!ok) anyErrors = true;
-    console.log(`${ok ? '✓' : '✗'} ${w}px -> ${result.file}` + (ok ? '' : `\n  ${result.errors.join('\n  ')}`));
+    const voidNote = result.voidPx != null ? ` (board-void: ${result.voidPx.toFixed(0)}px)` : '';
+    console.log(`${ok ? '✓' : '✗'} ${w}px${voidNote} -> ${result.file}` + (ok ? '' : `\n  ${result.errors.join('\n  ')}`));
   }
   console.log(`\nScreenshots written to ${OUT_DIR}/ — eyeball each one for overlap/clipping`
     + ' (this script checks console errors and the phone-gate contract, not layout correctness by pixel).');

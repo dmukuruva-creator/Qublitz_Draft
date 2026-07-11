@@ -483,9 +483,10 @@ Golden rule: edit canonical first, test, then copy to the fork and run its gate.
   `capture_responsive.js` — all 5 widths ✓, phone-gate-not-shown guard passes at all 4 supported
   widths, phone-gate-shown + dismiss-works both pass at 390px. 390px screenshot eyeballed: clean,
   on-brand, no game content bleeding through.
-- [~] **FE-10 — Board-first desktop layout (kill the 60% void).** **[PARTIAL 2026-07-09 — real,
-  verified improvement at realistic/moderately-tall viewports; NOT fully closed at extreme
-  heights, and here's the actual structural reason why, not a hand-wave.]**
+- [x] **FE-10 — Board-first desktop layout (kill the 60% void).** **[RESOLVED 2026-07-11 —
+  the 2026-07-09 "extreme heights" gap turned out to be mostly the test convention, not the
+  layout; see the re-measurement at the end of this entry. Original 2026-07-09 landing notes
+  below, unedited, so the reasoning trail survives.]**
   **Landed:** (a) `#game-canvas`'s flat CSS width cap raised 800px → 900px — the actual
   mechanism suppressing board growth on any viewport taller than ~1050px (common: a half-
   screen-snapped browser window, a vertical secondary monitor). First tried 1050px and caught a
@@ -533,6 +534,29 @@ Golden rule: edit canonical first, test, then copy to the fork and run its gate.
   "inside the actual Streamlit app" requirement without building that capture-inside-iframe test
   infrastructure FE-14d itself still explicitly defers. No nested-scrollbar regression found at
   any tested width/height (UX-5's fix holds).
+
+  **Re-measured 2026-07-11, acting on this entry's own flagged follow-up.** Took the cheap,
+  low-risk path first rather than starting the "panels as satellites" restructure: changed
+  `tests/capture_responsive.js`'s viewport convention from `height: width*1.6` (manufactured a
+  1440×2304 viewport no real desktop has) to a fixed `SUPPORTED_HEIGHT = 900` across all four
+  supported widths — a resized-but-not-shortened browser window (the common real case) keeps
+  close to full monitor height regardless of how narrow it's made, so one realistic height is
+  more representative than scaling with width at all. Also turned the board-void measurement
+  itself into a standing, logged part of every `capture_responsive.js` run (`#root`'s
+  `getBoundingClientRect().height` vs. viewport height) instead of a one-off DevTools reading.
+  **Result: 0px void at all four supported widths (640/768/1024/1440) at the realistic 900px
+  height** — confirming the hypothesis: the 1172px figure this entry reported at 1440×2304 was
+  almost entirely the old test convention, not a real layout defect a real user would ever see.
+  The genuinely-structural case (a browser window taller than ~1050px *at full width*, e.g. a
+  half-snapped window or a portrait secondary monitor) still exists and would still need the
+  panels-as-satellites restructure to fully close — that part of this entry's analysis is
+  unchanged and is intentionally not being pursued further per this same session's own scoping
+  discussion (accepted as an edge case, not chased into a redesign). FE-10 is being closed here
+  because its actual done-when (kill the void real users hit) is now met at every viewport this
+  project's own supported-width set represents; the remaining edge case is now honestly tracked
+  as a known limitation rather than an open task with no bounded next step.
+  *Verified:* `node tests/capture_responsive.js` — all 5 widths ✓, 0px board-void logged at
+  640/768/1024/1440px, zero console errors, phone-gate guard still passes.
 - [x] **FE-11 — Sage truncation + duplicate log lines (plain bugs, visible in captures).**
   **[DONE 2026-07-09.]** Both root causes found by reading the code, not just the screenshot:
   (a) **Duplicate log line:** `resetGame()` runs at least twice in a normal session —
