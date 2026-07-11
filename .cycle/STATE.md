@@ -4,8 +4,12 @@ phase: ship
 waiting: nothing structural — BE-8's iCloud relocation is DONE (2026-07-11, user-authorized: both
   repos + the linked worktree moved to ~/Developer/, verified via xattr to be outside iCloud
   sync). Phase F's other former blocker, "upstream PR #28 clears", was already DONE (#27/#28
-  merged 2026-07-04). Remaining open items are per-task, not structural: UP-0 (needs user
-  approval to post), UP-2 (blocked on UP-0), push/merge go-ahead for PR-A/C/D/F.
+  merged 2026-07-04). UP-5 (2026-07-11, user made the wire-up-vs-delete call directly) and GD-1
+  (2026-07-11, re-tuned 27.5%->44.0% loss rate, root-caused via instrumentation; 65% bar not
+  fully closed — a real structural ceiling under bot-AI-only scope, documented in the harness's
+  own tuning note) are both DONE. Remaining open items are per-task, not structural: UP-0 (draft
+  ready, needs user approval to post — outward-facing), UP-2 (blocked on UP-0), push/merge
+  go-ahead for PR-A/C/D/F (all committed + tested, none pushed).
 goals_locked: true
 last_updated: 2026-07-11
 note_cleanup_pass: |
