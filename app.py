@@ -9,8 +9,6 @@ st.components.v1.html. The HTML file is fully self-contained (no external assets
 beyond Google Fonts) so it deploys cleanly on Streamlit Cloud.
 """
 
-import json
-
 import streamlit as st
 from pathlib import Path
 
@@ -29,6 +27,17 @@ st.set_page_config(
 # ──────────────────────────────────────────────────────────────
 st.markdown("""
 <style>
+/* BE-4(d) — unlike quantum_chess.html (FE-5 self-hosted its fonts as a
+   hard constraint: it must open standalone with zero network deps), this
+   Streamlit wrapper page is never opened as a bare file — Streamlit itself
+   already requires a server/network round-trip, so a CDN font fetch adds
+   no new failure mode. Accepting the dependency rather than duplicating
+   FE-5's ~35KB base64 font blob a second time into this file for a title
+   and a handful of sidebar headers: an offline classroom still gets a
+   correctly-sized page, just in the browser's default sans-serif/monospace
+   fallback instead of the pixel/display faces — graceful degradation, not
+   the broken-layout failure mode FE-5 was fixing in the game itself.
+*/
 @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Space+Grotesk:wght@400;500;600;700&display=swap');
 
 html, body, [class*="css"], [data-testid="stAppViewContainer"] {
@@ -79,15 +88,24 @@ h2, h3 {
     font-size: 11px !important;
 }
 
-[data-testid="stMetric"] {
+/* BE-4(a) — st.metric's third positional arg is `delta`, which Streamlit
+   always renders with a colored up/down arrow inferred from the leading
+   character. None of the captions below are a change/delta — they're
+   plain descriptive text ("HP + a quantum charge") — but every one still
+   rendered a green "↑" in front of it, actively teaching a misreading of
+   the UI (a fact about game rules, presented as if it went up). Plain
+   cards instead; visually identical to the old stMetric styling below,
+   just without a widget that structurally can't NOT show an arrow. */
+.qb-stat-card {
     background: rgba(18,24,52,0.55);
     border: 1px solid rgba(124,140,230,0.20);
     border-radius: 14px;
     padding: 12px;
     box-shadow: 0 10px 26px rgba(0,0,0,0.45);
 }
-[data-testid="stMetricLabel"] { color: #8b93c4 !important; font-size: 12px !important; }
-[data-testid="stMetricValue"] { color: #2fe0d0 !important; font-size: 18px !important; }
+.qb-stat-card .qb-stat-label { color: #8b93c4; font-size: 12px; margin-bottom: 4px; }
+.qb-stat-card .qb-stat-value { color: #2fe0d0; font-size: 18px; font-weight: 700; margin-bottom: 2px; }
+.qb-stat-card .qb-stat-note  { color: #aeb8e6; font-size: 13px; }
 
 [data-testid="stExpander"] {
     border: 1px solid rgba(124,140,230,0.20) !important;
@@ -159,66 +177,25 @@ with st.sidebar:
     """)
     st.divider()
 
-    st.markdown("### ⚛ ACTIONS & PULSES")
-    gates = {
-        "ATTACK":      "Strike an adjacent enemy. Hit chance = your charge |β|². On a hit, an enemy caught in |1⟩ takes a CRITICAL (2 dmg). You then discharge to |0⟩.",
-        "X  (charge)": "|0⟩→|1⟩ — full charge, a guaranteed next strike.",
-        "H  (gamble)": "|0⟩→|+⟩ — ~50% charge. A flexible coin-flip strike.",
-        "S / T":       "Relative-phase rotations about Z (90° / 45°). They don't change charge or a normal strike — but a phase-loaded GUARD interferes in the X-basis, where phase decides the crit.",
-        "Z  (Pauli-Z)":"180° about Z — phase flip (|+⟩↔|−⟩). Flips a safe X-basis GUARD into an exposed one.",
-        "Y  (Pauli-Y)":"π about Y — bit-flip + phase-flip.",
-        "Rx / Ry":     "±45° rotations — partial charge in a single pulse.",
-        "CNOT":        "Entangle two ADJACENT units (friend or foe). A hit on one bleeds 1 onto the other.",
-        "MEASURE":     "Collapse this unit to an eigenstate and restore coherence (+12). Discharge an exposed unit, or stabilize one.",
-    }
-    for name, desc in gates.items():
-        with st.expander(name, expanded=False):
-            st.caption(desc)
-
-    st.divider()
-
-    st.markdown("### ⚔ COMBAT — CHARGE & MEASURE")
-    combat_table = r"""
-| Your charge | Attacking |
-|---|---|
-| \|1⟩ (100%) | sure hit — but you're left exposed |
-| \|+⟩ (≈50%) | coin-flip gamble |
-| \|0⟩ (0%) | cannot strike — charge first |
-
-A hit on an enemy caught in **\|1⟩** is a **CRITICAL (2 dmg)**.
-Entangled targets bleed **1** onto their Bell partner.
-"""
-    st.markdown(combat_table)
-
-    st.divider()
-
-    st.markdown("### 💡 QUANTUM CONCEPTS")
-    concepts = {
-        "Qubit Control":
-            "Steering a qubit's state with control pulses (gates) is the daily work "
-            "of real quantum hardware. Here it's how you arm and defend your units.",
-        "Charge = Born Rule":
-            "A unit's charge is P(|1⟩) = |β|². Attacking measures it: the strike "
-            "fires with that probability — exactly the Born rule.",
-        "Bloch Sphere":
-            "Any pure qubit state is a point on a unit sphere. The north pole is "
-            "|0⟩ (safe), the south pole |1⟩ (full charge). Gates rotate the vector.",
-        "Superposition":
-            "|+⟩ on the equator is a 50/50 blend — a gamble both when you attack "
-            "and when you're attacked (caught at 50% to take a critical).",
-        "Decoherence (T1)":
-            "Each turn a unit relaxes toward |0⟩ and loses coherence — charge bleeds "
-            "away. Load up and strike soon; a fully relaxed unit drops to ground state.",
-        "Entanglement":
-            "CNOT links two adjacent units into a Bell state; a hit on one bleeds "
-            "onto its partner. Entangle two enemies for splash damage.",
-        "Measurement":
-            "Projective collapse to |0⟩ or |1⟩ (Born rule). Discharges/stabilizes a "
-            "unit and restores coherence — a defensive reset.",
-    }
-    for term, explanation in concepts.items():
-        with st.expander(term, expanded=False):
-            st.caption(explanation)
+    # BE-5 — this sidebar used to carry its own copy of every gate
+    # description, the combat-odds table, and 7 quantum-concept blurbs —
+    # the same material verbatim in the in-game TOME (openTutorial() in
+    # quantum_chess.html), plus a third copy on the fork's Arena page. Three
+    # hand-edited copies of the same rules WILL drift (the council's own
+    # audit already found MEASURE's description differing in nuance across
+    # copies). The proper fix — one data source generating all three — is
+    # BL-4, a two-repo build-step redesign, explicitly not started here;
+    # this is the cheap interim move: keep only the one description that
+    # doesn't duplicate anything (the 6-step how-to-play above), delete the
+    # per-gate/per-concept expanders, and point at the in-game TOME as the
+    # single authoritative reference instead.
+    st.markdown("### 📖 FULL REFERENCE")
+    st.caption(
+        "Gate-by-gate effects, the combat/decoherence math, and every quantum "
+        "concept used here live in the game's own **▸ TOME** button (top of "
+        "the game panel) — one glossary, always in sync with what you're "
+        "actually playing."
+    )
 
     st.divider()
     st.caption("Built with ❤ + quantum weirdness")
@@ -229,44 +206,51 @@ Entangled targets bleed **1** onto their Bell partner.
 #  MAIN AREA — game embed
 # ──────────────────────────────────────────────────────────────
 st.markdown("<h1>◈ &nbsp; Q U B L I T Z &nbsp; ◈</h1>", unsafe_allow_html=True)
+# BE-4(c) — FE-6's rule ("pixel font is a headline voice, not a body font,
+# floor 12px when it is one") applies to this wrapper page too; this was an
+# 8px Press Start 2P subtitle, the exact violation FE-6 was written to
+# remove from quantum_chess.html. It's prose, not a heading, so body font
+# at the paragraph tier instead of just bumping the pixel size to 12px.
 st.markdown(
-    "<p style='text-align:center;font-family:\"Press Start 2P\",monospace;"
-    "font-size:8px;color:#8b93c4;margin-bottom:10px'>"
+    "<p style='text-align:center;font-size:14px;color:#8b93c4;margin-bottom:10px'>"
     "Qubit Battle Arena — command qubits, learn quantum control through play</p>",
     unsafe_allow_html=True,
 )
 
-# Quick-reference metrics row
-col1, col2, col3, col4 = st.columns(4)
-col1.metric("Armies",  "qubit units",      "HP + a quantum charge")
-col2.metric("Combat",  "Charge & Measure", "hit chance = |β|² (Born rule)")
-col3.metric("Win",     "Elimination",      "destroy the enemy army")
-col4.metric("Modes",   "Bot / 2P",         "3 boards · Easy/Med/Hard")
+# BE-4(a) — plain cards, not st.metric (see the .qb-stat-card CSS note above).
+QUICK_REFERENCE = [
+    ("Armies", "qubit units",       "HP + a quantum charge"),
+    ("Combat", "Charge & Measure",  "hit chance = |β|² (Born rule)"),
+    ("Win",    "Elimination",       "destroy the enemy army"),
+    ("Modes",  "Bot / 2P",          "3 boards · Easy/Med/Hard"),
+]
+for col, (label, value, note) in zip(st.columns(4), QUICK_REFERENCE):
+    col.markdown(
+        f'<div class="qb-stat-card">'
+        f'<div class="qb-stat-label">{label}</div>'
+        f'<div class="qb-stat-value">{value}</div>'
+        f'<div class="qb-stat-note">{note}</div>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
 
 st.divider()
 
 # ── GAME EMBED ───────────────────────────────────────────────
-# Height: title(48) + ui(820, sage overlaid on canvas) + log(68) + padding ≈ 960
+# BE-4(b) — named constant instead of a bare literal: this repo's embed was
+# a bare `height=1100` while the fork's pages/QuBlitz_Arena.py already has
+# its own named `_EMBED_HEIGHT = 920` — the two have already drifted, and a
+# magic number here couldn't even be discovered as the thing to reconcile.
+# Derivation: title(48) + ui(820, sage overlaid on canvas) + log(68) +
+# padding ≈ 960, rounded up for browser-chrome slop. NOT reconciled with
+# the fork's 920 here — HANDOFF.md's BE-4 explicitly defers that until FE-10
+# (board-first desktop layout) lands and gives both surfaces a real,
+# shared number to converge on instead of two independent guesses.
 #
-# QB-9 — the AI Sage uses a server-held Anthropic key, never a client key. If a
-# proxy URL is configured for this deployment (env QB_SAGE_PROXY_URL or a
-# Streamlit secret), inject it so the embedded game can reach it. Otherwise the
-# heuristic Sage plays and no key is ever requested from the user.
-def _sage_proxy_url() -> str:
-    import os
-    url = os.environ.get("QB_SAGE_PROXY_URL", "")
-    if not url:
-        try:
-            url = st.secrets.get("QB_SAGE_PROXY_URL", "")  # type: ignore[attr-defined]
-        except Exception:
-            url = ""
-    return url or ""
-
-_proxy = _sage_proxy_url()
-_inject = (
-    f"<script>window.QB_SAGE_PROXY={json.dumps(_proxy)};</script>" if _proxy else ""
-)
-st.components.v1.html(_inject + GAME_HTML, height=1100, scrolling=True)
+# The Sage advisor is the offline heuristic only — no LLM proxy, no Anthropic
+# key, no third-party API call anywhere in this deployment.
+QB_EMBED_HEIGHT = 1100
+st.components.v1.html(GAME_HTML, height=QB_EMBED_HEIGHT, scrolling=True)
 
 st.divider()
 
