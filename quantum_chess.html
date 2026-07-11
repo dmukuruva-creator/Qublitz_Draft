@@ -680,6 +680,27 @@ canvas { display: block; cursor: pointer; }
   cursor: pointer; line-height: 1; padding: 4px 6px;
 }
 
+/* PED-3 — notation-ramp chip: a one-line, dismissible explainer shown the
+   FIRST time a given symbol (|0⟩, |ψ⟩, ρ, T1...) is encountered in-session.
+   Same visual family as #kb-hint (small, dismissible, non-blocking) but teal
+   to read as "concept" rather than "control hint," and bottom-anchored so it
+   never covers the board or the panel it's explaining. */
+#notation-chip {
+  display: none;
+  position: absolute; left: 50%; bottom: 8px; transform: translateX(-50%);
+  z-index: 61; max-width: 92%;
+  background: rgba(47,224,208,0.12); border: 1px solid rgba(47,224,208,0.45);
+  color: var(--teal); font-size: 13px; line-height: 1.5; padding: 8px 30px 8px 12px;
+  border-radius: 6px; box-shadow: 0 4px 14px rgba(0,0,0,0.4);
+  pointer-events: auto;
+}
+#notation-chip.show { display: block; }
+#notation-chip button {
+  position: absolute; right: 4px; top: 8px;
+  background: none; border: none; color: var(--teal); font-size: 13px;
+  cursor: pointer; line-height: 1; padding: 4px 6px;
+}
+
 /* ── RPG Modal ─────────────────────────────────────── */
 #modal-overlay {
   display: none; position: fixed; inset: 0;
@@ -999,8 +1020,11 @@ body::before {
           <span class="srow-label">X-basis</span>
           <span class="val" id="sel-xbasis">—</span>
         </div>
+        <div id="bloch-caption" style="text-align:center;font-size:11px;color:var(--dim);margin-top:6px;letter-spacing:.02em"
+          title="Arrow up (north pole) = |0⟩, ground state — safe. Arrow down (south pole) = |1⟩, fully charged — a hit here crits. On the equator = superposition (H put it there).">Bloch sphere — your qubit as an arrow</div>
         <canvas id="bloch-canvas" width="100" height="100"
-          style="display:block;margin:7px auto;border:1px solid rgba(90,80,204,0.40);border-radius:50%;background:radial-gradient(circle at 40% 35%, #1c2440, #0a0f22);box-shadow:0 4px 16px rgba(0,0,0,0.50);"></canvas>
+          title="Arrow up = |0⟩ ground state · Arrow down = |1⟩ fully charged · Equator = superposition"
+          style="display:block;margin:3px auto 7px;border:1px solid rgba(90,80,204,0.40);border-radius:50%;background:radial-gradient(circle at 40% 35%, #1c2440, #0a0f22);box-shadow:0 4px 16px rgba(0,0,0,0.50);"></canvas>
         <div id="sel-budget" style="font-size:13px;color:var(--dim);margin:2px 0 4px" title="GD-5 — projects this unit's charge forward using the SAME Lindblad decay QPhysics runs each turn, so the T1 exponential is visible before you commit to a route, not just after."></div>
         <div id="sel-hint-toggle" onclick="toggleSelHint()"
           onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleSelHint();}"
@@ -1024,6 +1048,7 @@ body::before {
 
   <div id="log"></div>
   <div id="kb-hint">⌨ Click the board to enable keyboard shortcuts (H/X/Y/Z/A/M/C/G/E/?).<button onclick="dismissKbHint()" title="Dismiss">✕</button></div>
+  <div id="notation-chip"></div>
 </div>
 
 <!-- Modal overlay -->
@@ -1280,6 +1305,73 @@ const GATE_INFO = {
   CNOT:   {label:'CNOT',short:'entangle two qubits',effect:'Entangle a neighbor',ctrl:'Conditional X: flips target if control |1⟩. Forms a correlated Bell pair — a strike on one bleeds onto the other (no faster-than-light control; only the correlation is shared).'},
   MEASURE:{label:'Measure',short:'collapse to eigenstate',effect:'Discharge & reset',ctrl:'Projective Z-basis measurement. Collapses |ψ⟩ to |0⟩ or |1⟩ and stabilizes the unit (coherence +12). "Discharging" to |0⟩ is a game-mechanic reward, not a physical one — |0⟩ is simply the low-energy ground state a real qubit relaxes to anyway; |1⟩ is high-energy and short-lived by nature.'},
 };
+
+// PED-2 — Gate Log legend: each of the 10 counters gets a hover/tap tooltip
+// built from GATE_INFO's own `label`/`effect`/`short` fields (single source —
+// no separate copy of these strings exists anywhere else; the TOME and gate
+// menu already read the same object). Applied once at load, since these are
+// static gate descriptions, not per-game state. PED-4 — the same rows are
+// also the Gate Log's tap-to-glossary entry point (see openGlossaryIndex()).
+function applyGateLogTooltips() {
+  Object.keys(GATE_INFO).forEach(gate => {
+    const span = document.getElementById(`cnt-${gate}`);
+    const row = span && span.parentElement;
+    if (!row) return;
+    const info = GATE_INFO[gate];
+    row.title = `${info.label} — ${info.effect}: ${info.short}`;
+    row.style.cursor = 'pointer';
+    row.setAttribute('role', 'button');
+    row.setAttribute('tabindex', '0');
+    row.onclick = () => showGlossary(gate);
+    row.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); showGlossary(gate); } };
+  });
+}
+
+// PED-4 — in-game glossary. Reuses GATE_INFO (the same single source as the
+// gate menu, the Gate Log tooltips above, and — for X/H — the TOME) rather
+// than a second copy of the physics prose. Cross-references GATE_MISSION so
+// a player can jump straight to the one training mission that's built around
+// a given gate (missionShieldBlocks() hard-gates those three on the concept,
+// per GD-3 — this is the honest subset, not every gate has a dedicated one).
+const GATE_MISSION = {
+  X: 0,        // MISSION 1 — THE BORN RULE (charge = hit chance)
+  H: 3,        // MISSION 4 — SUPERPOSITION GAMBIT (phase-shield needs H first)
+  Z: 4,        // MISSION 5 — PHASE GAMBIT (relative phase, |+⟩ vs |−⟩)
+  CNOT: 2,     // MISSION 3 — BELL PAIR TRAP (entanglement)
+  MEASURE: 2,  // MISSION 3 — BELL PAIR TRAP (collapse)
+};
+
+function openGlossaryIndex() {
+  document.getElementById('modal-content').innerHTML = `
+<h2>◈ GLOSSARY ◈</h2>
+<p style="text-align:center;color:var(--dim);font-size:13px;margin-bottom:14px">Every gate in one place — tap any row for the full physics.</p>
+${Object.keys(GATE_INFO).map(gate => {
+  const info = GATE_INFO[gate];
+  return `<div class="mission-card" style="cursor:pointer" onclick="showGlossary('${gate}')">
+    <h4>${info.label} <span style="color:var(--dim);font-weight:normal;font-size:12px">— ${info.effect}</span></h4>
+    <p style="margin:0">${info.short}</p>
+  </div>`;
+}).join('')}
+<button class="btn" onclick="openMenu()">◂ BACK</button>`;
+  document.getElementById('modal-overlay').classList.add('show');
+}
+
+function showGlossary(gate) {
+  const info = GATE_INFO[gate];
+  if (!info) return;
+  const missionIdx = GATE_MISSION[gate];
+  const missionHtml = (missionIdx !== undefined)
+    ? `<button class="btn" onclick="closeModal();startMission(${missionIdx})">▶ Play ${CAMPAIGN_MISSIONS[missionIdx].title}</button>`
+    : `<p style="color:var(--dim);font-size:13px">Used throughout the game — no single dedicated training mission yet.</p>`;
+  document.getElementById('modal-content').innerHTML = `
+<h2>◈ ${info.label} ◈</h2>
+<p style="color:var(--teal);font-size:14px;margin:-8px 0 12px">${info.effect} — ${info.short}</p>
+<p style="line-height:1.6">${info.ctrl}</p>
+<h3>TAUGHT IN</h3>
+${missionHtml}
+<button class="btn" onclick="openGlossaryIndex()">◂ ALL GATES</button>`;
+  document.getElementById('modal-overlay').classList.add('show');
+}
 
 // ═══════════════════════════════════════════════════════
 // QPhysics — open-quantum-system engine (Lindblad T1 / T2)
@@ -2364,6 +2456,7 @@ function attack(attacker, target) {
   // GD-4 — captured before any state changes, for the gate-log debrief's
   // GUARD-survival stat (attack() clears no one's `guarding`; endTurn does).
   const wasGuarding = !!target.guarding;
+  explainOnFirstUse('born-rule', 'Your hit chance IS the quantum probability, P(|1⟩) — this is the <b>Born rule</b>: the one equation that turns a qubit\'s state into an actual outcome.');
   // Fire roll + GUARD-aware target collapse are delegated to
   // BotAI.resolveAttack (GD-1) — the same pure combat-resolution function
   // tests/bot_guard_harness.test.js drives headlessly, so the in-browser
@@ -3485,6 +3578,7 @@ function updateSelInfo(unit) {
   const _eqEl=document.getElementById('sel-eq');
   _eqEl.textContent=_eqText;
   _eqEl.title=_eqText; // UX-1 — full ψ readable via tooltip if it ever needs to truncate at narrow widths
+  explainOnFirstUse('psi-notation', '<b>|ψ⟩</b> = your qubit\'s exact state, and <b>|0⟩</b>/<b>|1⟩</b> are its two basic outcomes — ground (safe) and excited (charged). Everything above is built from those three symbols.');
   document.getElementById('sel-theta').textContent=`${unit.hp}/${unit.maxHp}`;
   document.getElementById('sel-phi').textContent=`${(ch*100)|0}%`;
   document.getElementById('sel-coh').textContent=unit.coherence.toFixed(0)+'%';
@@ -3495,7 +3589,7 @@ function updateSelInfo(unit) {
   document.getElementById('sel-xbasis').innerHTML=
     `<span>x=${_b.x.toFixed(2)}</span><span>GUARD ${_gc}%</span>`;
   document.getElementById('sel-hint').textContent=
-    `Charge = strike chance (P(|1⟩)). Use X to charge toward |1⟩, H for a 50% gamble, MEASURE to discharge & stabilize. Note: |1⟩ is the excited state — being IN it is what makes a unit fragile (it decays and can crit), not a state you'd want to sit in. After attacking, the unit drops to |0⟩, the ground state.`;
+    `Charge = strike chance (P(|1⟩)). Use X to charge toward |1⟩, H for a 50% gamble, MEASURE to discharge & stabilize. Note: |1⟩ is the excited state — being IN it is what makes a unit fragile (it decays and can crit), not a state you'd want to sit in. After attacking, the unit drops to |0⟩, the ground state. The sphere below is the same charge, drawn as an arrow: pointing up is |0⟩ (safe), pointing down is |1⟩ (fully charged, fragile), and anywhere around the equator is superposition — the arrow's tilt IS the charge percentage above.`;
   // GD-5 — coherence-budget readout: how many turns to reach striking range,
   // and what charge decoherence leaves by the time you get there if you
   // never re-gate. Makes the T1 exponential a route-planning input, not
@@ -4687,6 +4781,30 @@ function dismissKbHint() {
   if (kb) kb.classList.remove('show');
 }
 
+// PED-3 — notation ramp: shows a one-line explainer the FIRST time a given
+// symbol is encountered this session (sessionStorage, same "fresh tab resets
+// it" reasoning as FE-9/FE-13), then never again for that key. Deliberately
+// one shared chip, not a chip-per-symbol pile-up — only one can be relevant
+// at a time since they're each tied to a specific screen transition.
+function explainOnFirstUse(key, html) {
+  let seen;
+  try { seen = sessionStorage.getItem(`qb_notation_seen_${key}`) === '1'; } catch (e) { seen = false; }
+  if (seen) return;
+  try { sessionStorage.setItem(`qb_notation_seen_${key}`, '1'); } catch (e) {}
+  const chip = document.getElementById('notation-chip');
+  if (!chip) return;
+  chip.innerHTML = `${html}<button onclick="dismissNotationChip()" title="Dismiss">✕</button>`;
+  chip.classList.add('show');
+  clearTimeout(_notationChipTimer);
+  _notationChipTimer = setTimeout(dismissNotationChip, 9000);
+}
+let _notationChipTimer = null;
+function dismissNotationChip() {
+  const chip = document.getElementById('notation-chip');
+  if (chip) chip.classList.remove('show');
+  clearTimeout(_notationChipTimer);
+}
+
 function runBoot() {
   const logo =document.getElementById('boot-logo');
   const sub  =document.getElementById('boot-sub');
@@ -4742,6 +4860,7 @@ function runBoot() {
 // first-class, inspectable feature (capability + formality).
 // ═══════════════════════════════════════════════════════
 function openPhysicsLab() {
+  explainOnFirstUse('rho-t1-notation', '<b>ρ</b> (rho) is the density matrix — a table of numbers that fully describes a qubit\'s state, including how mixed/uncertain it is. <b>T1</b> is the decay time — how long charge takes to bleed away.');
   const { T1, T2 } = QPhysics.timesFromRate(GAME.decoRate);
   const sel = GAME.selected;
   let unitBlock = `<p style="color:var(--wood);font-size:13px">Select one of your units on the board to inspect its live density matrix here.</p>`;
@@ -4760,29 +4879,47 @@ function openPhysicsLab() {
   coherence 2|ρ₀₁| = <b style="color:var(--teal)">${coh.toFixed(3)}</b>
 </p>`;
   }
+  // PED-5 — chart first, plain-language caption, equation last behind an
+  // expander: the Outsider round found the Lindblad screen "would make me
+  // close the tab," but the decay chart almost landed. Same content as
+  // before, reordered — nothing removed, "show me the math" just moves THE
+  // MODEL's equation out of the first screenful instead of leading with it.
   document.getElementById('modal-content').innerHTML = `
 <h2>✦ PHYSICS LAB</h2>
-<p style="text-align:center;color:var(--dim);font-size:13px;margin:-8px 0 12px">Open-quantum-system engine · Lindblad master equation · unit-tested</p>
+<p style="text-align:center;color:var(--dim);font-size:13px;margin:-8px 0 12px">Charge decays like a real qubit's does — here's the proof, then the math behind it.</p>
 
-<h3>THE MODEL</h3>
-<p style="color:var(--dim);font-size:13px;line-height:1.7">Every unit is a single qubit whose state ρ evolves under the <b style="color:var(--teal)">Lindblad master equation</b> for amplitude damping (T₁) plus dephasing (T₂):</p>
-<pre style="color:var(--gold);font-size:13px;line-height:1.6;text-align:center;background:#0a0f22;border:1px solid var(--border);border-radius:4px;padding:10px;margin:6px 0">dρ/dt = −(i/ℏ)[H,ρ] + Σ γₖ( Lₖ ρ Lₖ† − ½{Lₖ†Lₖ, ρ} )</pre>
-<p style="color:var(--dim);font-size:13px;line-height:1.7">Each turn we apply its <b>exact</b> solution toward |0⟩: charge relaxes as <b style="color:var(--red)">e<sup>−t/T₁</sup></b>, transverse coherence as <b style="color:var(--teal)">e<sup>−t/T₂</sup></b> (with T₂ ≤ 2T₁). At the current rate (${GAME.decoRate}/turn): <b style="color:var(--gold)">T₁ = ${T1.toFixed(1)}</b>, <b style="color:var(--gold)">T₂ = ${T2.toFixed(1)}</b> turns.</p>
-
-<h3>ENGINE SELF-TEST: DECAY IS EXPONENTIAL, NOT LINEAR</h3>
-<p style="color:var(--dim);font-size:13px;line-height:1.6">A unit prepared in |1⟩, left to decohere. The engine's own generated data is fit against an exponential model and a linear model to confirm the <i>implementation</i> matches the exponential decay the Lindblad equation prescribes.</p>
-<p style="color:var(--wood);font-size:13px;line-height:1.6;margin:2px 0 6px">This validates the implementation against the model; the model itself is standard open-quantum-systems physics (the Lindblad master equation) — it is not an empirical measurement against a real physical qubit.</p>
 <canvas id="diag-canvas" width="360" height="190" style="width:100%;max-width:360px;display:block;margin:8px auto;background:#0a0f22;border:1px solid var(--border);border-radius:4px"></canvas>
 <p id="diag-readout" style="text-align:center;color:var(--dim);font-size:13px;margin:4px 0"></p>
+<p style="color:var(--dim);font-size:13px;line-height:1.6">A unit prepared fully charged, left alone: the real curve (teal) is exponential, not the straight line (red) a naive "charge just drains steadily" model would predict.</p>
 
 <h3>LIVE STATE INSPECTOR</h3>
 ${unitBlock}
+
+<div id="physics-math-toggle" onclick="togglePhysicsMath()"
+  onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();togglePhysicsMath();}"
+  role="button" tabindex="0" style="cursor:pointer;color:var(--teal);font-size:13px;margin-top:12px">▸ Show me the math</div>
+<div id="physics-math" style="display:none">
+  <h3>THE MODEL</h3>
+  <p style="color:var(--dim);font-size:13px;line-height:1.7">Every unit is a single qubit whose state ρ evolves under the <b style="color:var(--teal)">Lindblad master equation</b> for amplitude damping (T₁) plus dephasing (T₂):</p>
+  <pre style="color:var(--gold);font-size:13px;line-height:1.6;text-align:center;background:#0a0f22;border:1px solid var(--border);border-radius:4px;padding:10px;margin:6px 0">dρ/dt = −(i/ℏ)[H,ρ] + Σ γₖ( Lₖ ρ Lₖ† − ½{Lₖ†Lₖ, ρ} )</pre>
+  <p style="color:var(--dim);font-size:13px;line-height:1.7">Each turn we apply its <b>exact</b> solution toward |0⟩: charge relaxes as <b style="color:var(--red)">e<sup>−t/T₁</sup></b>, transverse coherence as <b style="color:var(--teal)">e<sup>−t/T₂</sup></b> (with T₂ ≤ 2T₁). At the current rate (${GAME.decoRate}/turn): <b style="color:var(--gold)">T₁ = ${T1.toFixed(1)}</b>, <b style="color:var(--gold)">T₂ = ${T2.toFixed(1)}</b> turns.</p>
+  <p style="color:var(--dim);font-size:13px;line-height:1.6">The chart above fits the engine's own generated data against this exponential model AND a linear model — confirming the <i>implementation</i> matches what the equation prescribes.</p>
+  <p style="color:var(--wood);font-size:13px;line-height:1.6;margin:2px 0 6px">This validates the implementation against the model; the model itself is standard open-quantum-systems physics — it is not an empirical measurement against a real physical qubit.</p>
+</div>
 
 <hr style="border-color:var(--border);margin:10px 0">
 <p style="color:var(--wood);font-size:13px;line-height:1.6">Verify in the browser console: <b style="color:var(--teal)">runDecoherenceDiagnostic()</b> · <b style="color:var(--teal)">QPhysics.selfTest()</b>. Physics engine has no UI dependencies — it is independently testable. Modelled after TLS-defect decoherence studied at the <b>Fitzpatrick Lab, Dartmouth College</b>.</p>
 <button class="btn" style="margin-top:8px" onclick="openMenu()">◀ BACK TO MENU</button>`;
   document.getElementById('modal-overlay').classList.add('show');
   drawDecoherenceDiagram(GAME.decoRate);
+}
+function togglePhysicsMath() {
+  const math = document.getElementById('physics-math');
+  const toggle = document.getElementById('physics-math-toggle');
+  if (!math || !toggle) return;
+  const open = math.style.display !== 'none';
+  math.style.display = open ? 'none' : 'block';
+  toggle.textContent = open ? '▸ Show me the math' : '▾ Show me the math';
 }
 
 // Plots charge-vs-turn for a |1⟩ unit: the physical (exponential) decay as a
@@ -4829,7 +4966,7 @@ function openMenu() {
   <p style="color:var(--gold);font-family:var(--pixel);font-size:12px;margin:0 0 6px">▸ PLAY IN 30 SECONDS</p>
   <p style="color:var(--ink-2);font-size:13px;line-height:1.7;margin:0">
     <b style="color:var(--teal)">1. CHARGE</b> — tap a unit, fire a gate (X = 100% charge, H = 50%).<br>
-    <b style="color:var(--teal)">2. STRIKE</b> — move beside a foe and ATTACK; hit chance = your charge (Born rule).<br>
+    <b style="color:var(--teal)">2. STRIKE</b> — move beside a foe and ATTACK; your hit chance IS the quantum probability — the Born rule.<br>
     <b style="color:var(--teal)">3. BEAT THE CLOCK</b> — charge decays exponentially each turn, because |1⟩ is the fragile, high-energy excited state — that's why it decays, not a game penalty. Strike before it bleeds away. Last army standing wins.
   </p>
 </div>
@@ -4840,6 +4977,7 @@ function openMenu() {
 <hr style="border-color:var(--border);margin:12px 0">
 <button class="btn" onclick="openCampaign()">◈ TRAINING PROGRAMS (6 missions)</button>
 <button class="btn" onclick="closeModal();openTutorial()">▸ BATTLE MANUAL</button>
+<button class="btn" onclick="openGlossaryIndex()">▸ GLOSSARY — every gate, one tap away</button>
 <button class="btn" style="border-color:var(--gold);color:var(--gold)" onclick="openPhysicsLab()">✦ PHYSICS LAB — inspect the real engine</button>
 <hr style="border-color:var(--border);margin:12px 0">
 
@@ -4948,6 +5086,7 @@ window.addEventListener('load', () => {
     initBg();
     animateBg();
     runBoot();
+    applyGateLogTooltips();
   });
 });
 </script>
