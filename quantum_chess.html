@@ -1420,6 +1420,28 @@ const QPhysics = (() => {
     const r = ('z' in pureOrBloch) ? pureOrBloch : blochFromPure(pureOrBloch);
     return Math.max(0, Math.min(1, (1 - r.x) / 2));
   };
+
+  // BR-3 — Pulse Forge. A resonant Rabi drive rotates the qubit around the
+  // X-axis by θ = Ω_R · t (amplitude × duration, in units where θ=π is a
+  // perfect flip — this is the SAME t_π = 1/(2·Ω_R/2π) relation the Qubit
+  // Simulator page's own Ramsey tab already shows). rabiPopulation is the
+  // textbook closed-form result for the population actually transferred to
+  // |1⟩ by that rotation, independent of any starting state — it's what a
+  // pulse calibrated to exactly θ=π gives 100% charge, and any other θ gives
+  // a partial, testable, physically real "why did my X only charge to 87%"
+  // answer instead of a made-up minigame number.
+  const rabiPopulation = theta => Math.sin(theta / 2) ** 2;
+  // Rotates a PURE state by θ around the Bloch X-axis — the same rotation
+  // GATES.Rx/Ry already perform at their own fixed angles (π/4), generalized
+  // to an arbitrary θ so Pulse Forge's slider-chosen amplitude×duration maps
+  // to a real state transformation, not just the scalar population above.
+  const rabiRotateState = (state, theta) => {
+    const c = Math.cos(theta / 2), si = Math.sin(theta / 2);
+    return {
+      alpha: C.add(C.scale(state.alpha, c), C.mul({ r: 0, i: -si }, state.beta)),
+      beta:  C.add(C.mul({ r: 0, i: -si }, state.alpha), C.scale(state.beta, c)),
+    };
+  };
   const radius      = r => Math.sqrt(r.x*r.x + r.y*r.y + r.z*r.z);    // |r|: 1 pure, 0 mixed
   const purity      = r => (1 + Math.min(1, radius(r)**2)) / 2;       // Tr(ρ²) ∈ [½,1]
   const coherenceL1 = r => Math.sqrt(r.x*r.x + r.y*r.y);              // 2|ρ01| transverse coherence
@@ -1592,7 +1614,7 @@ const QPhysics = (() => {
 
   return { blochFromPure, pureFromBloch, charge, guardCritProb, radius, purity, coherenceL1,
            lindbladStep, gateBloch, gateMatrix, rhoFromBloch, blochFromRho, Bell,
-           measure, timesFromRate, diagnose, selfTest };
+           measure, timesFromRate, diagnose, selfTest, rabiPopulation, rabiRotateState };
 })();
 if (typeof window !== 'undefined') {
   window.QPhysics = QPhysics;
@@ -3673,6 +3695,14 @@ function openGateMenu(unit) {
   // their own edge from more HP + less move range, not exclusive defense.
   opts.push({label:'[G] GUARD',          effect:'Brace for impact', action:'GUARD'});
   opts.push({label:'[·] End turn',          effect:'End your turn',          action:'SKIP'});
+  // BR-3 — Mission 7 (Pulse Forge) replaces the one-click X gate with the
+  // thing X was always secretly doing: a calibrated Rabi pulse. Only the
+  // flagged unit loses X this way — everything else in the mission plays
+  // normally, and every other mission's menu is completely untouched.
+  if (unit.pulseForgeOnly) {
+    const xOpt = opts.find(o => o.action === 'X');
+    if (xOpt) { xOpt.label = '[X] Forge Pulse'; xOpt.effect = 'Shape a drive pulse'; xOpt.action = 'FORGE_PULSE'; }
+  }
   GAME.gateMenu={ piece:unit, options:opts };
   GAME._menuHover=-1;
   GAME.phase='gate';
@@ -3704,6 +3734,8 @@ function handleGateClick(mx,my) {
           setGuard(piece);
           logEv(`GUARD: ${coord(piece.row,piece.col)} braces in the X-basis — a strike measures it as |±⟩; phase decides the crit (${(QPhysics.guardCritProb(piece.state)*100)|0}% crit risk).`,'quantum');
           spawn(piece.px,piece.py,'#8b7dff',12); sfxGate('Z'); endTurn(); break;
+        case 'FORGE_PULSE':
+          openPulseForge(piece); break;   // its own modal; ends the turn itself on APPLY
         default:
           applyGate(piece, opt.action); endTurn();
       }
@@ -4193,6 +4225,20 @@ const CAMPAIGN_MISSIONS = [
         mages[0].bell=bell; mages[1].bell=bell;
         mages[1].shieldNeedsEntangledSplash = true;   // the "rear" half
       }
+    },
+  },
+  // BR-3 — Pulse Forge prototype. Scope is deliberately one mission: this is
+  // a control-layer minigame, not a new permanent mechanic — the X gate
+  // everywhere else in the game stays the instant, free action it's always
+  // been. Franchise expansion beyond this mission needs its own proposal.
+  {
+    title:'MISSION 7 — PULSE FORGE',
+    intro:'This Knight has no X gate — you have to BUILD one. Open the gate menu and Forge a Pulse: set amplitude × duration so their product hits 1.0 (θ=π, a perfect flip). Miss it and you charge to less than 100%, exactly like a real Rabi drive. Long pulses decohere too — precision beats brute force.',
+    winText:'Pulse calibrated! Ω_R × t = π is what "press X" was secretly doing this whole time — you just did it by hand.',
+    setup(game) {
+      game.pieces = game.pieces.filter((_,i)=>i<2);
+      const knight = game.pieces.find(p=>p.owner==='white');
+      if (knight) knight.pulseForgeOnly = true;
     },
   },
 ];
@@ -4924,6 +4970,131 @@ function togglePhysicsMath() {
   toggle.textContent = open ? '▸ Show me the math' : '▾ Show me the math';
 }
 
+// ═══════════════════════════════════════════════════════
+// BR-3 — PULSE FORGE (Mission 7's control-layer minigame)
+// ═══════════════════════════════════════════════════════
+// amplitude × duration = 1.0 is the calibrated "perfect X" (θ=π) — the same
+// t_π = 1/(2·Ω_R/2π) relation the Qubit Simulator's own Ramsey tab shows, so
+// a player who's used that page recognizes the constraint. Both sliders
+// range past 1 so over-rotation (θ>π, charge falling back below 100%,
+// exactly like a real over-driven Rabi oscillation) is reachable too, not
+// just under-rotation.
+const PULSE_MAX_AMPLITUDE = 1.6, PULSE_MAX_DURATION = 1.6;
+// Long pulses decohere: a real drive can't be arbitrarily long for free.
+// Every action already pays the game's own standard end-of-turn decoherence
+// tick (endTurn() decoheres every piece on the board, same as a normal X
+// gate would) — charged ONLY against duration PAST the calibrated baseline
+// (1.0) so a well-calibrated pulse pays no extra penalty beyond what every
+// other action already pays, while a needlessly long, inefficient pulse
+// pays a real, visible extra price. That's the actual "precision beats
+// brute force" lesson, not double-counting the ambient per-turn decay.
+const PULSE_EXCESS_DECO_SCALE = 2.0;
+
+function openPulseForge(unit) {
+  document.getElementById('modal-content').innerHTML = `
+<h2>⚡ PULSE FORGE</h2>
+<p style="text-align:center;color:var(--dim);font-size:13px;margin:-8px 0 12px">
+  Shape a drive pulse: amplitude × duration = 1.0 is a perfect flip (θ=π). Miss it either way and you get a genuine partial charge.
+</p>
+<canvas id="pulse-canvas" width="320" height="140" style="width:100%;max-width:320px;display:block;margin:6px auto;background:#0a0f22;border:1px solid var(--border);border-radius:4px"></canvas>
+<p id="pulse-readout" style="text-align:center;color:var(--gold);font-size:13px;margin:4px 0"></p>
+<div style="margin:10px 0">
+  <label style="color:var(--teal);font-size:13px">Amplitude (Ω<sub>R</sub>/2π, normalized) — <span id="pulse-amp-val"></span></label>
+  <input id="pulse-amp" type="range" min="0.1" max="${PULSE_MAX_AMPLITUDE}" step="0.05" value="1.0" style="width:100%"
+    oninput="updatePulseForgePreview()" aria-label="Pulse amplitude">
+</div>
+<div style="margin:10px 0">
+  <label style="color:var(--teal);font-size:13px">Duration (pulse units) — <span id="pulse-dur-val"></span></label>
+  <input id="pulse-dur" type="range" min="0.1" max="${PULSE_MAX_DURATION}" step="0.05" value="1.0" style="width:100%"
+    oninput="updatePulseForgePreview()" aria-label="Pulse duration">
+</div>
+<button class="btn" style="border-color:var(--gold);color:var(--gold)" onclick="applyPulseForge()">⚡ APPLY PULSE</button>
+<button class="btn" onclick="closeModal()">◂ CANCEL (keep charging next turn)</button>`;
+  document.getElementById('modal-overlay').classList.add('show');
+  GAME._pulseForgeUnit = unit;
+  updatePulseForgePreview();
+}
+
+function _pulseForgeReadValues() {
+  const amp = parseFloat(document.getElementById('pulse-amp')?.value || '1');
+  const dur = parseFloat(document.getElementById('pulse-dur')?.value || '1');
+  return { amp, dur, theta: amp * dur * Math.PI };
+}
+
+function updatePulseForgePreview() {
+  const { amp, dur, theta } = _pulseForgeReadValues();
+  document.getElementById('pulse-amp-val').textContent = amp.toFixed(2);
+  document.getElementById('pulse-dur-val').textContent = dur.toFixed(2);
+  const predicted = QPhysics.rabiPopulation(theta);
+  const readout = document.getElementById('pulse-readout');
+  if (readout) {
+    const pct = (predicted * 100).toFixed(1);
+    const quality = Math.abs(amp * dur - 1) < 0.03 ? ' — calibrated!' : '';
+    readout.textContent = `θ = ${(theta / Math.PI).toFixed(2)}π → predicted charge ${pct}%${quality}`;
+  }
+  const cv = document.getElementById('pulse-canvas');
+  if (!cv) return;
+  const g = cv.getContext('2d'); const W = cv.width, H = cv.height;
+  g.clearRect(0, 0, W, H);
+  const PADL = 30, PADB = 20, PADT = 10, PADR = 10;
+  const plotW = W - PADL - PADR, plotH = H - PADT - PADB;
+  // axes
+  g.strokeStyle = 'rgba(255,255,255,0.15)'; g.lineWidth = 1;
+  g.strokeRect(PADL, PADT, plotW, plotH);
+  // the pulse rectangle: width = duration, height = amplitude, both
+  // normalized against their slider max — literally what's being "shaped".
+  const rw = (dur / PULSE_MAX_DURATION) * plotW;
+  const rh = (amp / PULSE_MAX_AMPLITUDE) * plotH;
+  g.fillStyle = Math.abs(amp * dur - 1) < 0.03 ? 'rgba(47,224,208,0.55)' : 'rgba(139,125,255,0.5)';
+  g.fillRect(PADL, PADT + plotH - rh, rw, rh);
+  // the calibration curve: amplitude*duration=1 (the "perfect X" boundary)
+  g.strokeStyle = '#f5b73c'; g.lineWidth = 1.5; g.setLineDash([3, 3]);
+  g.beginPath();
+  for (let px = 0; px <= plotW; px++) {
+    const d = (px / plotW) * PULSE_MAX_DURATION;
+    const a = d > 0 ? 1 / d : PULSE_MAX_AMPLITUDE;
+    if (a > PULSE_MAX_AMPLITUDE) continue;
+    const py = PADT + plotH - (a / PULSE_MAX_AMPLITUDE) * plotH;
+    px === 0 || d <= 0.1 / PULSE_MAX_DURATION ? g.moveTo(PADL + px, py) : g.lineTo(PADL + px, py);
+  }
+  g.stroke(); g.setLineDash([]);
+  g.fillStyle = 'rgba(255,255,255,0.5)'; g.font = '10px monospace';
+  g.fillText('duration →', PADL, H - 4);
+  g.save(); g.translate(10, PADT + plotH / 2); g.rotate(-Math.PI / 2);
+  g.fillText('amplitude →', 0, 0); g.restore();
+}
+
+function applyPulseForge() {
+  const unit = GAME._pulseForgeUnit;
+  if (!unit || !GAME.pieces.includes(unit)) { closeModal(); return; }
+  const { amp, dur, theta } = _pulseForgeReadValues();
+  const before = charge(unit);
+  unit.state = normalizeState(QPhysics.rabiRotateState(unit.state, theta));
+  syncBloch(unit);
+  // Long pulses decohere — reuse the SAME Lindblad step every idle turn
+  // already applies, scaled to how far duration overshoots the calibrated
+  // baseline (1.0), not the raw duration (see PULSE_EXCESS_DECO_SCALE).
+  const excessDuration = Math.max(0, dur - 1);
+  if (excessDuration > 0) {
+    const { T1, T2 } = QPhysics.timesFromRate(GAME.decoRate);
+    unit.bloch = QPhysics.lindbladStep(unit.bloch, { T1, T2, dt: excessDuration * PULSE_EXCESS_DECO_SCALE });
+    unit.state = QPhysics.pureFromBloch(unit.bloch);
+  }
+  refreshSuperpos(unit);
+  const after = charge(unit);
+  closeModal();
+  const pct = (after * 100).toFixed(0);
+  const calibrated = Math.abs(amp * dur - 1) < 0.03;
+  if (calibrated) {
+    logEv(`⚡ Pulse Forge: θ=${(theta/Math.PI).toFixed(2)}π, calibrated — ${coord(unit.row,unit.col)} charged to ${pct}%. Ω_R × t = π is what "press X" was secretly doing the whole time.`, 'quantum');
+  } else {
+    const verdict = amp * dur < 1 ? 'under-rotated' : 'over-rotated';
+    logEv(`⚡ Pulse Forge: θ=${(theta/Math.PI).toFixed(2)}π (target 1.00π), ${verdict} — ${coord(unit.row,unit.col)} only reached ${pct}% charge (was ${(before*100).toFixed(0)}%). Amplitude × duration = ${(amp*dur).toFixed(2)}, not 1.0 — that gap IS the missing charge.`, 'quantum');
+  }
+  if (GAME.selected === unit) updateSelInfo(unit);
+  endTurn();
+}
+
 // Plots charge-vs-turn for a |1⟩ unit: the physical (exponential) decay as a
 // curve+points, the linear best-fit for contrast, and the R² of each — the
 // falsifiability argument, rendered in-game rather than only in the console.
@@ -5107,9 +5278,19 @@ function openTutorial() {
 // disclosed physics link; the absolute turn count is a game-balance choice,
 // same as GAME.decoRate always was.
 function importSimulatorParams() {
-  let params;
-  try { params = new URLSearchParams(location.search); } catch (e) { return; }
-  const t1ns = parseFloat(params.get('t1'));
+  // Two sources, checked in order: window.QB_INITIAL_T1_NS (set by
+  // QuBlitz_Arena.py's own <script> injection — the same pattern already
+  // used for QB_SAGE_PROXY — for the REAL embedded case, since the game is
+  // injected via srcdoc and its location.search is never the parent
+  // Streamlit page's query string) and location.search directly (for the
+  // standalone file:// / direct-URL case, e.g. this file opened on its own
+  // with ?t1= appended).
+  let t1ns = (typeof QB_INITIAL_T1_NS !== 'undefined') ? parseFloat(QB_INITIAL_T1_NS) : NaN;
+  if (!isFinite(t1ns)) {
+    let params;
+    try { params = new URLSearchParams(location.search); } catch (e) { return; }
+    t1ns = parseFloat(params.get('t1'));
+  }
   if (!isFinite(t1ns) || t1ns <= 0) return;
   const REFERENCE_T1_NS = 200;
   const importedT1Turns = Math.max(1, Math.min(15, 5 * (t1ns / REFERENCE_T1_NS)));
