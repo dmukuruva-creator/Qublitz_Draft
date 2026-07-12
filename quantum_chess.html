@@ -974,6 +974,14 @@ body::before {
       <!-- Screen-reader announcements: turn, selection, winner (QB-8) -->
       <div id="a11y-status" aria-live="polite" role="status"
            style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap"></div>
+      <!-- GOV-4 — a SEPARATE assertive region for one-off events (attacks,
+           gate applications, cursor moves). #a11y-status above gets
+           overwritten by updateHUD() on nearly every state change, which
+           would clobber a transient announcement before a screen reader
+           gets to read it; keeping event announcements in their own region
+           means the two never race each other. -->
+      <div id="a11y-event" aria-live="assertive" role="status"
+           style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap"></div>
 
       <!-- Sage dialogue bar — overlays bottom of canvas like a JRPG dialogue box -->
       <div id="timer-bar"><div id="timer-fill"></div></div>
@@ -2089,6 +2097,7 @@ const GAME = {
   mode:'vsBot', botColor:'black',
   decoRate:2,
   importedT1Ns:null,    // BR-1 — set by importSimulatorParams() if ?t1= was in the URL
+  kbCursor:{row:GRID-1,col:0}, _kbCursorActive:false,  // GOV-4 — keyboard-only board navigation
   unitCount:6, boardPreset:0,
   log:[], gateMenu:null, winner:null,
   cnotMode:false, cnotControl:null,        // entangle-target mode
@@ -2140,6 +2149,13 @@ function resetGame(mode) {
   stopTurnTimer();
   GAME.pieces = initBoard();
   initTerrain();
+  // GOV-4 — start the keyboard cursor on one of the player's own units each
+  // new game, not wherever it happened to be left (which could be off-board
+  // if the army shrank, or sitting on a now-empty cell).
+  {
+    const myUnit = GAME.pieces.find(p => p.owner === 'white');
+    GAME.kbCursor = myUnit ? { row: myUnit.row, col: myUnit.col } : { row: GRID - 1, col: 0 };
+  }
   ALL_GATE_IDS.forEach(g => {
     const el = document.getElementById(`cnt-${g}`);
     if (el) el.textContent = '0';
@@ -2371,6 +2387,7 @@ function applyGate(unit, gateName) {
   refreshSuperpos(unit);
   logEv(`CHARGE [${gateName}] on ${coord(unit.row,unit.col)} — ${GATE_INFO[gateName]?.short||gateName}. `+
     `Charge now ${(charge(unit)*100)|0}%.`,'gate');
+  announceA11y(`${GATE_INFO[gateName]?.label||gateName} applied to ${coord(unit.row,unit.col)}. Charge now ${(charge(unit)*100)|0} percent.`);
   spawn(unit.col*CELL+CELL/2, unit.row*CELL+CELL/2,'#3fe08a',9);
   sfxGate(gateName);
   propagateEntanglement(unit, gateName);
@@ -2396,6 +2413,7 @@ function applyMeasure(unit) {
   unit.inSuperpos=false;
   unit.coherence=Math.min(unit.maxCoh, unit.coherence+12);
   logEv(`MEASURE: ${coord(unit.row,unit.col)} collapses to |${collapsed}⟩ and stabilizes (coherence +12).`,'measure');
+  announceA11y(`${coord(unit.row,unit.col)} measured, collapses to state ${collapsed}, coherence restored.`);
   spawn(unit.col*CELL+CELL/2, unit.row*CELL+CELL/2,'#f5b73c',14);
   sfxGate('MEASURE');
   GAME.gateCounts.MEASURE = (GAME.gateCounts.MEASURE||0)+1;
@@ -2496,6 +2514,7 @@ function attack(attacker, target) {
 
   if (!fired) {
     logEv(`MISFIRE: ${coord(attacker.row,attacker.col)} measured |0⟩ (P(hit) was ${(pAtt*100)|0}%) — no discharge.`,'info');
+    announceA11y(`Miss. ${coord(attacker.row,attacker.col)}'s attack misfired — hit chance was ${(pAtt*100)|0}%.`);
     spawn(target.px, target.py,'#9aa3cf',6);
     GAME.floats.push({text:'MISS', x:target.px, y:target.py-CELL*0.4, vy:-1.0, life:0.7, color:'#9aa3cf', size:7});
     beep(196,'square',0.07,0.12);
@@ -2552,6 +2571,7 @@ function attack(attacker, target) {
   }
   logEv(`STRIKE: ${coord(attacker.row,attacker.col)} → ${coord(target.row,target.col)} for ${dmg}`+
     `${crit?' (CRITICAL — target caught in |1⟩, the fragile excited state!)':''}.`,'capture');
+  announceA11y(`Hit${crit?', critical,':''}. ${coord(attacker.row,attacker.col)} strikes ${coord(target.row,target.col)} for ${dmg} damage, ${target.hp-dmg} HP remaining.`);
   spawn(attacker.px, attacker.py, FACTION[attacker.owner].col, 8);
   const partner = target.entangledWith && GAME.pieces.find(p=>p.id===target.entangledWith);
   // Flash the entanglement beam when a hit propagates.
@@ -2962,6 +2982,20 @@ function drawHighlights() {
     ctx.shadowColor='#8b7dff'; ctx.shadowBlur=14;
     ctx.strokeRect(u.col*CELL+2,u.row*CELL+2,CELL-4,CELL-4);
     ctx.shadowBlur=0;
+  }
+
+  // GOV-4 — keyboard-only board cursor. Only drawn once a player has
+  // actually used arrow-key navigation (GAME._kbCursorActive), same
+  // reasoning as the kb-hint ribbon: a mouse-only player should never see
+  // UI chrome for an input mode they're not using. Dashed to read as
+  // distinct from both the reachable-tile highlight and the selected-unit
+  // ring even when all three land on the same cell.
+  if (GAME._kbCursorActive && GAME.kbCursor && GAME.phase!=='gameover') {
+    const kx=GAME.kbCursor.col*CELL, ky=GAME.kbCursor.row*CELL;
+    ctx.strokeStyle='#f5b73c'; ctx.lineWidth=2; ctx.setLineDash([5,4]);
+    ctx.shadowColor='#f5b73c'; ctx.shadowBlur=8;
+    ctx.strokeRect(kx+5,ky+5,CELL-10,CELL-10);
+    ctx.shadowBlur=0; ctx.setLineDash([]);
   }
 
   // Attack-target mode: pulse adjacent enemies.
@@ -3653,6 +3687,16 @@ function updateSelInfo(unit) {
 // ═══════════════════════════════════════════════════════
 // LOG
 // ═══════════════════════════════════════════════════════
+// GOV-4 — announce a one-off event to screen-reader users via the dedicated
+// assertive region (#a11y-event, distinct from #a11y-status's periodic
+// polite turn summary — see that element's own comment for why they're
+// separate). Plain text only; strips nothing, so callers should already
+// pass screen-reader-appropriate prose, not canvas-formatted strings.
+function announceA11y(msg) {
+  const el = document.getElementById('a11y-event');
+  if (el) el.textContent = msg;
+}
+
 function logEv(msg, type) {
   const log=document.getElementById('log');
   const span=document.createElement('span');
@@ -3906,6 +3950,44 @@ document.addEventListener('keydown', e => {
       updateSelInfo(null);
     }
     closeModal();
+    return;
+  }
+
+  // GOV-4 — keyboard-only board navigation. Arrow keys move a cursor cell;
+  // Enter/Space "clicks" it by dispatching a REAL synthetic MouseEvent at
+  // the cursor's on-screen position, so it runs through the exact same,
+  // already-tested click handler the mouse uses (select → move → open gate
+  // menu → attack/entangle target) instead of a second, parallel
+  // implementation that could silently drift from it. Scoped to when no
+  // menu/mode is already consuming keys, matching every other keyboard
+  // shortcut's own scoping in this handler.
+  const ARROW_DELTA = { ArrowUp:[-1,0], ArrowDown:[1,0], ArrowLeft:[0,-1], ArrowRight:[0,1] };
+  if (!GAME.gateMenu && !GAME.attackMode && !GAME.cnotMode && GAME.phase!=='gameover'
+      && ARROW_DELTA[e.key]) {
+    e.preventDefault();
+    GAME._kbCursorActive = true;
+    const [dr,dc] = ARROW_DELTA[e.key];
+    GAME.kbCursor = {
+      row: Math.max(0, Math.min(GRID-1, GAME.kbCursor.row + dr)),
+      col: Math.max(0, Math.min(GRID-1, GAME.kbCursor.col + dc)),
+    };
+    const occupant = unitAt(GAME.kbCursor.row, GAME.kbCursor.col);
+    const cellName = coord(GAME.kbCursor.row, GAME.kbCursor.col);
+    if (occupant) {
+      announceA11y(`${cellName}: ${FACTION[occupant.owner].name} ${occupant.role}, ${occupant.hp} of ${occupant.maxHp} HP, ${(charge(occupant)*100)|0} percent charged${occupant.owner===GAME.turn?', yours':''}.`);
+    } else {
+      announceA11y(`${cellName}: empty.`);
+    }
+    return;
+  }
+  if (!GAME.gateMenu && !GAME.attackMode && !GAME.cnotMode && GAME.phase!=='gameover'
+      && GAME._kbCursorActive && (e.key===' ' || e.key==='Enter')) {
+    e.preventDefault();
+    const rect = canvas.getBoundingClientRect();
+    const scale = rect.width / BOARD;
+    const clientX = rect.left + (GAME.kbCursor.col + 0.5) * CELL * scale;
+    const clientY = rect.top + (GAME.kbCursor.row + 0.5) * CELL * scale;
+    canvas.dispatchEvent(new MouseEvent('click', { clientX, clientY, bubbles: true }));
     return;
   }
 
