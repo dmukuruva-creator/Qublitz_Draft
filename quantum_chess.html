@@ -2066,6 +2066,7 @@ const GAME = {
   turnCap:60,           // battle ends here → most units (then HP) wins
   mode:'vsBot', botColor:'black',
   decoRate:2,
+  importedT1Ns:null,    // BR-1 — set by importSimulatorParams() if ?t1= was in the URL
   unitCount:6, boardPreset:0,
   log:[], gateMenu:null, winner:null,
   cnotMode:false, cnotControl:null,        // entangle-target mode
@@ -4591,7 +4592,7 @@ function analyzePosition() {
 
   // My charged unit sitting next to a live enemy → exposed to a critical.
   const exposed = mine.find(u=>charge(u)>0.6 && adjacentEnemies(u).some(e=>charge(e)>0.4));
-  if (exposed) tips.push({p:7,text:`${coord(exposed.row,exposed.col)} is charged beside a live enemy — a unit caught in |1⟩ (the fragile excited state) takes a CRITICAL. Strike, retreat, or MEASURE to discharge.`,type:'warn'});
+  if (exposed) tips.push({p:7,text:`${coord(exposed.row,exposed.col)} is charged beside a live enemy — a unit caught in |1⟩ (the fragile excited state) takes a CRITICAL. Strike, retreat, or MEASURE to discharge — collapsing it to a definite outcome is measurement backaction, the same thing the Measurement Tutorial page plots for a real qubit (TOME has the deep link).`,type:'warn'});
 
   // Finish a low-HP enemy.
   const low = foes.filter(f=>f.hp<=1).sort((a,b)=>a.hp-b.hp)[0];
@@ -4887,6 +4888,7 @@ function openPhysicsLab() {
   document.getElementById('modal-content').innerHTML = `
 <h2>✦ PHYSICS LAB</h2>
 <p style="text-align:center;color:var(--dim);font-size:13px;margin:-8px 0 12px">Charge decays like a real qubit's does — here's the proof, then the math behind it.</p>
+${GAME.importedT1Ns ? `<p style="text-align:center;color:var(--teal);font-size:13px;margin:-4px 0 12px">T₁ imported from the Qubit Simulator page: ${GAME.importedT1Ns}ns there, scaled into this game's turn economy.</p>` : ''}
 
 <canvas id="diag-canvas" width="360" height="190" style="width:100%;max-width:360px;display:block;margin:8px auto;background:#0a0f22;border:1px solid var(--border);border-radius:4px"></canvas>
 <p id="diag-readout" style="text-align:center;color:var(--dim);font-size:13px;margin:4px 0"></p>
@@ -4902,7 +4904,7 @@ ${unitBlock}
   <h3>THE MODEL</h3>
   <p style="color:var(--dim);font-size:13px;line-height:1.7">Every unit is a single qubit whose state ρ evolves under the <b style="color:var(--teal)">Lindblad master equation</b> for amplitude damping (T₁) plus dephasing (T₂):</p>
   <pre style="color:var(--gold);font-size:13px;line-height:1.6;text-align:center;background:#0a0f22;border:1px solid var(--border);border-radius:4px;padding:10px;margin:6px 0">dρ/dt = −(i/ℏ)[H,ρ] + Σ γₖ( Lₖ ρ Lₖ† − ½{Lₖ†Lₖ, ρ} )</pre>
-  <p style="color:var(--dim);font-size:13px;line-height:1.7">Each turn we apply its <b>exact</b> solution toward |0⟩: charge relaxes as <b style="color:var(--red)">e<sup>−t/T₁</sup></b>, transverse coherence as <b style="color:var(--teal)">e<sup>−t/T₂</sup></b> (with T₂ ≤ 2T₁). At the current rate (${GAME.decoRate}/turn): <b style="color:var(--gold)">T₁ = ${T1.toFixed(1)}</b>, <b style="color:var(--gold)">T₂ = ${T2.toFixed(1)}</b> turns.</p>
+  <p style="color:var(--dim);font-size:13px;line-height:1.7">Each turn we apply its <b>exact</b> solution toward |0⟩: charge relaxes as <b style="color:var(--red)">e<sup>−t/T₁</sup></b>, transverse coherence as <b style="color:var(--teal)">e<sup>−t/T₂</sup></b> (with T₂ ≤ 2T₁). At the current rate (${GAME.decoRate.toFixed(2)}/turn): <b style="color:var(--gold)">T₁ = ${T1.toFixed(1)}</b>, <b style="color:var(--gold)">T₂ = ${T2.toFixed(1)}</b> turns.${GAME.importedT1Ns ? ` <span style="color:var(--teal)">Imported from the Qubit Simulator page: T₁ = ${GAME.importedT1Ns}ns there, scaled to this game's turn economy.</span>` : ''}</p>
   <p style="color:var(--dim);font-size:13px;line-height:1.6">The chart above fits the engine's own generated data against this exponential model AND a linear model — confirming the <i>implementation</i> matches what the equation prescribes.</p>
   <p style="color:var(--wood);font-size:13px;line-height:1.6;margin:2px 0 6px">This validates the implementation against the model; the model itself is standard open-quantum-systems physics — it is not an empirical measurement against a real physical qubit.</p>
 </div>
@@ -5071,9 +5073,20 @@ function openTutorial() {
 
 <h3>▸ ENTANGLEMENT &amp; MEASURE</h3>
 <p><b>Entangle (CNOT)</b> links two <b>adjacent</b> units (friend or foe) into a Bell link — a hit on one bleeds <b>1 damage onto the other</b>. Entangle two enemies for splash value. <b>Measure</b> collapses your unit to an eigenstate and restores coherence (+12) — discharge a dangerously-exposed unit, or stabilize one.</p>
+<p style="color:var(--dim);font-size:13px">What you just did to that unit — collapsing a superposition to a definite outcome — is exactly <b>measurement backaction</b>: the same thing the
+  <a href="Quantum_Measurement_Tutorial" target="_top" style="color:var(--teal)">Measurement Tutorial page</a>
+  plots for a real qubit. (Deep link works when this game is embedded in the lab's app; opened standalone, it's just a pointer to the page name.)</p>
 
 <h3>🎨 READING THE BOARD</h3>
 <p>Units glow in their faction color — <b style="color:#2fe0d0">cyan</b> vs <b style="color:#ff4d9d">magenta</b>; the glow turns <b style="color:#ff5a72">hot red</b> as a unit charges toward |1⟩ — physically, the fragile excited state, not a "power level." <b>Green pips</b> above = HP; the bottom bar = charge. The state dot reads green |0⟩ (safe, ground state) · cyan superposition · red |1⟩ (charged, but short-lived). The Sage NPC beside the board calls out the best play each turn.</p>
+
+<h3>▸ SEE THE REAL PHYSICS</h3>
+<p style="color:var(--dim);font-size:13px">Every mechanic above is dramatizing something a real qubit does — these pages on the lab's site formalize it (links work when this game is embedded there):</p>
+<p style="font-size:13px;line-height:2">
+  <a href="Qubit_Simulator" target="_top" style="color:var(--teal)">Qubit Simulator →</a> charge, the Born rule, and what X/H actually do to a real qubit's state.<br>
+  <a href="Quantum_Measurement_Tutorial" target="_top" style="color:var(--teal)">Measurement Tutorial →</a> what MEASURE's collapse looks like plotted, not just narrated.<br>
+  <a href="Dilution_Refrigerator_Noise_Explorer" target="_top" style="color:var(--teal)">Dilution Refrigerator Noise Explorer →</a> where T1/T2 decoherence — the clock this game runs on — actually comes from.
+</p>
 `;
   document.getElementById('modal-overlay').classList.add('show');
 }
@@ -5081,8 +5094,32 @@ function openTutorial() {
 // ═══════════════════════════════════════════════════════
 // INIT
 // ═══════════════════════════════════════════════════════
+// BR-1 — T1 import from the simulator (deep link). ?t1=<ns> in the URL sets
+// this game's decoherence rate from the Qubit Simulator page's own T1
+// (nanoseconds — a real qubit parameter, normally hidden by default on that
+// page behind a "show hidden simulator parameters" toggle since it's not
+// meant to be guessed at). This does NOT treat nanoseconds as game turns
+// directly (a literal passthrough would either flatline every real T1 to
+// the same clamped minimum, or need the game to model real time — neither
+// is honest); instead it rescales relative to a documented reference point
+// (200ns — the simulator's own example secrets value) so a qubit with 2×
+// the reference T1 decays 2× slower in-game too. That ratio is the real,
+// disclosed physics link; the absolute turn count is a game-balance choice,
+// same as GAME.decoRate always was.
+function importSimulatorParams() {
+  let params;
+  try { params = new URLSearchParams(location.search); } catch (e) { return; }
+  const t1ns = parseFloat(params.get('t1'));
+  if (!isFinite(t1ns) || t1ns <= 0) return;
+  const REFERENCE_T1_NS = 200;
+  const importedT1Turns = Math.max(1, Math.min(15, 5 * (t1ns / REFERENCE_T1_NS)));
+  GAME.decoRate = 10 / importedT1Turns;
+  GAME.importedT1Ns = t1ns;
+}
+
 window.addEventListener('load', () => {
   document.fonts.ready.then(() => {
+    importSimulatorParams();
     initBg();
     animateBg();
     runBoot();
