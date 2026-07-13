@@ -9,8 +9,11 @@ waiting: nothing structural. BE-8/UP-5/GD-1 closed 2026-07-11 (see prior note be
   mechanical error found mid-session; NOT fully unwound since some dependencies are real (see
   HANDOFF.md's "Branch topology" row in the carried-forward table) — merge in stack order.
   Remaining open items are per-task, not structural: UP-0 (draft ready, needs user approval to
-  post — outward-facing), UP-2 (blocked on UP-0), push/merge go-ahead for the full ten-branch set
-  (PR-A/C/D/F from before + the new six-branch stack), and eventually IRB consultation for EV-4.
+  post — outward-facing), UP-2 (mocked 2026-07-13 on branch `platform-home` off `simulator-bridges`,
+  live-tested, NOT merged — merge itself still needs UP-0/PI sign-off, only the visual was built
+  early at explicit user request so it could be shown to the PI bundled with everything else in one
+  sitting), push/merge go-ahead for the full ten-branch set (PR-A/C/D/F from before + the new
+  six-branch stack) + PR-E (`platform-home`), and eventually IRB consultation for EV-4.
   Prior note (2026-07-11): BE-8's iCloud relocation done (both repos + the linked worktree moved
   to ~/Developer/, verified via xattr to be outside iCloud sync); Phase F's other former blocker,
   "upstream PR #28 clears", was already done (#27/#28 merged 2026-07-04); UP-5 and GD-1 (initial

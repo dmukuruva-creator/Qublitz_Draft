@@ -194,7 +194,7 @@ resolution; all fork-repo branches, all opened only after UP-0's maintainer issu
 | PR | Branch (new, fork) | Contents | Politics / gate |
 |---|---|---|---|
 | **PR-D — "Page contract: config + shared header on every page"** | `platform-page-contract` | UP-1 (`set_page_config` ×5 missing pages, ~40-line `utils/ui.py` `page_header()`, VPN warning banner) | Squarely inside the agreed "visualization improvements" mandate; low politics; review story: "one helper + 10 tiny diffs" |
-| **PR-E — "Front door: landing page"** | `platform-home` | UP-2 (hero line, one-sentence blurb per tool, Learn/Play/Research grouping, start-here, demote FitzLab link) | **Issue-gated** (UP-0): touches the lab's public identity; single-file diff of `home.py` + before/after screenshots |
+| **PR-E — "Front door: landing page"** | `platform-home` | UP-2 (hero line, one-sentence blurb per tool, Learn/Play/Research grouping, start-here, demote FitzLab link) — **mocked 2026-07-13, committed to the branch, not merged** | **Issue-gated for the merge** (UP-0): touches the lab's public identity; single-file diff of `home.py`, before/after screenshots now exist |
 | **PR-F — "Perf: gate the four ungated pages"** | `platform-perf-gating` | UP-3 per-page recipes + UP-4's measured before/after numbers in the PR body + physics-regression guard on every cached path | Inside mandate ("latency"); must not touch anything PR #28 touches |
 | **PR-G — "Cold-start diet: lazy imports"** | `platform-cold-start` | UP-5 (lazy-import librosa/soundfile/bokeh in the pages that use them) | **Issue-gated** for anything beyond import moves; no dependency removals without sign-off |
 | *(theme)* | — | `.streamlit/config.toml` platform theme reconciling the Arena's identity | **Propose, don't ship** (PI stall-list): mock screenshots in UP-0's issue; ships only on explicit approval, then rides PR-D or its own micro-PR |
@@ -1053,7 +1053,19 @@ so recurrence is expected until the HUMAN relocation action below actually happe
   (the same pre-existing qutip issue) before `page_header()` ever runs, in this environment only.
   **Not done: PR body screenshots** — no PR opened yet (not pushed, per this file's own hard
   constraints on upstream pushes needing explicit go-ahead).
-- [ ] **UP-2 — The front door (PR-E; ~1 day; blocked on UP-0).** Rewrite `home.py` (single-file
+- [~] **UP-2 — The front door (PR-E; ~1 day; blocked on UP-0 for the merge, mocked 2026-07-13).**
+  **[MOCKED 2026-07-13, fork repo, branch `platform-home` off `simulator-bridges` — committed
+  locally, not merged, not pushed. Built at explicit user request specifically to bundle into one
+  conversation with the PI rather than gate the visual on UP-0's async issue round-trip first —
+  see the reviewer note UP-0's own draft left itself: "building even a mockup starts making the
+  same identity calls this issue exists to ask permission for" — that caution stands for MERGING
+  it, not for showing it. `home.py` rewritten per spec below; live-tested via Playwright
+  (`streamlit run home.py`, zero console errors, all 9 `page_link` targets confirmed to resolve
+  after a synthetic click). Before/after screenshot pair is in
+  `docs/STATUS_REPORT_2026-07-11.md`'s companion artifact, section "The one piece that's a
+  proposal, not a shipped change." Still gated exactly as before on the identity questions UP-0
+  itself lists (platform theme, Custom Qubit Query naming) — the mockup answers the layout/copy
+  question, not those.]** Rewrite `home.py` (single-file
   diff): (a) `set_page_config` + hero — the lab's honest one-liner: "Simulate real quantum
   hardware in your browser — the same open-quantum-systems physics our lab runs, no install";
   (b) three groups with one-sentence blurbs each: **Learn** (Qubit Simulator, Measurement
