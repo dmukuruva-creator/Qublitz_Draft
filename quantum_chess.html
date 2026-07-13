@@ -2098,6 +2098,7 @@ const GAME = {
   decoRate:2,
   importedT1Ns:null,    // BR-1 — set by importSimulatorParams() if ?t1= was in the URL
   kbCursor:{row:GRID-1,col:0}, _kbCursorActive:false,  // GOV-4 — keyboard-only board navigation
+  evQuizEnabled:false, evQuizResults:[],  // EV-1 — off by default; see the SETTINGS toggle
   unitCount:6, boardPreset:0,
   log:[], gateMenu:null, winner:null,
   cnotMode:false, cnotControl:null,        // entangle-target mode
@@ -2678,6 +2679,13 @@ async function endTurn() {
         GAME.campaignDone = GAME.campaignDone || [];
         if (!GAME.campaignDone.includes(GAME.campaignMission)) GAME.campaignDone.push(GAME.campaignMission);
         setTimeout(() => { startTypewriter('Mission complete! ' + m.winText); }, 600);
+        // EV-1 — the in-game 3-question transfer-check variant, OFF by
+        // default (see the settings toggle in openMenu()). docs/EV1_
+        // TRANSFER_TEST.md is the reviewed, versioned instrument this
+        // mirrors; PI review of BOTH is still an open human action (see
+        // HANDOFF.md) -- this ships toggleable and unused until that
+        // review clears, not silently defaulted on.
+        if (GAME.evQuizEnabled) setTimeout(() => openEvQuiz(), 2200);
       }
     }
     return;
@@ -4224,6 +4232,127 @@ function leaderboardHTML() {
 }
 
 // ═══════════════════════════════════════════════════════
+// EV-2 — CONSENT-GATED TELEMETRY EXPORT
+// ═══════════════════════════════════════════════════════
+// A student-initiated local file download, never an automatic network
+// transmission (there is no network call anywhere in this file — see
+// docs/DATA_AND_CONSENT.md, GOV-2). Contains only gate-log counts,
+// mission-outcome data, and anonymous personal-bests already stored in
+// localStorage — no name, no email, no IP, nothing identifying. The
+// student hands the resulting JSON file to their instructor themselves;
+// this game never sees where it goes after the browser writes it to disk.
+const GATE_LOG_EXPORT_SCHEMA_VERSION = 2;   // v2 adds evQuiz (EV-1's in-game variant)
+
+function buildGateLogExport() {
+  return {
+    schemaVersion: GATE_LOG_EXPORT_SCHEMA_VERSION,
+    exportedAt: new Date().toISOString(),
+    // Per-gate application counts this session (resets on page reload —
+    // GAME.gateCounts is in-memory only, never persisted).
+    gateLog: { ...GAME.gateCounts },
+    combat: {
+      hitsLanded: GAME.hitsLanded || 0,
+      critCount: GAME.critCount || 0,
+      entanglCount: GAME.entanglCount || 0,
+      guardAttacksFaced: GAME.guardStats ? GAME.guardStats.attacksOnGuarding : 0,
+      guardCritsTaken: GAME.guardStats ? GAME.guardStats.critsOnGuarding : 0,
+    },
+    // Which training missions (see CAMPAIGN_MISSIONS) have been completed
+    // THIS session — campaignDone is in-memory only, same as gateLog above.
+    campaign: {
+      completedIndices: GAME.campaignDone || [],
+      completedTitles: (GAME.campaignDone || []).map(i => CAMPAIGN_MISSIONS[i]?.title).filter(Boolean),
+      totalMissions: CAMPAIGN_MISSIONS.length,
+    },
+    // EV-1's in-game 3-question transfer check, if the (off-by-default)
+    // toggle was enabled and the student chose to answer. Empty array if
+    // never enabled or always skipped -- never inferred, never required.
+    evQuiz: GAME.evQuizResults || [],
+    // Anonymous personal-bests already in localStorage (see loadLeaderboard) --
+    // included here too so a single export file has everything, rather than
+    // asking a student to find and attach a second one.
+    personalBests: loadLeaderboard(),
+  };
+}
+
+function exportGateLog() {
+  const data = buildGateLogExport();
+  const json = JSON.stringify(data, null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `qublitz-gate-log-${new Date().toISOString().slice(0, 10)}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  logEv('Gate log exported — check your downloads folder. Nothing was sent anywhere; this is a local file only.', 'system');
+}
+
+// ═══════════════════════════════════════════════════════
+// EV-1 — IN-GAME TRANSFER-CHECK (3-question variant)
+// ═══════════════════════════════════════════════════════
+// The in-game companion to docs/EV1_TRANSFER_TEST.md's 5-question printable
+// one-pager -- 3 of its questions, adapted for a quick end-of-mission check.
+// Both need PI review before real classroom use (see HANDOFF.md's human-
+// actions list); this ships OFF by default and toggleable precisely so it
+// exists to review without being live for anyone by accident.
+const EV_QUIZ_QUESTIONS = [
+  {
+    q: 'You attacked at 80% charge and it landed. What determined that 80% chance?',
+    options: ['The Born rule: hit probability equals your qubit\'s |1⟩ population', 'A random dice roll unrelated to charge', 'Your opponent\'s HP'],
+    correct: 0,
+  },
+  {
+    q: 'You left a fully-charged unit idle for a few turns and its charge dropped. Why?',
+    options: ['A scripted game penalty for waiting', 'T1 relaxation — |1⟩ is a real qubit\'s fragile, short-lived excited state', 'The unit ran out of "energy points"'],
+    correct: 1,
+  },
+  {
+    q: 'Applying Z didn\'t change your charge at all, but it changed your GUARD outcome. Why?',
+    options: ['Z is a visual effect only', 'Z flips relative phase, which the Z-basis charge measurement can\'t see but an X-basis GUARD measurement can', 'GUARD ignores charge and phase alike'],
+    correct: 1,
+  },
+];
+
+function openEvQuiz() {
+  document.getElementById('modal-content').innerHTML = `
+<h2>◈ QUICK CHECK ◈</h2>
+<p style="text-align:center;color:var(--dim);font-size:13px;margin-bottom:14px">
+  3 questions, optional, for your instructor -- not scored in-game. Included in EXPORT MY GATE LOG if you answer.
+</p>
+<form id="ev-quiz-form">
+${EV_QUIZ_QUESTIONS.map((item, qi) => `
+  <div style="margin:14px 0">
+    <p style="color:var(--teal);font-size:13px">${qi + 1}. ${item.q}</p>
+    ${item.options.map((opt, oi) => `
+      <label style="display:block;font-size:13px;margin:4px 0;cursor:pointer">
+        <input type="radio" name="ev-q${qi}" value="${oi}"> ${opt}
+      </label>`).join('')}
+  </div>`).join('')}
+</form>
+<button class="btn" style="border-color:var(--teal);color:var(--teal)" onclick="submitEvQuiz()">SUBMIT</button>
+<button class="btn" onclick="closeModal()">SKIP</button>`;
+  document.getElementById('modal-overlay').classList.add('show');
+}
+
+function submitEvQuiz() {
+  const answers = EV_QUIZ_QUESTIONS.map((item, qi) => {
+    const picked = document.querySelector(`input[name="ev-q${qi}"]:checked`);
+    return picked ? parseInt(picked.value) : null;
+  });
+  GAME.evQuizResults.push({
+    missionIndex: GAME.campaignMission,
+    answeredAt: new Date().toISOString(),
+    answers,                                          // raw indices, no free text, nothing identifying
+    correctCount: answers.filter((a, i) => a === EV_QUIZ_QUESTIONS[i].correct).length,
+  });
+  closeModal();
+  logEv('Quick check recorded — included in your next gate-log export.', 'system');
+}
+
+// ═══════════════════════════════════════════════════════
 // CAMPAIGN — training missions (see CAMPAIGN_MISSIONS; count shown in UI is dynamic)
 // ═══════════════════════════════════════════════════════
 const CAMPAIGN_MISSIONS = [
@@ -5230,13 +5359,21 @@ function openMenu() {
   onclick="closeModal();resetGame('vsBot');GAME.difficulty=parseInt(document.getElementById('diff-sel')?document.getElementById('diff-sel').value:1)||1">▶ PLAY vs BOT (1P)</button>
 <button class="btn" onclick="closeModal();resetGame('vs2P')">▶ LOCAL vs FRIEND (2P)</button>
 <hr style="border-color:var(--border);margin:12px 0">
-<button class="btn" onclick="openCampaign()">◈ TRAINING PROGRAMS (6 missions)</button>
+<button class="btn" onclick="openCampaign()">◈ TRAINING PROGRAMS (${CAMPAIGN_MISSIONS.length} missions)</button>
 <button class="btn" onclick="closeModal();openTutorial()">▸ BATTLE MANUAL</button>
 <button class="btn" onclick="openGlossaryIndex()">▸ GLOSSARY — every gate, one tap away</button>
 <button class="btn" style="border-color:var(--gold);color:var(--gold)" onclick="openPhysicsLab()">✦ PHYSICS LAB — inspect the real engine</button>
+<button class="btn" onclick="exportGateLog()">⬇ EXPORT MY GATE LOG (for your instructor)</button>
 <hr style="border-color:var(--border);margin:12px 0">
 
 <h3>SETTINGS</h3>
+<p style="color:var(--dim);font-size:13px;margin-bottom:6px;">
+  <label style="cursor:pointer">
+    <input type="checkbox" id="ev-quiz-toggle" ${GAME.evQuizEnabled?'checked':''}
+      onchange="GAME.evQuizEnabled=this.checked">
+    End-of-mission quick check (research instrument, off by default)
+  </label>
+</p>
 <p style="color:var(--dim);font-size:13px;margin-bottom:6px;">
   Bot Difficulty:
   <select id="diff-sel" onchange="GAME.difficulty=parseInt(this.value)"
