@@ -1,17 +1,22 @@
 # Cycle state
 cycle: 03
 phase: ship
-waiting: nothing structural — BE-8's iCloud relocation is DONE (2026-07-11, user-authorized: both
-  repos + the linked worktree moved to ~/Developer/, verified via xattr to be outside iCloud
-  sync). Phase F's other former blocker, "upstream PR #28 clears", was already DONE (#27/#28
-  merged 2026-07-04). UP-5 (2026-07-11, user made the wire-up-vs-delete call directly) and GD-1
-  (2026-07-11, re-tuned 27.5%->44.0% loss rate, root-caused via instrumentation; 65% bar not
-  fully closed — a real structural ceiling under bot-AI-only scope, documented in the harness's
-  own tuning note) are both DONE. Remaining open items are per-task, not structural: UP-0 (draft
-  ready, needs user approval to post — outward-facing), UP-2 (blocked on UP-0), push/merge
-  go-ahead for PR-A/C/D/F (all committed + tested, none pushed).
+waiting: nothing structural. BE-8/UP-5/GD-1 closed 2026-07-11 (see prior note below). As of
+  2026-07-13, PED-1..5, BR-1..4, GOV-2/3/4, and EV-1/2/3 are ALSO all DONE — every carried-forward
+  v1 item is now closed except GD-1's remaining tuning ceiling (documented, structural) and EV-4
+  (the actual pilot, hard IRB gate, deliberately not attempted). Six new game-repo branches
+  (arena-pedagogy through arena-evidence) turned out stacked rather than independent — a
+  mechanical error found mid-session; NOT fully unwound since some dependencies are real (see
+  HANDOFF.md's "Branch topology" row in the carried-forward table) — merge in stack order.
+  Remaining open items are per-task, not structural: UP-0 (draft ready, needs user approval to
+  post — outward-facing), UP-2 (blocked on UP-0), push/merge go-ahead for the full ten-branch set
+  (PR-A/C/D/F from before + the new six-branch stack), and eventually IRB consultation for EV-4.
+  Prior note (2026-07-11): BE-8's iCloud relocation done (both repos + the linked worktree moved
+  to ~/Developer/, verified via xattr to be outside iCloud sync); Phase F's other former blocker,
+  "upstream PR #28 clears", was already done (#27/#28 merged 2026-07-04); UP-5 and GD-1 (initial
+  27.5%->44.0% re-tune) done the same day.
 goals_locked: true
-last_updated: 2026-07-11
+last_updated: 2026-07-13
 note_cleanup_pass: |
   2026-07-06 — user requested "pressure-test, debug, clean up, final PR". Findings + actions
   (all in the game repo only; fork untouched, #27/#28 still open upstream):

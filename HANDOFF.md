@@ -1229,18 +1229,15 @@ then-broken renderer. Revisit only after Phases A–D ship and the phone decisio
 | ID | One-line summary | Interaction with this batch |
 |---|---|---|
 | GD-1 (bar) | X-only should lose ≥65% vs Medium bot — **[re-tuned 2026-07-11: 27.5%→44.0%, see `tests/bot_guard_harness.test.js`'s own tuning note]**. Instrumented diagnosis found the crit-punishment mechanic already working (bot crits 55% of hits vs X-only's 16.5%) but the bot firing 40% fewer attack attempts overall (shared 0.6 attack-readiness bar + guard turns); lowered the bot's own bar to 0.45. A systematic grid search (attack-threshold × guard-rate × threat-bar) found the result is flat across guard/threat tuning — a real structural ceiling under AI-only scope, not an under-explored parameter | closing the rest needs a scoped decision outside "bot AI tuning" (combat math, unit count, or turn economy) since those affect PvP/human play too |
-| PED-1 | Label the Bloch sphere + first-selection tooltip | pairs with FE-13 |
-| PED-2 | Gate Log counter tooltips, single string source | FE-12 creates that source |
-| PED-3 | Notation ramp (first-use explainer chips) | after FE-6 makes text readable |
-| PED-4 | In-game glossary | FE-12 strings feed it |
-| PED-5 | Physics Lab on-ramp (chart first, math behind expander) | independent |
-| BR-1..4 | Simulator bridges (T₁ import, MEASURE link, Pulse Forge, cross-links) | independent |
-| EV-1..4 | Learning-evidence instrument, telemetry export, instructor pack, pilot (IRB) | pilot BLOCKED on GOV-4 + FE-7 (a11y) |
+| PED-1..5 | Bloch labels, Gate Log tooltips, notation-ramp chips, in-game glossary, Physics Lab reorder | **[DONE 2026-07-12/13, `arena-pedagogy`]** — glossary single-sourced from `GATE_INFO` (no second copy); notation chips fire on first real selection/Physics-Lab-open/attack, sessionStorage-gated |
+| BR-1..4 | Simulator bridges (T₁ import, MEASURE link, Pulse Forge, cross-links) | **[DONE 2026-07-12/13, `arena-bridges`/`arena-pulse-forge` + fork `simulator-bridges`]** — BR-1 verified end-to-end through the real embedded iframe (Python query param → script injection → JS global → in-game rescale); BR-3 shipped as Mission 7 with 8 new automated physics assertions; BR-2/BR-4 skip forcing links where no formalizing page exists |
+| EV-1..4 | Learning-evidence instrument, telemetry export, instructor pack, pilot (IRB) | **[EV-1/2/3 DONE 2026-07-13, `arena-evidence`]** — instrument + export + instructor guide all built and versioned, both EV-1 and EV-3 explicitly flagged NOT YET PI-reviewed. **EV-4 (the pilot) deliberately NOT attempted** — hard IRB gate, a human/institutional decision no amount of engineering substitutes for |
 | ~~GOV-1~~ | ~~Sage hardening~~ | **[MOOT 2026-07-08]** — Sage LLM path deleted, nothing left to harden |
-| GOV-2 | Data/consent posture doc | **[Sage clause MOOT 2026-07-08]** — no prompts transit anywhere now; still independently useful if EV-1..4 telemetry/pilot work resumes, minus the third-party-API section |
-| GOV-3 | Architecture map of the 4.6k-line file | independent; BL-6 is its stretch cousin |
-| GOV-4 | **Accessibility beyond contrast** — keyboard-only board play, screen-reader narration | peer review: pull forward, university deployment likely carries legal obligation; schedule immediately after Phase B |
-| Human actions 1–5 | T9 go-ahead, IRB, PI review, GOV-3 stretch decision, IN-4 docstring branch | unchanged; FE-9 phone decision RESOLVED 2026-07-07 |
+| GOV-2 | Data/consent posture doc | **[DONE 2026-07-13, `arena-evidence`]** — `docs/DATA_AND_CONSENT.md`; every localStorage/sessionStorage key inventoried by grep, zero network calls confirmed by grep, exact EV-2 export schema documented; linked from the fork's Arena page |
+| GOV-3 | Architecture map of the 4.6k-line file | **[DONE 2026-07-12, `arena-governance-docs`]** — `docs/ARCHITECTURE.md`, every line anchor pulled live from the file (not memory), linked from the README |
+| GOV-4 | **Accessibility beyond contrast** — keyboard-only board play, screen-reader narration | **[DONE 2026-07-13, `arena-accessibility`]** — confirmed live: a full select→gate→end-turn cycle completable via arrow keys + Enter alone; a separate assertive ARIA-live region for attack/gate/MEASURE events (the old region only ever showed the turn summary) |
+| Human actions 1–5 | T9 go-ahead, IRB, PI review, GOV-3 stretch decision, IN-4 docstring branch | GOV-3's own stretch (ES-module split) still untouched — deliberately, per its own text. IRB + PI review still open, now with real artifacts (EV-1/2/3) to review rather than a blank slate |
+| Branch topology | — | **[Found + partially fixed 2026-07-13]** PED→bridges→pulse-forge→accessibility→governance-docs→evidence ended up stacked (mechanical error, not by design) rather than each independently off `arena-c03-fe`. Some dependencies turned out real (BR-1 builds on PED-5's Physics Lab restructuring; GOV-3's line anchors need the other code present) — NOT fully unwound, since doing so would mean reworking tested code under time pressure. GOV-2 WAS moved (clean cherry-pick) to sit after `arena-evidence` since its content describes EV-2's schema. Merge in stack order. |
 
 ## Human actions — updated 2026-07-07
 
