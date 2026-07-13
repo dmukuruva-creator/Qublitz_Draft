@@ -78,6 +78,9 @@ and no third-party API call anywhere in this project. No API key is ever needed 
 
 ## Contributing
 
+- **New here?** [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) is a module map of
+  `quantum_chess.html` (physics engine, bot AI, rendering, input, Sage, missions — with line
+  anchors) — locate any subsystem in under 5 minutes instead of reading 5,000+ lines cold.
 - **Branch naming:** feature branches off `main` (e.g. `feature/<thing>`); the canonical game is
   always `quantum_chess.html` — never edit a copy.
 - **Commit messages** must follow `scope: imperative description (ticket-id)`, e.g.
