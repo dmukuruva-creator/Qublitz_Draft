@@ -29,3 +29,7 @@ QuBlitz_Poster_TechniGala26.html
 
 # Screenshots — non-code assets, kept out of git
 screenshots/
+_arena_screenshots/
+
+# Ad hoc Playwright installs for tests/capture_responsive.js (not a repo dependency)
+node_modules/
