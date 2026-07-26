@@ -1,7 +1,18 @@
 # Cycle state
 cycle: 03
 phase: ship
-waiting: nothing structural. BE-8/UP-5/GD-1 closed 2026-07-11 (see prior note below). As of
+waiting: |
+  2026-07-26 — NEW WORK IN FLIGHT outside this cycle's scope, per David's approved plan
+  (~/.claude/plans/fancy-hugging-salamander.md): the typography/density + Photon Duel D0–D3
+  rework. Phase 0 (TY-1..5 type scale + SM-1..7 story declutter) is COMMITTED on branch
+  `duel-phase0` (stacked on arena-evidence; commits 8949e38 + f8f771b), full gate green
+  (qphysics, contrast 0-AA, offline 3-fonts, harnesses, captures, live-checks 5/5; extracted
+  blocks hash-identical; bot_guard bit-identical, only the known GD-1 bar fails). FE-6's
+  pixel-font classification is superseded — see HANDOFF.md's FE-6 amendment. Cycle 03 close
+  (Gate-2) still awaits David; when cycle 04 opens, this plan becomes its PLAN.md. Duel work
+  (D0+) continues on `duel-d0` stacked above. Prior status follows.
+  ---
+  nothing structural. BE-8/UP-5/GD-1 closed 2026-07-11 (see prior note below). As of
   2026-07-13, PED-1..5, BR-1..4, GOV-2/3/4, and EV-1/2/3 are ALSO all DONE — every carried-forward
   v1 item is now closed except GD-1's remaining tuning ceiling (documented, structural) and EV-4
   (the actual pilot, hard IRB gate, deliberately not attempted). Six new game-repo branches

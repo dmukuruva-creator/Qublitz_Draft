@@ -389,6 +389,13 @@ Golden rule: edit canonical first, test, then copy to the fork and run its gate.
   Full test suite + responsive captures green, no console errors, fonts visibly correct at
   390/1440px.
 - [x] **FE-6 — Typography system: pixel font is a headline voice, not a body font.**
+  > ⚠️ **SUPERSEDED by TY-1..TY-5 (branch `duel-phase0`, 2026-07-26, per David's explicit
+  > direction):** FE-6's classification kept Press Start 2P on buttons/panel-headers/modal
+  > chrome at a 12px floor; the TY pass demotes the pixel face to display-only (boot/title
+  > logos, modal h2, vote title, canvas WIN/DRAW banners, unit glyphs, FX floats — all ≥ the
+  > scale's --fs-2) and moves everything dense/interactive to Space Grotesk on a 4-size
+  > CSS-var scale (--fs-0..3), with Rajdhani (digits subset) as the HUD-numerals face.
+  > Do not "fix" body-face buttons/headers back to pixel — that's the old rule.
   **[DONE 2026-07-08.]** Swept all 84 `font-size:Npx` declarations (CSS rules + inline styles):
   for each, checked whether its own rule/attribute also declared the pixel font — if so, floored
   at 12px (headings/labels/flavor: panel `h3`s, buttons, modal titles, TOME strings); if not
