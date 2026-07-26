@@ -189,6 +189,9 @@ async function checkLogDedupeAndSageScroll(chromium) {
   );
 
   const sageCheck = await page.evaluate(() => {
+    // SM-1 — the bar now defaults collapsed; this check's contract is the
+    // EXPANDED bar's scroll-not-clip behavior, so expand it first.
+    if (typeof _sageCollapsed !== 'undefined' && _sageCollapsed) toggleSagePanel();
     const el = document.getElementById('sage-bar-text');
     el.textContent = 'A very long sage message that must not be silently clipped mid-sentence. '.repeat(6);
     const cs = getComputedStyle(el);

@@ -462,6 +462,7 @@ canvas { display: block; cursor: pointer; }
 }
 /* FE-6 — gate-use counts are values a student reads, not flavor; body font. */
 .gcnt span { color: var(--gold); font-family: var(--font-num); font-weight: 600; font-size:var(--fs-0); }
+.gcnt.hidden { display: none; }  /* SM-4 — counters default-collapsed */
 
 .btn {
   display: block; width: 100%;
@@ -497,14 +498,6 @@ canvas { display: block; cursor: pointer; }
   box-shadow: 0 12px 30px rgba(139,125,255,0.50);
 }
 
-#sel-eq {
-  /* FE-6 — the quantum-state readout is a value a student reads to
-     understand game state, not flavor; moved off the pixel font (was
-     11px Press Start 2P). */
-  font-size:var(--fs-0); color: var(--teal);
-  overflow-wrap: break-word; word-break: normal; min-height: 16px; margin-bottom: 4px;
-  font-family: var(--body); font-weight: 600; line-height: 1.7;
-}
 /* FE-13 — progressive disclosure: this ~60-word explainer (Charge = strike
    chance, why |1⟩ is fragile, etc. — UX-7's own honest copy, good copy in
    the wrong place by default) used to always render, pushing the panel's
@@ -524,6 +517,11 @@ canvas { display: block; cursor: pointer; }
   font-family: var(--body); font-weight: 500;
 }
 #sel-hint.show { display: block; }
+/* SM-5 — the GD-5 coherence-budget sentence rides the same disclosure as the
+   hint prose: actionable numbers stay (HP/coherence/X-basis/Bloch), sentences
+   are one tap away. */
+#sel-budget { display: none; }
+#sel-budget.show { display: block; }
 
 /* ── Retro Sage Dialogue Bar ──────────────────────── */
 /* Portrait canvas inside the dialogue bar */
@@ -684,6 +682,16 @@ canvas { display: block; cursor: pointer; }
   height: 54px; overflow-y: auto;
   font-family: var(--body); font-weight: 500; line-height: 1.75;
 }
+#log.hidden { display: none; }  /* SM-6 — default-collapsed (P3.5) */
+#log-toggle {
+  width: 100%; max-width: 1350px;
+  margin-top: 4px; padding: 3px 14px;
+  font-size: var(--fs-0); font-family: var(--body); font-weight: 700;
+  color: var(--ink-3); cursor: pointer;
+  background: rgba(4,6,20,0.75);
+  border: 1px solid rgba(90,80,204,0.25); border-radius: 4px;
+}
+#log-toggle:hover { color: var(--teal); }
 #log span { display: block; animation: logIn .35s var(--ease); }
 @keyframes logIn { from{opacity:0; transform:translateX(-6px)} to{opacity:1; transform:none} }
 #log .ev-gate     { color: var(--green);  }
@@ -983,7 +991,11 @@ body::before {
         <div class="srow">Units <span class="val" id="p1-cnt">0</span></div>
       </div>
       <div class="psec">
-        <h3>▸ GATE LOG</h3>
+        <h3 id="gatelog-toggle" role="button" tabindex="0" aria-expanded="false"
+            onclick="toggleGateLog()"
+            onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleGateLog();}"
+            style="cursor:pointer"
+            title="Per-gate use counts for this battle — included in the instructor gate-log export">▸ GATE LOG</h3>
         <div class="gcnt">
           <div>H: <span id="cnt-H">0</span></div>
           <div>X: <span id="cnt-X">0</span></div>
@@ -1056,9 +1068,7 @@ body::before {
       <div class="psec">
         <h3>▸ SELECTED QUBIT</h3>
         <div class="srow" style="color:var(--teal)" id="sel-name">—</div>
-        <div id="sel-eq">|ψ⟩ = —</div>
         <div class="srow">HP <span class="val" id="sel-theta">—</span></div>
-        <div class="srow">Charge <span class="val" id="sel-phi">—</span></div>
         <div class="srow">Coherence <span class="val" id="sel-coh">—</span></div>
         <div class="srow srow-xbasis" title="Bloch x sets a GUARD's crit risk = (1−x)/2">
           <span class="srow-label">X-basis</span>
@@ -1069,11 +1079,11 @@ body::before {
         <canvas id="bloch-canvas" width="100" height="100"
           title="Arrow up = |0⟩ ground state · Arrow down = |1⟩ fully charged · Equator = superposition"
           style="display:block;margin:3px auto 7px;border:1px solid rgba(90,80,204,0.40);border-radius:50%;background:radial-gradient(circle at 40% 35%, #1c2440, #0a0f22);box-shadow:0 4px 16px rgba(0,0,0,0.50);"></canvas>
-        <div id="sel-budget" style="font-size:var(--fs-0);color:var(--dim);margin:2px 0 4px" title="GD-5 — projects this unit's charge forward using the SAME Lindblad decay QPhysics runs each turn, so the T1 exponential is visible before you commit to a route, not just after."></div>
         <div id="sel-hint-toggle" onclick="toggleSelHint()"
           onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleSelHint();}"
           role="button" tabindex="0">▸ What does this mean?</div>
         <div id="sel-hint"></div>
+        <div id="sel-budget" style="font-size:var(--fs-0);color:var(--dim);margin:2px 0 4px" title="GD-5 — projects this unit's charge forward using the SAME Lindblad decay QPhysics runs each turn, so the T1 exponential is visible before you commit to a route, not just after."></div>
       </div>
       <div class="psec">
         <h3>▸ TURN</h3>
@@ -1090,7 +1100,11 @@ body::before {
     </div>
   </div>
 
-  <div id="log"></div>
+  <div id="log-toggle" role="button" tabindex="0" aria-expanded="false"
+       onclick="toggleLog()"
+       onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleLog();}"
+       title="Turn-by-turn event history">▸ EVENT LOG</div>
+  <div id="log" class="hidden"></div>
   <div id="kb-hint">⌨ Click the board to enable keyboard shortcuts (H/X/Y/Z/A/M/C/G/E/?).<button onclick="dismissKbHint()" title="Dismiss">✕</button></div>
   <div id="notation-chip"></div>
 </div>
@@ -3262,10 +3276,22 @@ let _sageTypeTimer = null;
 let _sageTyping    = null;
 
 function startTypewriter(text) {
-  if (_sageTypeTimer) clearTimeout(_sageTypeTimer);
-  _sageTyping = { text, idx: 0 };
   const el = document.getElementById('sage-bar-text');
   const more = document.getElementById('sage-bar-more');
+  // SM-1 — renderSage fires on every selection/gate/turn; re-running the
+  // 20ms/char animation for an unchanged message (or into a collapsed bar)
+  // was itself a distraction source. Same text: leave it alone. Collapsed:
+  // set instantly so the message is current the moment the bar expands.
+  if (_sageTyping && _sageTyping.text === text) return;
+  if (el && !_sageTyping && el.textContent === text) return;
+  if (_sageTypeTimer) clearTimeout(_sageTypeTimer);
+  if (_sageCollapsed) {
+    _sageTyping = null;
+    if (el) el.textContent = text;
+    if (more) more.classList.add('show');
+    return;
+  }
+  _sageTyping = { text, idx: 0 };
   if (el) el.textContent = '';
   if (more) more.classList.remove('show');
   typeNext();
@@ -3286,7 +3312,21 @@ function typeNext() {
   _sageTypeTimer = setTimeout(typeNext, 20);
 }
 
-const SAGE_BAR_H=82;  // sage dialogue bar overlays bottom of canvas
+// SM-2 — the bar height used to be a hardcoded 82 here while the CSS var
+// (--sage-bar-h) grew to 108px in FE-6, so menuPos() was clearing a bar
+// 26px shorter than the real one. Read the real rendered height (also
+// correct for the collapsed 34px state) converted to board-logical units;
+// cached, invalidated on collapse-toggle and resize (layout reads are not
+// free in a per-frame path).
+let _sageBarHCache = 0;
+function sageBarLogicalH() {
+  if (!_sageBarHCache) {
+    const bar = document.getElementById('sage-bar');
+    const h = bar ? bar.getBoundingClientRect().height : 108;
+    _sageBarHCache = h / canvasCssScale();
+  }
+  return _sageBarHCache;
+}
 
 // IN-1 — the gate menu is drawn in LOGICAL board coordinate space (0–800,
 // BOARD) but tapped in CSS pixels. At native size (desktop) rect.width===
@@ -3347,7 +3387,7 @@ function menuPos(piece) {
   const MH = GAME.gateMenu ? GAME.gateMenu.options.length*MENU_IH+48 : 0;
   let mx=piece.col*CELL+CELL+6, my=piece.row*CELL;
   if (mx+MENU_W>BOARD) mx=piece.col*CELL-MENU_W-6;
-  const maxY = BOARD - SAGE_BAR_H;
+  const maxY = BOARD - sageBarLogicalH();
   if (my+MH>maxY) my=maxY-MH;
   if (my<0) my=0;
   return {mx,my,MH};
@@ -3501,39 +3541,10 @@ function roundRect(x,y,w,h,r){
   ctx.closePath();
 }
 
-// ── Turn banner ────────────────────────────────────────
-function drawTurnBanner() {
-  const isW=GAME.turn==='white';
-  const col=isW?'47,224,208':'255,77,157';
-  const text=`${FACTION[GAME.turn].name} TO MOVE  |  KNIGHTS ${aliveCount('white')} – ${aliveCount('black')} MAGES  |  TURN ${GAME.turnCount+1}/${GAME.turnCap}`;
-  ctx.font=`bold ${canvasFontPx(6)}px 'Press Start 2P',monospace`;
-
-  // UX-4 — the banner sits in the row-0 strip and previously only had a
-  // low-alpha (0.18) gradient wash behind it, so it visibly overprinted
-  // row-0 unit sprites instead of occluding them. Measure the text and draw
-  // an opaque backing plate sized to it (not the full board width) before
-  // the text, so it reads cleanly without blanking out the whole top row.
-  const textW = ctx.measureText(text).width;
-  const padX = 14, bandH = 18;
-  const bandW = Math.min(BOARD, textW + padX*2);
-  const bandX = (BOARD - bandW) / 2;
-  ctx.fillStyle = 'rgba(4,6,20,0.86)';
-  ctx.fillRect(bandX, 0, bandW, bandH);
-
-  // Subtle faction-colored wash + hairline, kept inside the opaque plate.
-  const g=ctx.createLinearGradient(bandX,0,bandX+bandW,0);
-  g.addColorStop(0,'transparent');
-  g.addColorStop(0.5,`rgba(${col},0.28)`);
-  g.addColorStop(1,'transparent');
-  ctx.fillStyle=g; ctx.fillRect(bandX,0,bandW,bandH);
-  ctx.strokeStyle=`rgba(${col},0.35)`; ctx.lineWidth=1;
-  ctx.beginPath(); ctx.moveTo(bandX,bandH-0.5); ctx.lineTo(bandX+bandW,bandH-0.5); ctx.stroke();
-
-  ctx.textAlign='center';
-  ctx.fillStyle=`rgb(${col})`;
-  ctx.fillText(text, BOARD/2, 12);
-  ctx.textAlign='left';
-}
+// SM-3 — drawTurnBanner removed (P3.5 density pass): its one line packed
+// three facts that all render verbatim in the right panel's TURN section
+// (turn-info / phase-info / turn count in updateHUD), so the canvas copy
+// was pure duplication over row-0 sprites.
 
 // ── Overlays ───────────────────────────────────────────
 function drawOverlay() {
@@ -3676,12 +3687,9 @@ function updateHUD() {
 function updateSelInfo(unit) {
   if (!unit) {
     document.getElementById('sel-name').textContent='—';
-    document.getElementById('sel-eq').textContent='|ψ⟩ = —';
     document.getElementById('sel-theta').textContent='—';
-    document.getElementById('sel-phi').textContent='—';
     document.getElementById('sel-coh').textContent='—';
     document.getElementById('sel-xbasis').textContent='—';
-    document.getElementById('sel-eq').removeAttribute('title');
     document.getElementById('sel-hint').textContent='';
     const budgetElEmpty = document.getElementById('sel-budget');
     if (budgetElEmpty) budgetElEmpty.textContent='';
@@ -3689,13 +3697,11 @@ function updateSelInfo(unit) {
   }
   const ch=charge(unit);
   document.getElementById('sel-name').textContent=`${coord(unit.row,unit.col)} · ${FACTION[unit.owner].name}`;
-  const _eqText=fmtState(unit.state);
-  const _eqEl=document.getElementById('sel-eq');
-  _eqEl.textContent=_eqText;
-  _eqEl.title=_eqText; // UX-1 — full ψ readable via tooltip if it ever needs to truncate at narrow widths
-  explainOnFirstUse('psi-notation', '<b>|ψ⟩</b> = your qubit\'s exact state, and <b>|0⟩</b>/<b>|1⟩</b> are its two basic outcomes — ground (safe) and excited (charged). Everything above is built from those three symbols.');
+  // SM-5 — the ψ equation and Charge %% rows are gone from this panel: charge
+  // already renders as the in-world bar, the unit's mini-Bloch needle, and
+  // the arrow on the panel sphere below (three encodings is plenty). The
+  // exact |ψ⟩ string now lives in the Physics Lab's live-unit block.
   document.getElementById('sel-theta').textContent=`${unit.hp}/${unit.maxHp}`;
-  document.getElementById('sel-phi').textContent=`${(ch*100)|0}%`;
   document.getElementById('sel-coh').textContent=unit.coherence.toFixed(0)+'%';
   const _b=unit.bloch || QPhysics.blochFromPure(unit.state);
   const _gc=Math.round(QPhysics.guardCritProb(unit.state)*100);
@@ -4157,7 +4163,6 @@ function loop(ts) {
   drawParticles();
   drawFloats();
   drawGateMenu();
-  drawTurnBanner();
   drawOverlay();
 
   if (_doShake) ctx.restore();
@@ -4793,6 +4798,7 @@ document.addEventListener('visibilitychange', () => {
 
 window.addEventListener('resize',()=>{
   initBg();
+  _sageBarHCache = 0;  // SM-2 — canvasCssScale changed; menuPos re-measures
   // Under reduced motion there's no running rAF chain (animateBg returns
   // after its one frame and never reschedules) — redraw once at the new
   // size directly. Otherwise the already-running chain picks up the new
@@ -4975,8 +4981,10 @@ function toggleAdvisor() {
 
 // Coaching depth: TEACH (verbose, concept-linked) ↔ TERSE (just the move).
 // Persisted so a learner's preference survives reloads.
-let _coachTerse = false;
-try { _coachTerse = localStorage.getItem('qb_coach') === 'terse'; } catch (e) {}
+// SM-1 — TERSE is the default (P3.5 density pass); a stored 'teach' from a
+// user who explicitly chose verbose coaching is preserved.
+let _coachTerse = true;
+try { _coachTerse = localStorage.getItem('qb_coach') !== 'teach'; } catch (e) {}
 function _updateCoachLabel() {
   const el = document.getElementById('sage-bar-coach');
   if (el) el.textContent = _coachTerse ? '◆ TERSE' : '◆ TEACH';
@@ -4993,8 +5001,10 @@ function toggleCoach() {
 // so more of a fixed-height embed (e.g. an 860px iframe) fits on screen,
 // while the footer controls (EXPLAIN / TEACH / MORE / this toggle) stay
 // visible and reachable. Persisted like the coaching-depth preference.
-let _sageCollapsed = false;
-try { _sageCollapsed = localStorage.getItem('qb_sage_collapsed') === '1'; } catch (e) {}
+// SM-1 — collapsed is the default (P3.5 density pass); a stored '0' from a
+// user who explicitly expanded the bar is preserved.
+let _sageCollapsed = true;
+try { _sageCollapsed = localStorage.getItem('qb_sage_collapsed') !== '0'; } catch (e) {}
 function _applySageCollapsed() {
   const bar = document.getElementById('sage-bar');
   const wrap = document.getElementById('canvas-wrap');
@@ -5002,11 +5012,13 @@ function _applySageCollapsed() {
   if (bar) bar.classList.toggle('collapsed', _sageCollapsed);
   if (wrap) wrap.classList.toggle('sage-collapsed', _sageCollapsed);
   if (btn) btn.textContent = _sageCollapsed ? '▸ SHOW' : '▾ HIDE';
+  _sageBarHCache = 0;  // SM-2 — bar height changed; menuPos re-measures
 }
 function toggleSagePanel() {
   _sageCollapsed = !_sageCollapsed;
   try { localStorage.setItem('qb_sage_collapsed', _sageCollapsed ? '1' : '0'); } catch (e) {}
   _applySageCollapsed();
+  if (!_sageCollapsed) _narrowFocusRadio('sage');  // SM-6
   beep(_sageCollapsed ? 392 : 523, 'triangle', 0.06, 0.1);
 }
 
@@ -5020,13 +5032,68 @@ try { _selHintOpen = sessionStorage.getItem('qb_sel_hint_open') === '1'; } catch
 function _applySelHintOpen() {
   const hint = document.getElementById('sel-hint');
   const toggle = document.getElementById('sel-hint-toggle');
+  const budget = document.getElementById('sel-budget');
   if (hint) hint.classList.toggle('show', _selHintOpen);
+  if (budget) budget.classList.toggle('show', _selHintOpen);  // SM-5
   if (toggle) toggle.textContent = _selHintOpen ? '▾ What does this mean?' : '▸ What does this mean?';
 }
 function toggleSelHint() {
   _selHintOpen = !_selHintOpen;
   try { sessionStorage.setItem('qb_sel_hint_open', _selHintOpen ? '1' : '0'); } catch (e) {}
   _applySelHintOpen();
+}
+
+// SM-4 — the Gate Log's 20 always-visible counters were the densest block
+// in the left panel (P3.5). Default-collapsed behind its own header-toggle;
+// the counts still accumulate and still export — this hides the readout,
+// not the record. localStorage: an explicit open survives reloads.
+let _gateLogOpen = false;
+try { _gateLogOpen = localStorage.getItem('qb_gatelog_open') === '1'; } catch (e) {}
+function _applyGateLog() {
+  const body = document.querySelector('.gcnt');
+  const h = document.getElementById('gatelog-toggle');
+  if (body) body.classList.toggle('hidden', !_gateLogOpen);
+  if (h) {
+    h.textContent = (_gateLogOpen ? '▾' : '▸') + ' GATE LOG';
+    h.setAttribute('aria-expanded', _gateLogOpen ? 'true' : 'false');
+  }
+}
+function toggleGateLog() {
+  _gateLogOpen = !_gateLogOpen;
+  try { localStorage.setItem('qb_gatelog_open', _gateLogOpen ? '1' : '0'); } catch (e) {}
+  _applyGateLog();
+  if (_gateLogOpen) _narrowFocusRadio('gatelog');  // SM-6
+}
+
+// SM-6 — event log default-collapsed; session-scoped so a fresh visit starts
+// quiet again (same reasoning as FE-13's sel-hint sessionStorage).
+let _logOpen = false;
+try { _logOpen = sessionStorage.getItem('qb_log_open') === '1'; } catch (e) {}
+function _applyLog() {
+  const log = document.getElementById('log');
+  const t = document.getElementById('log-toggle');
+  if (log) log.classList.toggle('hidden', !_logOpen);
+  if (t) {
+    t.textContent = (_logOpen ? '▾' : '▸') + ' EVENT LOG';
+    t.setAttribute('aria-expanded', _logOpen ? 'true' : 'false');
+  }
+}
+function toggleLog() {
+  _logOpen = !_logOpen;
+  try { sessionStorage.setItem('qb_log_open', _logOpen ? '1' : '0'); } catch (e) {}
+  _applyLog();
+  if (_logOpen) _narrowFocusRadio('log');
+}
+
+// SM-6 — one focus panel at a time on stacked (<=1100px) layouts (P3.5):
+// opening any of sage / event log / gate log closes the other two. Visual
+// only — stored preferences are NOT overwritten by the radio, so a phone
+// session doesn't permanently rewrite a desktop choice.
+function _narrowFocusRadio(keep) {
+  if (!window.matchMedia('(max-width: 1100px)').matches) return;
+  if (keep !== 'sage' && !_sageCollapsed) { _sageCollapsed = true; _applySageCollapsed(); }
+  if (keep !== 'log' && _logOpen) { _logOpen = false; _applyLog(); }
+  if (keep !== 'gatelog' && _gateLogOpen) { _gateLogOpen = false; _applyGateLog(); }
 }
 
 // "Explain this" — read the selected qubit's quantum state in plain language.
@@ -5071,6 +5138,8 @@ function finishBoot() {
   _updateCoachLabel();
   _applySageCollapsed();
   _applySelHintOpen();
+  _applyGateLog();
+  _applyLog();
   setTimeout(openMenu, 200);
   // IN-3 — iframe focus affordance: hotkeys silently do nothing until this
   // document actually has keyboard focus (common in an embedded iframe).
@@ -5177,8 +5246,10 @@ function openPhysicsLab() {
     const rho = QPhysics.rhoFromBloch(b);
     const ch = QPhysics.charge(b), pur = QPhysics.purity(b), coh = QPhysics.coherenceL1(b);
     const fmt = z => (z>=0?' ':'') + z.toFixed(3);
+    explainOnFirstUse('psi-notation', '<b>|ψ⟩</b> = your qubit\'s exact state, and <b>|0⟩</b>/<b>|1⟩</b> are its two basic outcomes — ground (safe) and excited (charged). Everything here is built from those three symbols.');
     unitBlock = `
 <p style="color:var(--teal);font-size:var(--fs-0);margin:4px 0">UNIT ${coord(sel.row,sel.col)} — live state ρ</p>
+<p style="color:var(--ink-2);font-size:var(--fs-0);margin:2px 0">${fmtState(sel.state)}</p>
 <pre style="color:var(--ink-2);font-size:var(--fs-0);line-height:1.5;background:#0a0f22;border:1px solid var(--border);border-radius:4px;padding:8px;margin:4px 0;overflow:auto">ρ = [ ${fmt(rho[0][0].r)}        ${fmt(rho[0][1].r)}${rho[0][1].i<0?'−':'+'}${Math.abs(rho[0][1].i).toFixed(3)}i ]
     [ ${fmt(rho[1][0].r)}${rho[1][0].i<0?'−':'+'}${Math.abs(rho[1][0].i).toFixed(3)}i   ${fmt(rho[1][1].r)}      ]</pre>
 <p style="color:var(--dim);font-size:var(--fs-0);margin:2px 0">
@@ -5396,8 +5467,9 @@ function openMenu() {
 <h2>◈ QUBLITZ ◈</h2>
 <p style="text-align:center;color:var(--dim);margin:-10px 0 10px;font-size:var(--fs-0);">Qubit Battle Arena — charge, close in, collapse the enemy</p>
 
-<div style="background:linear-gradient(135deg,rgba(47,224,208,0.10),rgba(139,125,255,0.08));border:1px solid var(--border);border-radius:6px;padding:9px 11px;margin:0 0 14px">
-  <p style="color:var(--gold);font-family:var(--font-body);font-weight:700;font-size:var(--fs-1);margin:0 0 6px">▸ PLAY IN 30 SECONDS</p>
+<button class="btn" style="border-color:var(--gold);color:var(--gold)"
+  onclick="var b=document.getElementById('menu-howto');var open=b.style.display==='none';b.style.display=open?'block':'none';this.textContent=(open?'▾':'▸')+' PLAY IN 30 SECONDS';">▸ PLAY IN 30 SECONDS</button>
+<div id="menu-howto" style="display:none;background:linear-gradient(135deg,rgba(47,224,208,0.10),rgba(139,125,255,0.08));border:1px solid var(--border);border-radius:6px;padding:9px 11px;margin:0 0 14px">
   <p style="color:var(--ink-2);font-size:var(--fs-0);line-height:1.7;margin:0">
     <b style="color:var(--teal)">1. CHARGE</b> — tap a unit, fire a gate (X = 100% charge, H = 50%).<br>
     <b style="color:var(--teal)">2. STRIKE</b> — move beside a foe and ATTACK; your hit chance IS the quantum probability — the Born rule.<br>
@@ -5462,10 +5534,6 @@ function openMenu() {
 </p>
 <hr style="border-color:var(--border);margin:6px 0">
 ${leaderboardHTML()}
-<p style="color:var(--wood);font-size:var(--fs-0);text-align:center;margin-top:10px;">
-  Every unit is a qubit · Guardians [G] resist criticals · Charge → strike.<br>
-  Warriors attack, Guardians tank. Eliminate the enemy army.
-</p>
 <p style="color:var(--wood);font-size:var(--fs-0);text-align:center;margin-top:8px;opacity:.8;line-height:1.6">
   QUBLITZ ${QB_VERSION} · Lindblad T₁/T₂ physics engine (unit-tested)<br>
   Built by David Mukuruva · Fitzpatrick Lab, Dartmouth College
