@@ -60,16 +60,27 @@ const GAME_URL = 'file://' + path.join(__dirname, '..', 'quantum_chess.html');
       ctx2.font = `16px ${fontFamily}`;
       return ctx2.measureText('QuBlitz0123').width;
     }
+    // TY-2 — Rajdhani is digits-only, so its probe string must be numeric
+    // (letters would fall through to the next face and measure as fallback).
+    function numWidthOf(fontFamily) {
+      const c = document.createElement('canvas');
+      const ctx2 = c.getContext('2d');
+      ctx2.font = `600 16px ${fontFamily}`;
+      return ctx2.measureText('0123456789:%').width;
+    }
     return {
       pixelFont: widthOf("'Press Start 2P'"),
       pixelFallback: widthOf('monospace'),
       bodyFont: widthOf("'Space Grotesk'"),
       bodyFallback: widthOf('sans-serif'),
+      numFont: numWidthOf("'Rajdhani'"),
+      numFallback: numWidthOf('sans-serif'),
     };
   });
 
   const pixelFontLoaded = Math.abs(widths.pixelFont - widths.pixelFallback) > 1;
   const bodyFontLoaded = Math.abs(widths.bodyFont - widths.bodyFallback) > 1;
+  const numFontLoaded = Math.abs(widths.numFont - widths.numFallback) > 1;
 
   await browser.close();
 
@@ -78,6 +89,7 @@ const GAME_URL = 'file://' + path.join(__dirname, '..', 'quantum_chess.html');
     { name: 'Zero failed requests while offline', pass: failedRequests.length === 0, detail: failedRequests.join(', ') || '(none)' },
     { name: 'Press Start 2P actually rendered (not fallback)', pass: pixelFontLoaded, detail: `custom=${widths.pixelFont.toFixed(2)}px vs fallback=${widths.pixelFallback.toFixed(2)}px` },
     { name: 'Space Grotesk actually rendered (not fallback)', pass: bodyFontLoaded, detail: `custom=${widths.bodyFont.toFixed(2)}px vs fallback=${widths.bodyFallback.toFixed(2)}px` },
+    { name: 'Rajdhani (HUD numerals) actually rendered (not fallback)', pass: numFontLoaded, detail: `custom=${widths.numFont.toFixed(2)}px vs fallback=${widths.numFallback.toFixed(2)}px` },
   ];
 
   console.log('=== FE-14b offline/self-contained check ===\n');

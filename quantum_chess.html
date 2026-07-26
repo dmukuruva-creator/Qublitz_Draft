@@ -29,7 +29,16 @@
    @font-face rules in the original CDN CSS. So only one file is embedded
    here, subsetted to the Latin unicode range (matching Google's own
    "latin" subset for this family), with one @font-face spanning the full
-   weight range instead of four separate weight-specific files. */
+   weight range instead of four separate weight-specific files.
+
+   TY-2 (2026-07-26) — Rajdhani SemiBold, the HUD-numerals face (P4):
+   subsetted to digits + the timer/odds punctuation this UI draws
+   (pyftsubset rajdhani-600-latin.woff2
+     --unicodes="U+0020,U+0025,U+002B-003A,U+00B0,U+00BC-00BE,U+03C0"
+     --flavor=woff2), 1.5KB raw / ~2.1KB base64. Rajdhani has NO glyphs for
+   π or the vulgar fractions (¼½¾) — those code points subset to nothing and
+   fall back to Space Grotesk (next in the --font-num stack), which is why
+   the charge-bar tick labels render mixed-face by design. */
 @font-face {
   font-family: 'Press Start 2P';
   font-style: normal;
@@ -43,6 +52,14 @@
   font-weight: 300 700;
   font-display: swap;
   src: url(data:font/woff2;base64,d09GMgABAAAAAEtMABQAAAAAuCAAAErfAAIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAGoI9G+8aHIV0P0hWQVKDEQZgP1NUQVRYJx4AhAYvRBEICvhc4BAw4UoBNgIkA4gwC4QaAAQgBYQsByAMBxtaqAfYNq0fBucBxHuw/JGjERFsHECYt0dnIyLYOACNHZcZ//+fE+SQYQG3C9D21X0Eubo6jkqUSlTwhFWL2airWWo3La/uqmwbnekqCNgWBBPOkf/W0bRqy9phc6FIC91zumPHOzxaxQk4rZETjxwtYski5VVn+8gZV3byfN6XOiO/v+bRRhO48HtNRAhCR3Zw9IcOAQCu8XNqMsaZBeSg12Glt86c1bG7e8JMCimkkD7XvbQXrf+vOwPbRv4kJy/p89G2/swskdaCUYC4FgKCFXj69K6ti8pWL8Poi8jh+bn9H2rOu3vxScXYI3JubCzu7l0XaxgxemMBEi1i5cPCiMYojALrtfVK3w99pS/VX/odyqk1ks3FlCAFXE5hGV/3eeB7H6/KWeDfAXC3C3gFN3EdWMch23EMssCWhSNpNKKRRCTbjh8orJhiE57vf79H95n7khQQ4K86JmHQAZAHlK2qIpr/eTfrb8QJIaIkIQkhUAiQUiZlUn2mdv73HQLdfaLy9X5FdMRsx85MxylAiZPdMmebLO1/hfVYj8GhoH619tk9EOi3EyZh44D18cAnPiAZoJ2K27UhcKcC7pRK7s1ZX5VKkmWZ0wH++cQDmJnPS9fTvlX3LFwOAHgC5EFId4Bsx5aX5dICDXjNaE9Epvrc+Ic4an+PruMEWgywiQIslYB3PKXVhyrchA/aOP5im2SW6upCaYuYJJj74/7cmlljslDv/u/u69pgNpuIMCasiHSrQbq9wKDQ8O9NNdv/CNFcSg7AxYUjcHHhiAvTn9e55LloUuWi+/gLYPfjA8QCIo9YgJSWIGktFe4A8AJIXMBiKQ0AyR7yopJjVqicP6lgQLoZ41Km7FyFXIaYi9Kdr+lclikXjXkef2/N8nLoikupCtfUCItwONfKpbtPqWoyavMVdElwCiG3qM0qcATjJEdrqf3L3AU2ZXSpJWFenSzY6ALay+x99vt7W0Leg+w+FBCEqaqvrNR19XW67y5RpOqIhCKTsTR3keoe19SA4Es7+vifb+7NuQoxm6dmgqr6uUJ4hFA9fqqaZ4LJmGC21C8NIQtj8rbls/t77+m3vXecHQSDQXAQDAaDQRAEQRB8uEG3WXmhVOnEHlmDNvIvBgjGFdAPAACUo5wwEoSMC4LnjvDkifCmRwQwIoKEIcwiEHZ2RJRoRG9BYWaaichXgCpShgYEKJ5Ulnw20aI5mHmEkaadtkixEqXKKgkOyxpmN+0oZ2KkLqHElEexSWG6SjVK7IJigGYmcJ1zueQAJYe0hE7jIAZS4H2BIhWsMJTGsqJqugHnlo2w6/lBSKI4oVDiQjr3x+g/Sfu+VjXdMK2yW/GCahS3+wNKGQhAzsiG7rWP3gaiLzq9IwSicQD8jj3ThWe3hQARvDjUT8kX+HDd/nkBwIi82b/Jwv0mX+2e2jLSP/ih/5f7+fuJZGpmmB+WTevcnmQUz3+/TwvnvpI4kGNUjbZxoM7WONAnWuvUh+vs8/UehTYfeEnoyfd5/c2u0h8Tle538KdRyrzmX/iUnUuc0B0goYrU/H9PKFbjXeqH/aR7FpjfyxcKw0gcEXANxrVPnKj/Z0GMEI7hiEkpqblw5YanoeXOgydvvvz40zMwCiQIESqMiZmFlY1djCQpHCRk5BRUtEpZWNk4Vanm0cTLp5lfQItO3Xr16TdghkEzDRlvgokmmWyKqaaZboaZZpltjrnmmW+BhRZZbImlllluhZVWWW2TA/Jdc90NNz25oo9omQpVXnjlA4svFAcjEiKHB9bWdonvZNeX0NLeKj0jub2EpubGXuZDWnNIdvfkyJWnaduo2xbatatlveDTzC8gOOZcQf8ZbEdldOBxme04CUj2rKqxcftPLbmWsj0A6vYdU+FLP5UUAJmhYHtyzfOu2T2YbTuGrtSe9yHQuWTI7H878S9FbHmcVS24GBbREazutj4DxM6AtWJZfORL/Zg2ArqNZ+qHS/qZWGDLzQqc4KW1VcPVSVR9+3nMVm4hT3tYn80A7B8dShR9nVsrY2hWD19Yva5F8qFAkWIlSpXNqQyAzpezS2MBti+emxochp0wAITAfYv3M4kI74iSM5KaPIdbXlWmio3FFN/BJ1ung/0QGe2sS3Sgr0Eh62KB3xbHhDUctUhbjHUYHa8NbEDqczvYXhEVb4yf7WK7JzVeB+qBN1uR1BSOY54hbksXukI33dsDeuqld/sU0l7o02/ADIOd57bzYYGFFllsSZcW2Nkwx1zzzL94kfA5f/pJfxbvMlhuhZVWdU1JuhbWWW+Djc130tvoJ9XqN2K/Jd954um6ANwMLFijOZ4L9/qVRvt+s9t4YGvfhnOEf2uzEHQdegFTIFW9AhoG4XNLJ12sq329xKeZX0Cw8zJ2Ckw1zXQzzOwsmN05MNc887vAWxcii+Ra3KXSLoPlVlhpVW8OR1/Y9BXtBNhmkCmqpe4wuTOH2+84cBEbi8Q3/jCh/93pElvHnyb1l20Cz15qJnj3X5/HfNvuirLub+J1op8butJCCKArTNSmn7yGhrOrfP+cYFVPEa1y0dZiVyhps+x4+/hpL+nTb8AMg53ps0Mwy+zOcWty58MCCy2y2JIuhdmdA3PNM99Syyy3wkqruqaQroV11ttgY/PL0AL05ii0SGwxKVGqbBMJ2r1aJ1A0F7CNX7CAupC88KpE18AsEatWwxej0ivvEDpE+24ogJhBuwdfM/ikMiGzpXJN3Cu9tMLN78Zgk7/mFk5Ywxwvv9eglaRWATwh/BtezdFBttqkm7Rm84CuafVyfJr5BQQ7x+CKRTpTSsPpHpvtDuSmRT7blHfEniHZJX5jGuHoJOtGyz5QuNGPdZG87I79T3eyMgHibEfSoAfjsbWaciSG1sYoK7doayEDSlrvLVLQIihWYoDt6V9zunSEetbi+Viv0UbFHt9tzsXeB2SR+2W/Z/xxTGfjecwSMkGcDDLQ4LHbNB2cV44uUwtU3dDXOVEdSLJmlZlqy7VRgobTaC8idJT8O02DczYd+ZdJCx4wTYTucVfmRopjZguPmVb1GLxVxPSh9+W9EDz8U6fSLYe3U3pLhh2Lu7YOCud183jZnSd3b3xjiBSpa+urGFV1emsIjcLrJ/Z7W2ex5OZi5674C2301og5HP8gL2kjhdnbqrvvtVFJhxZ667ANVwvhsQK9ED//1fGaUMff17jzVVQmc+P8mPfN8UQd/jDmxPVcftTkJ+4veJcb2/vZgjDHGqdQOXK64Qx3Lnubx2Oiog1K+Mk99NXzse436zlX3iiPZSeZFNazS/T7v2fi4ce/1WePaz7Ho04uVzFNCX2ZyT5K5QzrGuOG5YNoLnQRrotLokmE/iygqMa7Cvo9OtDTUdybE4XQrPO1Fg71BdvpY/19qRWu8E/MUJrm8yzl7anRLhfXXd+x3XB/A9HV9Eyd9WEufQzhf21yLTXGwLonvuRo3+SMIUbGiXOYY8QLL+cmve+XFqX93Nj3pkvedNhbuhSBELvxcY7moKduP3sl9Vb7Ke+Ji4Xq9NJaHj2gVhU2Fv/VfCuS0mAdqhZL5lMO+WaLZKxTyIHKQBvY5zZJeyDwLg/en7sneaIasyT6+dD8fO0u4nCYUW0/mjv1hB8MCdV3v9N45uD+BZgTgOGysrEInnlEtJ/a4l+5I8GdSqHMW2mUMHUap1IVzJxR+dpJB2n6Fz+ylBPRWnpzlx6zTQ1ic/0MLPZ+5PaxhWfU6wizCa4HOQJePn6ty9671RNKX5D0IuJWX+EX4spNTx8zG3/3rtrG2abKw/7tRniiKa1H/4zq68C9/LU/dvofbYyfY0LFZdb4RX9bK/DqB2tIaMuhGrUx5St/zKG7oej2T/YJjTPlmZTD7eBZuZaZtfejDopk8up7nY65lcrGPbzhjvx81avNriVIqDoxWmhsyKm3l2GbyySGq05CeayQoaveXS33OGcwshlQEiwuF6JomYXGnddpn8/lrUluGBZMrUoYW8rqAt46qGqFB4xp5S20j/xdqQ1Oaaxghf0vUkblCA9Rw4hFIpARKfjPJrz2BENAeQ5+o7RUj4RYrk7DpVhwEQThwZFwlpDBDaBc+26++rK4IFaBqt9xwYUMK4gSU58Of6P1FqbwFk9JoczhMrf4kYnWnXK5RHfmwdO+3uie5t6FFS19oqZ40oz1z6GFvghp0uiIND5vrTHp5dkfVesxoScBxl3dX53rjOLod3JDLslJbIHa0DfN82+Si3nhIeratGrDqNsn8apISFmsN4Cko6L1IFT/qsekxjxMMacQS32IH2f0c7YdS67+u7XGhvLnmq+bpVPjcy0rUOGcIWfNVXllBv9JYGAE2uDccvFBNpndkguTvsrrI1TD0zTdd9LiAHOUR8PCttp/H3Qmxwyum4xWsyj6nKX34pEClrYYwexcpUvEIOcTajkJg8/dM8j5Qhqtjwlh6qx0rs3ihpUmt3duvBxN/nPFlgT26O8mLEuhQX3aD0hPUR4YA2b/GyMTHTOrEDaRTKLFsIiTiiGNDKYeG1xTTgpVPJSatNPoMkcT86zSyS6bjHJLgdE+cdNYjz02TpEy473wwhSvvDLVe+9N80vgXf/E3stkIsNMVI4IRhwMLjqiaIlDSMKRJoJs0YOcgpgynlQRqBedOXEm5hLCNTZuIfi40EROGy/uoTxi5xlfXonkHTWfuPONiC4yhoQwLkoFEkgExSi4su97RMo8ubEgCtb4sEXJHn+RiRIdXkwCxMUqPhYJCZOYUEkxS064lARzhCo1edK2zlOPWYxsNuQqIY/UZUCE3kikPknQdxmmn/bl2iG6IYZhO4LhBoUZazZqoszVJptB9BWSSoLJyRJGKj8SBZG5GU+Po1e0GKJYCYnSyJRF4kUkXkXifQL9ykn/erjyQ6MhMQlaSbVLR7raqpaOaGklKfE4YdyZOO/xiB+/lT89grlcgACEkQ3Fd7gbdgthilR4CHOkLFGxRi4ijC1q9niJTLioMNHxFhOd2AjiEio+IRJilJRgyQmSkgCO5KiVTOk/ZlZbsuQR/zyIMNINH91Oqapw3HAeM1ezzEdAscdlq6VWIdbYiN3FZOS0fCa5ylt9iYJi0vuITPqVY/51b4Ufu7FEzjSaw8iFSRYvhl0QEbMQbpyJKVgouUoQKBEvmIqMWjhfXqL40/LgLoCGwCqUJz8uTCLoGXkz8Bm6G1/Tu7yfO4nhta4W23N3GwXGQw6S42TkUUfolunA/2QMQCqO7Vk/Y8GluCH6teSsS1qCgPp/qe8AmBed31QD+BddWhcAUkb9qfGSzmAbsAHNOAB7LiOnqgjBQWPYmZiaH5t+Bq30OPk+RZHR2LLtlhhPZ9I0dtGMBqaVACVnxJr2CJG1nwOoOhks64l2sXq1+ba8BblcC3vau4LBNeHhHkQJotkSQeoanFRmIabrqJtelXVrJUH23c4CRYaPIQlFpXK/eFreO3T1rM80AK97JsenUIShSoXffBs+oBExHMBgegzdWS5F8oCiOxaU3x25x8pVeu8jTxCUiInMV28nF5Z7okLVVwAjPcbJSZ/lubgjdU3izINOMLNI8YoxBoFKhKMFpf5gRSjNv3gClXkEBcXBCC4YwUrkhJHoUXjAeErS44yC12bafxtWP/ZDiL/YJl3Hbv/66z8RSHrllWs7g+l8uQ4b7h+ev8dcXiTiTC1E3j2HVdH42Jcmf15Np8GsaYs21c8u3jTjuDDMEOMX6/VubQpjzDL0yy7EZdieVNnPnLhym83ptBzNF4v57ePt7ePj7eP97f39y/19FC0WV1dXh5tn9q4qeEVeSFitaFpw9x0X3otjEFivKMyKbfkd8ZMYphB0A4Kg322RrN2WkRJClpXWO/vPDW2mfPpa4fpaPFX4osb4siIjnZdu0gpZyG1JrkRjMxT3ZTzSuFb71BJ4mljErCA8Z7clJZNCKo6/f2McIssSKhHQO+ICUA+7JqdgJkukjQOw/h6Jm5RxIAA4R7XG0tjjvxi4W5J9YfcF8mPGADqsw6SSm87jAD7oted6O8IAACmekVXvCTGRfFNpKJkHdmHV6kG+iHWT4nQgRO84p8KZ672rIeSJy2gEoLareMzJx2Q+AYikw+GpWMRxKOfRZ9D74zLKgpSlPMtzvcCLvAUv856+2q7VDf4XVl+4hmugzhJARccqXiq3Gv22GZy4pGd49tn2vO2xMwgkOeF/GfyfivI/K5QfxBu7sYzkcGt+fwlLe3p7WXdf3ttTesW73wZoePhmANppBACArJLMkFDN6N6fakbvkD0O6kxHQanRGXmqWKnYOYw56bQW6kloSV3W0XVp1OSueKe54/babZ869rpsu82eOe+ff7rigjOuu+GSN7Zpb8I1Wzx3yGFHtPwy8+GCQlpN16Zdh84HmK1b9Hy7udm5oOnqoDYaZ4Oe6O/ZGmuts94Gm2zUgFEpEzOLl77fZxipQyatQUQlfVJPytQGIUlaCvfBgF+TUy2uI53wpQYuBAB0OTTnq3Q+FuD/B7hzALZURXIMceBwwKh0s1RRzaVIm8pc1MlWDV3EOQche6RQhG+aPBEHTamFQDY2ck4VmFeBopqZ1YNVDCeqg60TFRRJ2oemynwexeyldZEEU1PuBixOioimEF61aERCcWfTKtwIhVCNh9iRW4dQcN5qLvlYQqKoldo03peJlB8wQpsLcqTrHniFFzqdKhgmwSx0GzWzMKlSd5+D06Egk661wxwnZhD0+x6DSJdhjzsYpDhfdWThM6yyteQJ5MJ5uYGHrL+tQsqzH/DItlZGzGIFfXsAJwF6AKAtJg1DmyBECeioRSEKU5D1ITVB2irRuqqFJLJUKJxCX9QRBICrCaKBc3IsCQTQMehqzj40tdXahkQfXYmFT0hLwLDCru4eAKV5Lxto2VWgbO9DEXUfxhkhYd4YVtgZPanWmMRTVfvNum2KF6LGpGszwwfjjgrVrxK3M6zw1PYtU9gpbSufnvdJFsppGNGFUmYcJaABPUaiyl4FVjGZQjPZSjlKjC76zxRb6UhPzMazDqtt5OqUXgps5hipUJg1j2KT1aL0eNabc/bFcMatBqCdxljg9NJzOwAVCqu0wUu//ZCjHE/n/hibUwpm1gO24uaaXKoCscJHScxWR2soZRXXVpJ6aic6BIIR9fHGbLdIzeiSaDShljScphxKgTe5YEdr5ChU10BOHKrlKNqtkBiYxURH4hImDQ6Bp3c1j/M0iMTxE1+NRySjazkm6mpFMJcu39JVhmSYyVJsKmz82Ysmyds7zfJLYQ4odppK12wq75cjyitIWhicjbOnCEoGVdq432kkhimfUMGu1ggDt5vYg27TaaREsymj0oTBEBoJyTLQoAYZbJVO+isJdfWqItH079Y2YxydNmSPUgGAcJILv5pLFqSSWfoj1GkI07UGqAJl7c+EBOoRtI07VNurmDsfKjn7eC2Rh+3yHeGWyRTsDq5ShIpVGexJkqBG1CFWfJUghVSEoBBJpFlIkRQiCXyAotjsbwck7smBVxMRJrNOsZmIlYa0YaD9CzlVEz1rozh2ik1+q70CgG1ZluVc1zI23ntoQLIUKT+nq1AgoZHTMgHAnaQKxwxINymSvYZX+xcIneZ/vaxG/noSZ7VI863XPklJcV5e2F5+TWm0FDsnymbc6Ijj2sQ9zaFIQ+W2oVKn+g+iJXbAz6OBUa+VOk9fSD8h4bhe4Cy6iaq9tBA/UwAqK2JVVumq3XAIkYsZ9K9djnZ2exiQTjvCoEItbO8nPQ2TcaitoTrOGT4nPQuL52F5wbEZKKcnlrJU97D86L8RKslkYTx/aMN66wzimOrkvMHz7pbWsB/6ZUmssxs0e9cU0HYEMuEew/P2inGgLcf0rbL8MpIlY1jaDuPVjcLGoAENKcUijxjaIAw4wtDRtlU8iuTDXVIdHYdye8teSW77KTrsh4pr/S0fHiy6aJIYqqRJiKSqwnl5oPwIqzH2aV7YvjqRvCe9aCoPR+iy/ZvvDkM4O28pWpIkxjCQP/3YWrCoj08kknhqrjR/WRoXgHA688BcuGJK8MidnTqy+YA2fGufwl4Far3KDyyMoQ51Gh2qq20dqBSPtVtNbFrN0L7dY+6Cbs8xvYCUZxz0/xZJC/swiyXepuFM1fYCJ4E7udhpGDfyLjQySmWOwCMpVoHu4kA54p0rebn79kmVf2PqbtINH4H7maSsbo7avHu4d9OztCUNurKbpMKt1DIyiNyZtpafRsckq6YeMVh9/wzYdzbF7GfPDtfL8LLutaLsZ7Qnzl1HlJn91AnRoaM8bV68aUHflVX6JW8ELizcxPmCQzaUKFtm0KbPbMipN6qkZ4WN8BrLBhoPZJBCa22h2jxFq6T6Z0i4C10Jwc0gQBhbDlKYjARTpId8urdy4PB1RRbR0sHg562Cxf2Ttfml/OV9LqKFAzwiQ7j/3H/wgJpim4QD4NdC7TcsQc0GR06faW7Fp1RkRyPf2HfM584WBRNuPeEF4RNBp51Bg2oor2zVKDRUF3b3pqldUha6lxyi4BR4Oz9u7JWrvpxIhOjA87ujsHFxCg9wZ1MMPt9uk5r38mRbmPY+3skkr+GTMjbRKfCrr5BmUkYEDFBxjbJZOx5GpEuac+OOVldrPbmUavHCGqp3RadH2QxnYfqJ5LELh8VxLn3NKY5CS5JgqeXZmvJ8iBLqN3evh4izEiCNpaFf5BeNolBwlhwFc8lFpiVIvdDmQmLYHiB2yjMb0LfDgdGSDsVamD955Iy8T+zhU+Pbk2iMG0cTbBydWHIzhUSzo+bdBACxYeNk9oX1nLzwzCzc5eTnLQjK+fYKM1XrM1JdhOW8X3mN+4eZhI+PdSyqtCT/4ykcacx1309iAWO79+h5ngIV6/qYf1lsqcmi90rQUB7G3GAfolVfE/1by3VxIUTtCPMhWbX+RUrz6nchNCHDCORYWvdMLV6a81TKqWqiu7qqUYOqgVIYr3o1xRbNBAgMksylyGqRM0yQu+YTBwLyx9LlG/KMN/AxWdW6mGnHXvA8vclDtdMjfDOgK364z+ZB4dMZ3Xdr71djNzeqlS1YM0O7v4RXvG56VOHIPMKJbl0aosNqdO/SSZEcdE7AHElTPmpqP2jlN9IkEjl7Nfk2YSKFO7HwVHpkqGxm2j8fXjLbyE6iDD8nXGLDXylTtsPAitWr6zE3v7KIZWQRGdXWtfCaehMD4nFKqwr5J3hHdHoFTsR7ju4INqowylEIFZ5iFBiQ/pXDS7cslQ76+4YWdkWJJznKA56aQKd/h1/0Gk9hOaaIka6zyGFHBFq0bvGqWavWLVrUwGsMtfu6FnS3e0ONwDG2F2si6DAd0Y/x2rdhHoIMk0mBBjF3iyWDlV3PwILpF+Hm2MzF4nFZdVmwMu4HNKdZZILPnFcmv5URi+snnGSl9VLS7RsDkUinjrYgQ8zQ6CqMZkGF5tgARsC0x4KNbez75sMyvNxX1lnjNkpg+fTs1guZM75cA0+jM8aEIzPaVtCRndTM9IyKFbNkLdAj/StsgVZEV/N9vNrmGY6ytTX+HkbohV8pIoS1NJ5TBIswV+00wfXsqjGdQyOD5Da1YQzw02n+TYo90yJSkNMUXOAYi5HUFqEWHFLJzN/ClP/Q3ol/oHyYBRXU3TPa1PIouUVtvgfiEV0nSxawxYpja0IVDmelWVQ4W03+3/s5TWqJmsfDrE1UhSJEF1co6WI6ly4rzSjRVEnvuGuU6UesV8tCrlYg4JcFiwFh9s9YHPbzbKBDdK0skd/ySPyoqra8rKy2vGrOtwj901ng3fcnZZ+NwJMm++WBnX0XJC1r4OE1XdBgaJLV8u5hPsj+yfOs3HCVBl+jGYB/WxnGWfBNFoiOf7en/t1KeNL0XEQDWK61GdBS7Nbow30HBl4gJZZMuqyY8T7bnzmah8skErFWeGP4fIncns+vqK92vCCn0VniDBZlEnR5kST5gaGqwg4fZ8mpdLqSCdyI2SVUwWXYGL8IvvVCm8aW+viCVgNsELaizMi2NvoqiZW/WaulqYvBB2xEFeKLphsgo6gVHaqUHhbHFjqozBOrctlsa3GxS0AUAENnm9vWxoPLUdt+KShAJD6+8IDvL0FrM1/C0aS9uAUX8cewMljlEkoO5HARXUgomK6FdY8/DgJCpdyL4s1aypbwcm+tWa4V8J3fG635/8trF2GstGk11TZw6dg2zrbF2U15PZwAmTx7F2fXMSD6HTYIgz5cYmzHaG22M0/PEWeQP4cnXmrSOJJmXBD6V4cENLmJFY2NMxoriO6mJuCyzPU9c0CewmI7i1hOWT4/22ySy3R1NfV/sR5iD/zvW80yXuT92xn2NfwN9TdjDLieY2L4ZwlNgKvZr+GoTLaEqckvUDMMfBXrVx5m0Krz1olkSTmcUMo37rfMBQqo5bARbUjIb9XBugjHDVpSmYbtqAuUE8uZddjrexjjwDlxxKExs8mXtxixfh6kbG3aywk4/dxvpl71x4SvOZSgu43ClojJdoAdeS1Nrv4JL4A/CzJ4qJgrEUiLQRLiGrAingMdsDI5n68uLqLKP1z06JGGsrdQVKuyWOu1sLJ/vZaOciUFBfkn0UeJJvIPNEWTFhDzmrLrN3E2neafPsA5UEEmt3FAzGSWyybHmEzKBN9aZeDbU8/EW8/AkyaOeWBb8Jmw+iI8cLERGgxNuFruG+AA5p0319/ptozD1HTEhanf9QnMi4FFE5w0MvlWf31hl7Ncj1DAzzGZFLfyFb9DdlMeEFuUVkjA6bOorJCZA4RI18Lly7YtG/u7Dpd1cj2eLt8+H/o9+KcPgBFkXYTyWEHvGMAUOrbDUyKJzYjWFhbIWJGaeqvR6nO5ET6iF3lbOWp1gIVXiSbLWY5qjjiObNZmD3ASD6KAhmjauOJmfawwzu7z2B3VbiWBNcVCZjbZUq9AO9Dvy5MuQVxJAxV3SCAJ7gmywbrhLi3+t55XfWjfcNsE+zM4/yYwIdogxvcqECFU3lBmdnhqnERrRY2euom4sqLzBjp/CrxlozKdLahBeV41pMT8AQFgIYoQV+zT/kuPBYK40eDjsitxocJldbg8Hrsf/tCFGiVNKL9RBavETSGunFvaUGkhcmmmUiqH4/g7wyValksOtiVljk1J+GvycfQvTRZp51BKEsARS0ex0IVDHJpCln0dHr8xSIMwsamlUKUiJgeDaIMnH8JfSrOrGQ6EP8IPuaVcd0ClJKoCSrfbMyqiclFW7nbUyYREYdTvOJwFhYhnoQo7pcxqL6sWxF5JkxJWixtNhTLI3czU/UvHC4ZwXUm43MxhpYW4OTTzLQUbn5Gd6eJ0J3mENS+VnEtOnccCsc/ExIi0HfjXM9+mdDUu0WE6Ca6Goj2QIEebHQEzozZHYOIkaTYCPvA+c88Vqhe3OqarF8U8N6s/rG32fP28tjnCB7JnrIGw6XPm6edPny0x1nGSRdMdrerFxSBqIqZursDbAPvrtMQ0YA+e5Z/F68IQyDvq3A4k+b3nfgHqtBcmUSyPJEUn4TMHSVa9Dtj3xwhjyGc0eP0sJiKFkeQLv/U/9tejPt3+zi6UCGj/N1EYDNuHJXJ2gbBQLqpooatVfibu5HELtHLG9nd5shT9ybPwe/Tzggu9vhoFc8U77q9kh1BEfbLjnfK9MN9n6Yr3exUst0xUOQ+7eyJreKrilHbyEURTR6AJEVCk8oygKAHWZ2g+yrmuoN8PcHBNRuqVjIwrqRnBpw0o9aG3UJAwMfteQ+f15XHLg9evN8yMG7hQ6zs3J3Zh1ZA9MbcuA4EnYS+ZWJWQE1LGqDjBSiHG+AZdBeuwVch+eEo6r66b1OnavtUWjGnd56g8NPTBUP2hUUf7Fc6j3xWuBjfkHqQKhavJBbs+fABAKwu5pTg1S+L/Groo18r4XIu7gDOPM8S3iRW0Xklq3sZ2fns9p175NXvrB1uFDolS6ZQA+n2aS0bQlH/3vrt5NUHmWmCkVu+G2EIjI8xSdQfBjLGZmIiQhWURZdgfjJP8XNKJ7Zexx6ZzYM1mbDHlmjyAXX/YWkZKh29+BPw9uRnR+OVYl0aNTfdKZbJ6FPVps4cjHbV1JolSWIjFUA3Z3zENnio7dJqrodJoBtZsW1Cn0TQrzGeKcK1EIjUJvmw9x5a58gXyMi4tPv6j6OXJVxLNmaNZ1vBSl02trnL9QVtKvKVZqMBMOctIsfrB/nZKemP6ilbD6JCT3xcUa9molTGtDCeW1Qftdo+VHf5Ylr8rC46UgRUIz5XDUdf1XzbzcFxawqBgM18WZyQnf9jwaZatiK5hsAttBajbcA2/ZBN0B0UqniVvmqygMHVxDPFzUiKyyyzPP0inT1NYsoFzYi5eRHq82FnmxRHzvm76XjwipZ3vaoCGLi/GBxQctXKNbA7HSGf3JRV8Qqf/b7DovFYkk2mVok0JcRRqXspPyXDo4NWX3HF0ck/OT5SM/4OvraYaj8PhhsnsuSJPQRGq0IlESKD4owMISKc2X0UiP0ZhNulwMZ9Gl1DVpIopVpkgafyPG7ZIWrHYnMmw+0tNWfyMXPOZTIaSWsw2UqVI6dQyjM/YPjqROElZUZZAVtUheYocOfw6h3c1OfcHI+J4CaQYJKkrQq18iI9a64vET8b48yrmyVsmx0+2mHU4ATMZgItkGxQrFvqbA4oFgWuD7ANi+YJAs1++UMrtc4i+rt6F3oXRiI/YzJvtVoXZlm7QarFK5BqLJB5PzZFNy2UwN9BCWbkX6Al4vFhZCuACfhWLUykQOM7q+eLaU4aKCgMJ+kpkWBr+E3uOLTmuSEUA1YgoVxgfz7V2MqbGR0fzUxkg6rsnKvZ5QhekepI7RuBcwNoTxk6P6TMvZerHwOj9+az5h+C9j97f5F3AWnBIibUgbjq0CdRUr19/NMVYREXwkQ3rN/zbmFZEDf7xwPoDy9OM1KLgj/av3/+zMYVa1PK/6wnHwWA4eBjTYWdwOCIynTzeH4ijeMXQSWPDLv4uIES1UUqWcq4v5Pd4cNN9uJCn1dhUSq1NO3sBa0FUAwoSsm/+vuLBH8fTL2f/bT9rLmtOS7TJH8FvpafhMfYYpJJCzJMhMISMlpwcDZ1UORwagtZhV9G0awmaxTeXkl48wICY/cXF/UyIMVBaI68ESUtOn0JPnca4hUCdBN2Fgs2butdZpnvtuhDh4+uPmvv56cl+rod+gquwIL1ziZU1adbOE+ZJVNYNQ1JQN0tZPwxR5U4lSFp28hR66iTGpX9dlmpp956LrdXboF//A7TuBzAtWVMqReIT03/7z9ZKBHrUWCovV7zN7fRuNHS1C3z6wt6MblsGLmwulOXkyahUx9lIYZFUxPge3F3IKqKWFBaWUItYAJewqKzVRatITuSxyOf85+m8hO8SEr+dXuK9xISP1yCxyJXBkcSLDHP07jkAfy3pNJZ2gm23yZnCtf8zJcRfiZ26PTEbaqYTFHkPc1J2XGmhGVhFrdUJSwD+es5gpVhq0sFBIJOXcC8h8e4rX0hMGLsrbg0K/xPUf4liELUkVnZA4PNBi++W+km//da4c2fVSrYKU7FXVs21xrIjcBnRWXi0NE/M32H5zRyalSWXK4eWc1MO/0k9abTandIWMbdmULYwmVsoGVsZ++ktaekhOj2UntYCep957LJKOqNHbAn2SOJmFdepg+Iv01k2lrUlqjmE7rmcuS/u2BBn6EmO/T9pH43NDJg0lV+gTbFvPp3gKOesfD2wdUQEPdlGelUvuuOY2cKtv+TD7DyiNEs8OaYBWnF1Tq6rIG/zBvHNTOrvzfD+X2h59+LzMJMK/OX6jnPuU/vXVqrV9dmcrUfhlbvAWq57jkE/Byz7T2mnUdIJTMnpZ7STjyB5OQLNl0TGRoAsmWcERWMk7Rq4nvOfA9lLXhTYJo7ws00GpURVvQrrX/T84HdPLPy6Aa6e9ls8/Arc8ZhXkuxX4CoiM/J0kerXDFt7bgbchbBwqwjHnTKFwinFu3CnVn6QuSQndzGTsSE3ZyMYpsBoJdez0VAFrL+UZZ59Wmzmyoz89sLC9vwC7nTLEjfEx29ITMBHj9cv5ffGE19J8l/dVOMOUF6BGsqF5HlXodemMP6qh8dnpII7iMIpw9wpv74fjWIw5ty/G54nL3L9XWm2/i2uTvk56MSbL8PnA72ISWGuXY9exFkUu/biNv2c/tXsB+siInaLBbGFv1Bp6zJzPSU4c4EC+geVwVuogMRAzUSzOxTpoCFz5NGKNwma7+OfZkHQcfXoqvd5oufTLFIHoO6/3a+GfyS7c9hP0yBSYdlTOWrry5T3J0ySvy4DackshUw55fC8TIqaStvAnxolsYukUrOQw5WHwa1L3py/QAbwvM2Twbf+dLfn1xxl07DrRhKt1aZl15muKbJ9e/Pk3re2uKz/suT5b6PreAkQezhXNF8n5ms3D3mr6TnyBGOSscGYcsvP5XhHnqDPyNz4MSpfg4oiLAQQOJrMyGzkZiS0ityXvGCKNCMXk964elaWsuXN8fUVYFtrrIZY11turRW7e6zYNaI2l7h/cXrHb37LRdTxtj1crCH/eSHJCQstCVw2JdrBIrl/JihsNV/bbi1ou/sguf+05+y3ZKBwyQ37LBeoNF34BeTqy/rf6r5xKeTPscLdGPZa7lBhumvnM3L/VuFNcBF8Z1VfCmSXFjoom3tnB+oaLmMo9w4nX28R/uWG5Vwfdq02BbNAoanXDmfk3nnw0lb9ua1wUdudR8i9571QhyUdRFhumGmFwS0zjB9Dsp7aahcT+buniABMtCLgqhmhHQJy72wRlQL5ENXt3jkAGJ9WCA6srbxTZbZK9oiY5LdKhHeTxntTFspBIdxL3O5G5+HjfHJKfZIKgTojUVp4K/IUeOzQKofKwMZAChcX7zXiI1k/4Fc7AtpweMJ57T66ZMwplxSA/09S/zmz77vDj+18VwHHYdvWLU/oAKgFYEftuPgMsEtPJzF/+m/dEcaz1YSTIkx6f4C0TsBQEGqk84oiZFiR4VrJnpuXMmlAjxutIBfobuv2LLSPox+imrrDCv9JNabJSFg/yPUqbicesLmKVAIeCb2UIisDRDoPRBO862gjbiteGyGZgErggX97IpFFn90Mk1yg2OMDoAdtgDsS1hjkjnVv7N7Gvi00l5FXuamFMJM7xrY1Pbq+6qsHoMZ3VwDBhDEdQM3G6BK1UZuILSG2M5XBNqgUJ8tuHJyGSW4frEs8knA9clG+0a3XLYAffDAwsVAPawyocMzA4lBpYj9EoqAdTZVrVc2HC8RUd/jFHBenm9oKdwTkb2h9BYxQrmkppMdeq7nndUypVUG1BmeKZ9QM6tUL53megZBzqbkNU2zV6BfcNhCgm3xHAG2mRP/HIOGpoXYrbbBfqbe+RUpOGFHGmZ6MjGvjp2RXcenKVcGaWcPZmW9rEosYFWNubanP69d6U9MpTimTaqqflswz8x/zR30yJU9SQ1rJAiIRi6wRlxJ6pF/aTffSD3W9Z6/XW+WtvDdmsMEbHqhDB1ZjE07HPpyNY2RQRg1PWOIGcqhickL2YnMZw6bswIBFbIWNmaXpGmxox3Zu1dXXGjtJSggRSpWlSAmcjI6VWx2/Nn1mm2GBFTbY4YC72jgyy6+o/M/dRy1tbVvb29HOdrWlmvUbZeT2/6/6veXlr33z2973PS862YH+1QF9Rv8NEFrzMSPmYdDS0PiDG/UIYgDzwOIKF3V0oCNghRvftNHNWgbZwS280+MiV9kmR7WKlddaZzXU9JpbYjXV7mIf+9+n+q89uuuQU1XyqUPDWuookK+mIjO23q2yzW63eLYF72276V62J86SS6555JdgVkUI5D+50dOfcwxj2PtSBeMY0EAAwJAIM/4AAhosAGA3c0+W/js4s9TblzWQNRuSZYE32rs6DVcY0PAWAnRtjHEcbxHizsNJermsK4GqKmX0/XrgOD/O0LuLZSN6DNwMadPpPyqliEJLIkDcxjROxNDIT8EXFOMJiyZ92Az2ymFn8JRR37oWRDfOiGinV4w7qWFOxSK0bk0AZkYYZsYqcTH2BzP0CZnd0eWpHqW1yy+Zwra46d/YY0gMMJRMu1+b6zWdlhGhZ5mceQq+xjR1+HbYExLGKIkMppzkjoVKZnkFK584+1SuRPx9SZERk/RQeez+FbR87DQDW+jFG2DuobV+RZpqaO9gW9vLwINl6LuknZL960trA3lgKRaHS2hJSEikrGxpme3XuKMop6o5ilD4ZpaGoof9Te3as2tqCMcMMugAg09wWJdA33wsDh1TlxYZekT0kCt139raIUvhE6CZ3E+BmED3bSkw4WdlBj3+lik4XcWbnO4//d7MnQ8lCTTNCM9GOVAGabffcJYFwFKMEYSHw0+tbhiBj8S235cJ343vvSILzzxmdTrQ/iq+3B8js7OMh/fARHzpjx98s3nU+UFKtzuwsCCH7VlHFOd1lGSKbfMWxeGaV8sM0pwDemwsuoFkdgz/xLL9IHduOMdz2ZHlqqKFGWBO1EIQhcztu8c82L35VmLqGHAz3gssQ1P4jgjAWoMf6c3ahBdtccNJhi9Ewtl5tv2yZMTiC8MozPG9iF/IAc8oDiZq0dMOfFEiahLa4W71pjzordsdc/QxQDPWcZREGZpKYruMoPB9EYCzhjq0/uMYPmClOdJVoPtFPh8tStd6g+JOVyQayoFU6Fe+phE4balfYm84qthKI9xl8maGFxmimFyWjv1CBaXhZocd6U5RQiPHYGoG+92M7L9tsZJmhr4ll3g5SohN41SX+6CrhAfYz8BfgALFBaDyzNAVXRQNfNZAh1oZAtAmZ8U9MSe3vbgsF2zxBp2Q2foB8Stjfo0vTMHP82fBMiOcSp4YW9fh3/hcoXb4ZbVy6e7nfBvLvwvoxHgozX18jLRagHI7YbEOz6PqLwf7+o48u9Dj311c7G0gtdr4uw7cfcl7gwr+eSSOoW6G0GHOh3PoAJxWfB58+7vUK7LvU6MoTOv7o+9dujTD0NWn3i8H8G5rYWlCw0S4DpcXHQdeo7OJHI/QQsen1ErnijY4wxHXqplUfR5cBbjJu7RQOqqJm5q2JTrVkgrao/BUi5GYRK5L4ZAcKz6UZML1KsmEDC8oj+p+L02S67qXpv2mrRQ1+b2o4Oe9Aql32imQMjkzeH66dzaqSPstfM+hKgbnzpm4nK9gvSnxzqCO4LmTYeZZOtpZqR8kOfb3iy2NeEEiHQZcIS7OF0QVgCljHkuSFKU9LdLAo7W6WZeynsRrzWyXgUZU0Ruu87dlTUfZWNiszZarVWDfQbnSQokfJynKOx9vfq0SRWOR5w3AM8eCmWlkGDXXQWS36eJ8aVNcnMVb1774m9/8H+kOPGL2B5QQSouU5Z6m7R1Mb+gPAAO9dfsvYZcWmgXK/9qkaFMC8zTetfWHgbeBlBmKVquoLyslpwa9qBeRQcIbaHuY1ORh+85F22rCRhEWqgXl2XpvKJ/V+m3X5Qyfccu3QKdeZ/VT6sh6RH2XJFimg4kuLrukmq1MQEUOJy9ImFHtwt6co1qmQrRHVEI/4QA3I3UysARXpPCoRAbc+qBc8ArU3g9VFlzzeEJp8CRLSXr6vndPOwP0tISfqrLaEWRZnVFIyiAMAS+J18fg/jqBLSuWVaK5mGDMTT3qGzoiGnSSkHNZlBR1XZFOtcY9qgxlmmcMiZV1GxrHh5OXinbpV5B43bKhW9RPVjVaWUXaGlTAMyb9gjg6BKfoTbF+Kghb9Q5IK4npl5t7EMW9fsAJfIdsBMZjY/At6vW6dd92Bi+KR+Vf6yuCp1lBWLeb/RTGRJhHHV+/pcOgqJ+t2zdZl97rkuQpghAqOchYEWubwlipI4/QqlxBUVMpCYLi7ds3R5eO9evHmaDKSt5LF7petVqLzx7qIT8dRacJ/ZvoVhZew413lo3ui21ypyyaZIwVutF4uCAZ5g81iUQtkejE0k+zCyBMmNEzGpCe/V7EZdeqPBorZlpqy2tO5Tb3p8ShXQk815TZbMgyeR8QdDHCXV+/sDodcnlyMunabM7Qe8NDxaPifxqu0oOepc9k1VR0SbTYbF3frzt3aV0EhBFo5sUs3HE9PYCHaG2w0chhNzGoN4X5mzyFuZdPZuCboSjqVzqsL1S7QSD+Sr/vQVI+e9n4Jj/5m3vm/XC/rgZebvfHDdLtpoJ/z4T7y/zdE3rf4ba2gy6mwDJDJ6X1SzGryUw1sG5V7o02mvbil9d74yIMHd1e2PBWt65pqKQ1yEs4rZNGmvbRJjDncZhuJCv0/9+vkORtKcvCJOu+8MU9aPxXj/R6YMvzoK7qqCRTGC2IWcO8UmbUpzY6yinw8ui+RKs0AOOxer94vYINSjHdlZWtS+YwVj5yv/FCOlhlPVWruj7Nwqv11oyBsiA4D+q3RM4J59E1wVz3kpQUSeUZb5uJEWy+1KKxI2gFQT202Q3uV3APWPAojOOkVIwD7GCo6mPN9upZtgE3glXHHYJAF70aMlltL1DJVfXatxcWjb5PnYa6Ki0ECYQZ1ePA95MjmUhswl13l4MLP6lUGH115k8FSiuBl4C0Z7MusivvBrr/875u77OPrF0oMfYVsRac+9tTsA+vHG+y3JybZAU8dHN9xkB4Mu7cMAru8fnFtOPwYW2njUgDavJ6AhAbJ+eCVUHoftX460NNY8KZmfMNly1kHUUQlrNedEGQo9R8XOTmKJVY1oGG49h9DcwGNUtTDb9eFMtGgOALKepndFBsJdK8cgHfj9Jwz+1UIBl4vTKftooolHGCbOxiNG9WpahpEjbMoNY6vcXM8OvvfWARcj6qQYeF8iXtJMof/1Fh+MdoUgkDPjG5NrPUoT78RrVcrja5B0owjQMLhusaVO5HOvzfl97LUDS85Kz9rfgfqMLbgD1FwinGRAmFS3jghRSKNiA+KcVRKohXLXeeDyTHCmTjOh8sWGrWrPTZzLLwGXyVWgdbpa3x8GUR7l0cU0YmaxZYqwu6tYQBZpARWloAh7Tl1rwmqb10WKLCBkkKzFMZJB59R7SVQLYTEpU0ElJMRcC5c3PFMuIrovGzrbfPDab9UTlGjngiFYdhB2c8GBkRQkq8kZQAh+B8w019riAWsKZ3VhyhCmFEQ7ShN86dGRPIjMELs7VRqcT50xNyWli70+v3V6Mpg+1xvH3wA17m4ZiputBnA0XHkoibTEoSUOkJovP2HBFfF/LcNL71HHZ5+cKpfkFIeyWmOI1tzZW0lA1J8qxTjwGdTiTe1WKPGjCbE3DBceJ87ECvREXJHu+UQoVMmx28Mi9q0OgGjwYWMMKbLY6fdziQERBVKqfZtgR5xB5XZtVPqAEP5Xta0FHjZOUyCF0A38VEJA2fmpcMPdA1AWpqTk8Y+PxtD9hLDtVzYEwmn/8iN9Bp9OIxiUHc0eAo7P38xEDtbJogLOIbhqq8fnLLwEfICKXJw4nkmcXrD374+XoVxQWgCFEPzO0Wc+92t/tUqQMXjTQIoSB264vPXT2oEZ6A3vWInsnj4HopjaGit7gLu3Kx+uV3Yw1tyx+a9DOMwhD2tkpVzwZbiZ6AoKmSEhpC132uE3cA9u/Xf7QuAnTROzPQ+4/5+GGzdkPyN524tQHaFDzCkmnC9LplF+4Z3BBhtaPWWoAtRn2CiYPIq/DpaLkit6ouYpdZorDEJaFnm8gJw5hezum90eLzZevFSG2oVg/RBpAQ3+IHfXTGV9ajzqqkVcRVaxYVBgRmDTu4lVAyCc1I6qgmBI5DsKPmL/odTnC0Nb9Mq2cXMv+oTDGt18LqddC/IzLEYFlgG/oI9afL/SuErmHk3mnD2JUpL15RW5yNGw2MxYesKcyLW5ld/TnhCSD6Sz/GACU2gyx9/RBILgHoBrxkoGWPjDynEac7JbjReg/PA9qur66GA/a/PHJ036cXG6CDyBiq06cTgf0mjn5WBGtrSYIWqFtlQiFVNk/dfnqbNr9Q76sjxQRnzPHNudu35+YK4vcT8toN6b/tXVL0kwXUxEZ3W7hCmhOvROL5WOmJcFqY86QWKgRHSf+f6GCVplSEJC/1A1+7XnjadrVW07RnyZYDhD9v3XRXpF1H0b3echC89lqV9ZcbGxyPe3xlCNDrC6D9SBzKkIjCaDQYBgmisroa+dH0Ml3evp0RZeQ4zkRRkx2KcMgYnxaCM5ilcCrjpGTWxNd3mGTpCLLgkgR6Jy7hlbzA743H+b0EWxALY+huIUga/YitmbpYi6Oo6XnNKIprom5qtp2zWRLeFmJsgb7hWFJg3zUzBSm18YtS+mLu+pgQlh3yotKsNxornc5Ko1FvKiI/ZKefzvrqgGzmJeRiOVpO6tkB7VL9UMvKV7t9TH3z34U+PMfODi7Cghk55fIJ/yz/1OqYYNnjntia2vZSgGVoxBN9eXBbTpOz5bp9fdCXS8kV5Oy+MXD7QqB7AiCajaTN0pCT5aK+BqDlfLmk+TjsViCtLz9zrEtakcpGrcWNqt5tPmWaSKtoooAj2ArtWsPb9dMXA97MSrjcWWrlpJ4t8PX82m8XFiPf/PxSbb5Fhl2b+fyzH/91ZaaSXLwjbiAeE4UlNFJmSos1RbU+v9VzaMqb7Gg06HG5CZKf+sxXf7nJwJfZPJ4SQrqaUixSV+RdA04o3DMCOHlSvEaeHATeQh5k3aABN3XUHlMTVVzvcttt6krXiKDRuLWKRucGOjYEU3jjZLsMbB0t4CO+U6+tNxrjhOZ9CXBgoqxWE1wLYOk22S0jYGb4QgJwQYSAMOm6HvELfaPQFziOs6ZEslkNbxwyspNdjc7XPXhU8GRVQk6S01y9WbZjmtGQy8l5fSHgfW2QyhkuNEutnNjDw2Pc1bakls2XmVoGcs8kfqSVyEr0icn5fFF8Yh5dlyCbYTtVX72brj3dt9LqthsLRhV43OTDTCmnHm90EMnUVhY4TrZWIT1zlY0F/HTWBGhQiKOSFDm6pqqamUVZrmUailSiJ6a+IRDN3IQckdPkcI8af9FGVuWF+cG2lqMKPiuIGk5r22BrTIQFeAVS75L23byRv4FKWj1PXRVFeLPZnZueum2vudDYU0Z5i5AwoCQLCE5nRYKkwUo5zCTFgJwizJi8leLkS4qvRwtV2zkOUbGeXTYqxUEAGKQZaoUx4edVu0ahb5hVsGMGSYqmSJXZFc1qmx/jN85NSQsOjmCGO+5xLBNkwmfcyAi+Zq49UHWgSXE6at4U27o78ciCGpc3bbXr8P1DMeKhyMx9yPxVgilXyt9AelkNtahWWpbvsAvgBGPaKbjnRvsSuRUysZKGohHkJHQt5EWlph/m6TW/Vpc733e05QUFKUi6nhYQDgWZOaYu9JUA+T29UlJYKnY2eDjWIDiGpr5S2zCi6OTa6GdHkLLQN0PFtVCsmWX5bxSWl4FU2y3rRXNOdtnBp3NronwLrtiJMkLTCxnoaYIMxcafKcq44i2RXiwyyuPohtd09G2iQqUDUk6+As3kIiey3EN/OikLcg8ylOneS3/5bvH8Glcsbg7HrluWb0ucSCXZnMsb//f920laT91VRxZFw3QrWGK2ISH2xDAo2PxOQyX9fVD7jm062McOkGn6vm2PmB0pV1ppSwiNA8ZsEgIbA8b1VUIIyIHmOwBzgxPbVdAKQtWfx0GQUsyv0PPAhNnHFB0ghDD98F2HwhcnxggjIz5DgvfIzbsF4eaRQC6+MHnmEIg3Jy8AXNSBeXsHWHLdzEpF39QnFJGAB7oaFwtq38pHSV/ug0gUWGwumaRjQfTU/IsJ+YOC7qxFxRiJZZf7DRGOmgu8QNMA0vP9cqKPXB5k73UVrrP81hJqlBi4oGmNfuPbMItCd0pVKtxyXbwC/tfep73fVfeRzb/+DRNpru6hU6LtVVNdlt2sVCCk5TyWnR6seA+8UsnzMU7EiupiMuIdtS0G8aHlq73GcGortetQMwhO9k/4/e/weIgjhcHL/ZxVRuBP1uKmOulebQMMN0qyWt8nieIUF/653jEhail900YCXK7XtrlkOe6AAdXbNcvegeKBieRO14cjhujudJgbPjp1Ze/2hr8yrksDbT3z+mgw7x0gx/VSqY28thcSb+SJNa/oeQGXg6vMBao3E9PcnlL/H65PwjgdRXyWyCtcSE4ebIsKviSOn3ApnKT/SkdFnEUbr2w5SKPzNPxGh/qgCQ3zRPxscEDEJAGPHN4q/+xvUjcnZ5PEraOzo2epFVMGK2qtAMot2L0r6/JuONzX0q694c00KMQ5+QqINyYYFKWl5OatcXCwBKkcnnc8x+GE76XEOXv9r6KXisvX1eHuU6XdMv2eqY4V16U6m1v3AIR3tsGPZRtD2T4Lf0oXF8cK8na59jYe+eIkvQNE/0PSObRzB8edQt8RUuXOTV6fPLcnA5uvgNqt3kf8Ml08Nt7ATmcTe4mc+3c0uKMQV2rPC+qWPpCK3MbYdxCyZHF6sJodVFwT6924K+0vth/yLCduLK8vz1ucW/kSR8Jv4uFbR38O1EjJtS9GZ1u95/32sBqTB4VC3TCUwk5Vw1YU6RI6QRnDRxgZ6j7iXqOBhQatF9e+WcTgfruj3U7yKzrctOrOwfOS4Xt92AjSp9i+dTJA1gJFB/nhjngovffHY8KihqtqoNQQ4yqdq9VAnSsC4/1DYu9sGbnzoFCGTaS77TFGtLFoNbl2RmOPHTVqbahjOaAxzloCT7njIYbVsDBTyz1dHY4N1FotQ6ah7FKVsnFKGzpCmpgP6yKKvBYXt3GBkazAqEBQFqMm/H3hjS3i8THldxXRdc9MlkraU+7lPCPZxw2CMUHf1J8ySBPbYfJUMWGtKsZaawRrY11VA1ePXkRnclWcMw1GmZe8IsVRPHhukwEKPC+rVnt4kapKpmL99IQmeWidaMLoIUZeTcE2ObdUKUauGgWrYw7CeKvZmDALFqZAWCrcU/ce6QrL5JtsV6Mn95hjki7PvsX52rfn4u+Xv+ot0Radip4+4I8aQqQbArnySRRNcml0G5nKSEcrC7sVUBMXZYXz82jobnKdzuXQ4tJxlIhxDltxHAEhsa/yCX1ikf2SRD7q9ZRsXXdL8KpUy7ax+cIwpij081w/TjYWDW0qLmiOea0573cAD5icU1j54bRLHen+zTIk38m5bHKVVh6IFQV7dvm3+FgynZ6zkIKUQIlUcYTaR2ofd9nJkVOf4VoIgx4F8IS9grXQy7j4woDoEpEBwYc06l9G9MJ+jE2/MPRaN5MwIfjEOt+gdrKKoSOHO5SheYNukju28TEPj++CdpWxoY/ne0Omd1LOQ0be5buCnHOE0itX7g7xTjHWDXZ097wWuPiyErymeWuiIyXVuGso7CDg2c6mGwjqDGsN6D6IkJARrktj00bHXPra/OCgs4mPB/4UmxvuRb8LFAfBrQFcgetZKfIIEKttF3R4L++78oD8eu907+XRyUnhxgREUyA8mrBwkUhDnZmr9zXHABm4qVXJAdhkqj/GSJ4uOtCx2DOdTmqBH2pJU9rQ+lsS/wqgb2SVO65pOzPlpat8tYWlvhTfthkU9/vxNJ6dHYuzpEXQpa3Mzn2ad0ZlBM5tgMhstddHUy5o0xpgpdmd0RnH0FaPsJWUSy5+Jv3QiCJHT7XAO9QeoGiw5QYcthQFcmM7cyQ7Sm0vtNsfmkBhJnw+pb/8oMieChqxCXXLcugXXg6HbzTO6SmcasMLBrojhtPHQ+GVvLklxuikRy97VXuMyp1VyUCijdiqyCLH41JwiXmWZoLLWiBugZWoIGIVxVYYpAE9N4VK7+E16ongjSc5EGcyCwsemtw6Yo/Zl4QQvjNVgmvyAc5UpPhOk2dC13AcB+0WSyY4C7lM4JQjA3FETzhzGSrnYGQ4XSf6dWg1W+gfgc0WPHg8CylpFxV4K1V1d/ghigaR3NryCDCHsAx9o7CnPfgVNuP4SjKYou1GrS8KTEd6oeG+en4O3jf0c7E7/ODHhLZI2eUOKXJUS7OvDsgMBcWdyyzL0Iq7CRcErlSkSmxBPGSb0JqZ7dnKlXWeJ0+9I/ReBWLPEm6WgHMMd+kCjEyaBBXJWDZlaMtJKIw9EYjIjJUXhSgGVWoQbjwrvgpqB/9vk2MyiO7k7me9qF20MJOm7ELtUaanRLR7CyXzjNZHRupRTLQ+PNI1+4xZynHJmdPoU2FQ+hzJ0Ij5seM4hqfyKlvHxSd8Zjv8zlrw7gz+//drx/P260wmfM8Fh0yNZlim1EBEnc3hVwuuchyjlORREGdJzgrr1tDquwgcZ2KgisYEWUAqSoiRY/DaddzAd7kNp6Vwp2jC7c+1eYvbXUbhAelBVV6IY6dhQa7xshUqAe485BKK9uw+DWUMHR1qCTsYllEESpmYmL4TENX5BUGiwm/2B5sNoLUMuBaih8T1JZDjejOGKokjCsGdv63RRhC2mGF3d7lsaWxp9sQLbWrqJiR6iSnR8+agUL3uwnVW6Lb3Xh0dVJ48W7U9bzwMfv3TL33if2+dL3Xkd1/6/Ed1LFr89+P8qJ/1R2ubJuoEjH4GuWqVy4086j6Dfm7E5TIw2hZOsYXt8TkPCrp04wEK43/R32+7g//bxtgLAIqeMiwXbvLscbL0fzedmDyAGAUABP4EiPbzofBrS0JbdJvIQiybu1wAKYBeJa1Ws9YsjhrJJrmaFPlKV238w5p4MalHrQr6szQZ5XQN6YZqwkXQbXhxGu3Tap2sCkgbtfKrX/YH7T8oKVYJxdR8zcpNTOzIUZQxfjU3X7yeywu1/No4hA6GMKp6q54FtLQZMOj0bPID0fnkg8PVKa0kwsgXXxbMBIVadLAxuRpfVRVwBwdklgNatdMKFVA9OPkkGiWX++OyQ7CfTzvx6aH0RPBCkxAKw72SmLkgQpQI1VKomFtdzFCgwV+ccZHSjHwmr7zCWNfCEX5xEVaAZZokFVWLWQDWyjhBGDJ7tVQooBqgzN5eSoqVcgKBDQSkogSOTBijSvVcjXZ4vSBB9Xp7JTmunCOyzVzMGaedq1l2Cc3p6W9NFZOuzis/WULxhdZ01ApQqTfWWr5cUjlrdSHvAUEYBfjBdWOIXy1RD9YlOCChQ2VjeuQmRiJgJexCkgfWSn5tAIm+2ZMWaRncHqVHdUQ+vQiYUQHMLBWMg9RhunprcnzRCecYS49sHLWYNmo3WptEgmXcFRixZncGwYLxfnaXxCYcaMaMIB4VGNvoakl4oq5GzuADdtRy5igjtbhoLmgwouHnFBRHWBSkYEJKMdnVTIg2l88RWQitEHUS1VhuGsMASkswZJIBuATiyYTg0smU2quTmWg/6jn1ySJeoZ0kZoz6AgRQphdOJpBnWLU9IpjdE+4YB2nmSNOiVa82Pk28OlDYWPuGTt4SGmguczXqxMBMbVp0GO38YFkJaGZ1Rkaqzox61WjTriw4A+5p68LAWG65rnzy9p1q0XTUIoiui4AST0aN0MhqrEhOGjpMDnTTd5quW17gNFm/QGrZrmvSKZBlHZOZ9WBXCTLo4Ia1emedBg7i0OPTUkehjTcCZ0SsloCB1veH6RQk1SKgXoTomf3/NTalx/L+zZdZBg==) format('woff2');
+}
+
+@font-face {
+  font-family: 'Rajdhani';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url(data:font/woff2;base64,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) format('woff2');
 }
 
 *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
@@ -73,12 +90,31 @@
   --wood:      #9aa3cf;   /* QB-8 — AA-contrast muted text on dark bg */
   --pixel:     'Press Start 2P', monospace;
   --body:      'Space Grotesk', system-ui, -apple-system, sans-serif;
+  /* TY-1 — the type system. Four sizes only; every font-size in this file
+     must resolve to one of these (supersedes FE-6's per-rule literals, per
+     David 2026-07-26). Pixel face is display-only: ≥ --fs-2, never body. */
+  --font-pixel: 'Press Start 2P', monospace;
+  --font-body:  'Space Grotesk', system-ui, -apple-system, sans-serif;
+  --font-num:   'Rajdhani', 'Space Grotesk', system-ui, sans-serif;
+  --fs-0:      13px;   /* dense: values, log lines, captions */
+  --fs-1:      15px;   /* default prose / interactive */
+  --fs-2:      18px;   /* section titles — pixel face floor */
+  --fs-3:      28px;   /* display banners */
+  --lh-prose:  1.4;
+  --ls-pixel:  0.5px;
   /* FE-6 — sage-bar grew from 82px to fit ≥13px readable text (was 11px
      Press Start 2P) without shrinking it back down on phones; every layout
      value derived from the old fixed 82px height now reads from this var
      instead of repeating the number. */
   --sage-bar-h: 108px;
   --ease:      cubic-bezier(.22,.61,.36,1);
+}
+
+/* TY-1 — dark scrim so HUD text stays ≥4.5:1 over bright art (P4 rule) */
+.hud-scrim {
+  background: rgba(4,6,20,0.72);
+  border-radius: 4px;
+  padding: 2px 6px;
 }
 
 /* QB-8 — calm board for users who ask for reduced motion: drop CSS animations
@@ -137,7 +173,7 @@ html, body {
 }
 #boot.fade-out { opacity: 0; pointer-events: none; }
 #boot-logo {
-  font-family: var(--pixel); font-size: 38px;
+  font-family: var(--font-pixel); font-size: var(--fs-3);
   background: linear-gradient(135deg, var(--indigo), var(--teal) 60%, var(--gold));
   -webkit-background-clip: text; background-clip: text; color: transparent;
   filter: drop-shadow(0 6px 18px rgba(91,84,230,0.28));
@@ -147,18 +183,18 @@ html, body {
 }
 #boot-sub {
   font-family: var(--body); font-weight: 500;
-  font-size: 16px; font-style: normal;
+  font-size: var(--fs-1); font-style: normal;
   color: var(--ink-2); letter-spacing: 3px;
   min-height: 22px;
 }
 #boot-lines {
-  font-family: var(--pixel); font-size:12px;
+  font-family: var(--font-body); font-size:var(--fs-0);
   color: var(--ink-3); text-align: left; width: 360px;
   line-height: 2.2; white-space: pre;
   min-height: 100px;
 }
 #boot-start {
-  font-family: var(--pixel); font-size: 12px;
+  font-family: var(--font-body); font-weight: 600; font-size: var(--fs-1);
   color: var(--indigo); letter-spacing: 1px;
   animation: blink 0.9s step-end infinite;
   min-height: 16px;
@@ -192,17 +228,17 @@ html, body {
 }
 #phone-gate.dismissed { display: none; }
 #phone-gate-logo {
-  font-family: var(--pixel); font-size: 26px;
+  font-family: var(--font-pixel); font-size: var(--fs-3);
   background: linear-gradient(135deg, var(--indigo), var(--teal) 60%, var(--gold));
   -webkit-background-clip: text; background-clip: text; color: transparent;
   letter-spacing: 5px;
 }
 #phone-gate-msg {
-  font-family: var(--body); font-weight: 500; font-size: 16px;
+  font-family: var(--body); font-weight: 500; font-size: var(--fs-1);
   color: var(--ink-2); line-height: 1.6; max-width: 300px;
 }
 #phone-gate-anyway {
-  font-family: var(--pixel); font-size: 12px;
+  font-family: var(--font-body); font-weight: 600; font-size: var(--fs-1);
   color: var(--indigo); letter-spacing: 1px;
   text-decoration: none; border-bottom: 1px solid rgba(139,125,255,0.45);
   padding-bottom: 2px; cursor: pointer;
@@ -237,15 +273,15 @@ html, body {
   box-shadow: 0 4px 20px rgba(0,0,0,0.55), inset 0 1px 0 rgba(139,125,255,0.08);
 }
 #title-bar h1 {
-  font-family: var(--pixel); font-size: 17px;
+  font-family: var(--font-pixel); font-size: var(--fs-2);
   background: linear-gradient(120deg, var(--indigo), var(--teal));
   -webkit-background-clip: text; background-clip: text; color: transparent;
   filter: drop-shadow(0 2px 6px rgba(91,84,230,0.25));
   letter-spacing: 4px;
 }
-#title-bar .sub { font-size: 13px; font-family: var(--body); font-weight: 600; color: var(--ink-2); letter-spacing: 1px; }
+#title-bar .sub { font-size: var(--fs-0); font-family: var(--body); font-weight: 600; color: var(--ink-2); letter-spacing: 1px; }
 #attract-badge {
-  font-family: var(--pixel); font-size:12px;
+  font-family: var(--font-body); font-weight: 700; font-size:var(--fs-1);
   color: var(--indigo); letter-spacing: 1px;
   display: none;
 }
@@ -385,13 +421,13 @@ canvas { display: block; cursor: pointer; }
 }
 .srow {
   display: flex; justify-content: space-between; align-items: center;
-  font-size: 13px; color: var(--ink-2); margin-bottom: 5px;
+  font-size: var(--fs-0); color: var(--ink-2); margin-bottom: 5px;
   font-family: var(--body); font-weight: 600;
 }
 /* FE-6 — stat values are read for game-state understanding, not headline
    flavor; moved from the pixel font to the readable body font (was 11px
    Press Start 2P, under both the old and new floor). */
-.srow .val { font-family: var(--body); font-weight: 600; font-size:13px; color: var(--green); }
+.srow .val { font-family: var(--font-num); font-weight: 600; font-size:var(--fs-0); color: var(--green); }
 .srow span, .srow > * { min-width: 0; }
 .srow-label {
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
@@ -422,10 +458,10 @@ canvas { display: block; cursor: pointer; }
 
 .gcnt {
   display: grid; grid-template-columns: 1fr 1fr; gap: 6px 10px;
-  font-size: 13px; color: var(--ink-2); font-family: var(--body); font-weight: 600;
+  font-size: var(--fs-0); color: var(--ink-2); font-family: var(--body); font-weight: 600;
 }
 /* FE-6 — gate-use counts are values a student reads, not flavor; body font. */
-.gcnt span { color: var(--gold); font-family: var(--body); font-weight: 600; font-size:13px; }
+.gcnt span { color: var(--gold); font-family: var(--font-num); font-weight: 600; font-size:var(--fs-0); }
 
 .btn {
   display: block; width: 100%;
@@ -433,7 +469,7 @@ canvas { display: block; cursor: pointer; }
   border: 1px solid rgba(90,80,204,0.45);
   border-radius: 4px;
   color: var(--ink-2);
-  font-family: var(--pixel); font-size:12px;
+  font-family: var(--font-body); font-weight: 700; font-size:var(--fs-1);
   padding: 10px 6px; cursor: pointer;
   text-align: center; letter-spacing: 1px;
   transition: background .15s, border-color .15s, color .15s, box-shadow .15s;
@@ -465,7 +501,7 @@ canvas { display: block; cursor: pointer; }
   /* FE-6 — the quantum-state readout is a value a student reads to
      understand game state, not flavor; moved off the pixel font (was
      11px Press Start 2P). */
-  font-size:13px; color: var(--teal);
+  font-size:var(--fs-0); color: var(--teal);
   overflow-wrap: break-word; word-break: normal; min-height: 16px; margin-bottom: 4px;
   font-family: var(--body); font-weight: 600; line-height: 1.7;
 }
@@ -477,13 +513,13 @@ canvas { display: block; cursor: pointer; }
    it. min-height stays on the toggle line (not the hidden prose) so the
    panel doesn't visibly jump when nothing is selected. */
 #sel-hint-toggle {
-  font-size: 13px; color: var(--indigo); cursor: pointer;
+  font-size: var(--fs-0); color: var(--indigo); cursor: pointer;
   min-height: 18px; margin-bottom: 2px;
 }
 #sel-hint-toggle:hover { color: var(--teal); }
 #sel-hint {
   display: none;
-  font-size: 13px; color: var(--ink-2);
+  font-size: var(--fs-0); color: var(--ink-2);
   line-height: 1.65;
   font-family: var(--body); font-weight: 500;
 }
@@ -529,7 +565,7 @@ canvas { display: block; cursor: pointer; }
   min-width: 0;
 }
 #sage-bar-name {
-  font-family: var(--pixel); font-size:12px;
+  font-family: var(--font-body); font-weight: 700; font-size:var(--fs-1);
   /* line-height must be explicit: #canvas-wrap sets line-height:0 (to kill
      the inline-canvas gap) and this div inherits it — at phone widths the
      name wraps to two lines that would otherwise stack on the same baseline
@@ -546,7 +582,7 @@ canvas { display: block; cursor: pointer; }
      messages are read as prose, so this moved off the pixel font (was
      12px Press Start 2P) to the paragraph-tier Space Grotesk floor. The
      bar's height grew (--sage-bar-h, 82px -> 108px) to fit it. */
-  font-family: var(--body); font-weight: 500; font-size:14px;
+  font-family: var(--body); font-weight: 500; font-size:var(--fs-1);
   color: #eaf0ff; line-height: 1.5;
   flex: 1; min-height: 0;
   /* FE-11 — this was `overflow: hidden` with no ellipsis and no scroll, so
@@ -568,11 +604,11 @@ canvas { display: block; cursor: pointer; }
   position: relative; z-index: 1;
 }
 #sage-bar-hotkey {
-  font-family: var(--pixel); font-size:12px;
+  font-family: var(--font-body); font-size:var(--fs-0);
   color: rgba(139,125,255,0.55); letter-spacing: 1px;
 }
 #sage-bar-more {
-  font-family: var(--pixel); font-size:12px;
+  font-family: var(--font-body); font-weight: 700; font-size:var(--fs-1);
   color: #8b7dff; animation: blink 0.7s step-end infinite;
   display: none;
 }
@@ -583,7 +619,7 @@ canvas { display: block; cursor: pointer; }
    visible and reachable, so a fixed-height embed (e.g. an 860px iframe) can
    reclaim vertical space without losing access to the Sage controls. */
 #sage-bar-collapse {
-  font-family: var(--pixel); font-size:12px;
+  font-family: var(--font-body); font-weight: 700; font-size:var(--fs-1);
   color: rgba(139,125,255,0.85); cursor: pointer;
 }
 #sage-bar.collapsed {
@@ -623,7 +659,7 @@ canvas { display: block; cursor: pointer; }
 }
 .sage-tip-row:last-child { border-bottom: none; }
 .sage-tip-ic {
-  font-family: var(--pixel); font-size:12px;
+  font-family: var(--font-body); font-weight: 700; font-size:var(--fs-1);
   width: 20px; flex-shrink: 0; text-align: center; padding-top: 1px;
 }
 .sage-tip-ic.danger  { color: var(--red);    }
@@ -632,7 +668,7 @@ canvas { display: block; cursor: pointer; }
 .sage-tip-ic.gate    { color: var(--indigo); }
 .sage-tip-ic.info    { color: var(--ink-3);  }
 .sage-tip-tx {
-  font-family: var(--pixel); font-size: 12px;
+  font-family: var(--font-body); font-size: var(--fs-1);
   color: var(--ink-2); line-height: 1.85;
 }
 
@@ -644,7 +680,7 @@ canvas { display: block; cursor: pointer; }
   border: 1px solid rgba(90,80,204,0.40);
   border-radius: 4px;
   padding: 5px 14px;
-  font-size: 13px; color: var(--ink-2);
+  font-size: var(--fs-0); color: var(--ink-2);
   height: 54px; overflow-y: auto;
   font-family: var(--body); font-weight: 500; line-height: 1.75;
 }
@@ -669,14 +705,14 @@ canvas { display: block; cursor: pointer; }
   position: absolute; left: 50%; top: 6px; transform: translateX(-50%);
   z-index: 60; max-width: 90%;
   background: rgba(245,183,60,0.14); border: 1px solid rgba(245,183,60,0.5);
-  color: #f5b73c; font-size: 13px; padding: 6px 30px 6px 12px;
+  color: #f5b73c; font-size: var(--fs-0); padding: 6px 30px 6px 12px;
   border-radius: 6px; box-shadow: 0 4px 14px rgba(0,0,0,0.4);
   pointer-events: auto;
 }
 #kb-hint.show { display: block; }
 #kb-hint button {
   position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
-  background: none; border: none; color: #f5b73c; font-size: 13px;
+  background: none; border: none; color: #f5b73c; font-size: var(--fs-0);
   cursor: pointer; line-height: 1; padding: 4px 6px;
 }
 
@@ -690,14 +726,14 @@ canvas { display: block; cursor: pointer; }
   position: absolute; left: 50%; bottom: 8px; transform: translateX(-50%);
   z-index: 61; max-width: 92%;
   background: rgba(47,224,208,0.12); border: 1px solid rgba(47,224,208,0.45);
-  color: var(--teal); font-size: 13px; line-height: 1.5; padding: 8px 30px 8px 12px;
+  color: var(--teal); font-size: var(--fs-0); line-height: 1.5; padding: 8px 30px 8px 12px;
   border-radius: 6px; box-shadow: 0 4px 14px rgba(0,0,0,0.4);
   pointer-events: auto;
 }
 #notation-chip.show { display: block; }
 #notation-chip button {
   position: absolute; right: 4px; top: 8px;
-  background: none; border: none; color: var(--teal); font-size: 13px;
+  background: none; border: none; color: var(--teal); font-size: var(--fs-0);
   cursor: pointer; line-height: 1; padding: 4px 6px;
 }
 
@@ -718,7 +754,7 @@ canvas { display: block; cursor: pointer; }
   box-shadow: 0 30px 90px rgba(0,0,0,0.65), 0 0 0 1px rgba(139,125,255,0.12), inset 0 1px 0 rgba(255,255,255,0.08);
   padding: 30px 32px; max-width: 760px; width: 95%;
   max-height: 88vh; overflow-y: auto;
-  font-size: 13px; line-height: 1.7; font-family: var(--body); font-weight: 500;
+  font-size: var(--fs-0); line-height: 1.7; font-family: var(--body); font-weight: 500;
   color: var(--ink);
   position: relative;
   animation: modalIn .42s var(--ease);
@@ -726,34 +762,34 @@ canvas { display: block; cursor: pointer; }
 @keyframes modalIn { from{opacity:0; transform:translateY(18px) scale(.97)} to{opacity:1; transform:none} }
 #modal::before, #modal::after {
   content: '✦'; position: absolute;
-  color: var(--indigo); font-size: 14px;
+  color: var(--indigo); font-size: var(--fs-1);
   opacity: 0.55;
 }
 #modal::before { top: 14px; left: 16px; }
 #modal::after  { top: 14px; right: 16px; }
 #modal h2 {
-  font-family: var(--pixel); font-size: 16px;
+  font-family: var(--font-pixel); font-size: var(--fs-2);
   background: linear-gradient(120deg, var(--indigo), var(--teal));
   -webkit-background-clip: text; background-clip: text; color: transparent;
   margin-bottom: 20px; text-align: center; letter-spacing: 2px;
 }
 #modal h3 {
-  font-family: var(--pixel); color: var(--teal); font-size: 12px;
+  font-family: var(--font-body); font-weight: 700; color: var(--teal); font-size: var(--fs-1);
   margin: 18px 0 8px; letter-spacing: 1px;
 }
-#modal p  { color: var(--ink-2); margin-bottom: 10px; font-size: 13px; }
-#modal table { width:100%; border-collapse:collapse; margin:12px 0; font-size:13px; }
+#modal p  { color: var(--ink-2); margin-bottom: 10px; font-size: var(--fs-0); }
+#modal table { width:100%; border-collapse:collapse; margin:12px 0; font-size:var(--fs-0); }
 #modal td, #modal th { border:1px solid var(--border); padding:8px 10px; color:var(--ink); }
 /* FE-7 — white on --indigo (#8b7dff) measured 3.24:1, under the 4.5:1 AA
    floor; darkened the fill to the same #5a4cd6 shade already used (and
    verified >=4.5:1 with white text) for the gate-menu header elsewhere in
    this file, instead of introducing a new color. */
-#modal th { color:#fff; background:#5a4cd6; font-family:var(--pixel); font-size:12px; }
+#modal th { color:#fff; background:#5a4cd6; font-family:var(--font-body); font-weight:700; font-size:var(--fs-0); }
 #modal .close-btn {
   display:block; margin:22px auto 0;
   background:linear-gradient(180deg, rgba(40,52,104,0.6), rgba(22,30,64,0.6)); border:1px solid var(--border);
   border-radius:12px;
-  color:var(--ink); font-family:var(--pixel); font-size:12px;
+  color:var(--ink); font-family:var(--font-body); font-weight:700; font-size:var(--fs-1);
   padding:12px 30px; cursor:pointer; letter-spacing:1px;
   transition:transform .2s var(--ease), box-shadow .25s var(--ease), color .2s, border-color .2s;
   box-shadow: 0 4px 14px rgba(0,0,0,0.4);
@@ -777,7 +813,7 @@ body::before {
   box-shadow: 0 4px 20px rgba(0,0,0,0.55);
 }
 .panel h3 {
-  font-family: var(--pixel); font-size:12px;
+  font-family: var(--font-body); font-weight: 700; font-size:var(--fs-1);
   color: var(--teal); letter-spacing: 1px;
   margin-bottom: 6px; padding-bottom: 5px;
   border-bottom: 1px solid rgba(47,224,208,0.25);
@@ -828,7 +864,7 @@ body::before {
   display: none; position: absolute; bottom: calc(var(--sage-bar-h) + 4px); right: 6px;
   /* FE-6 — a countdown a player must read quickly under time pressure is a
      value, not flavor; moved off the pixel font (was 11px Press Start 2P). */
-  font-family: var(--body); font-weight: 700; font-size:13px;
+  font-family: var(--font-num); font-weight: 700; font-size:var(--fs-0);
   color: var(--teal); z-index: 11; pointer-events: none;
   background: rgba(4,6,20,0.85); padding: 2px 7px;
   border: 1px solid rgba(47,224,208,0.35); border-radius: 4px;
@@ -846,13 +882,13 @@ body::before {
 }
 #vote-overlay.show { display: flex; animation: fadeIn .3s var(--ease); }
 #vote-title {
-  font-family: var(--pixel); font-size: 13px;
+  font-family: var(--font-pixel); font-size: var(--fs-2);
   color: var(--gold); letter-spacing: 3px;
   text-shadow: 0 0 24px rgba(245,183,60,0.7);
 }
-#vote-subtitle { font-family: var(--body); font-size: 13px; color: var(--ink-2); }
+#vote-subtitle { font-family: var(--body); font-size: var(--fs-0); color: var(--ink-2); }
 #vote-timer {
-  font-family: var(--pixel); font-size: 34px;
+  font-family: var(--font-num); font-weight: 600; font-size: var(--fs-3);
   color: var(--teal); letter-spacing: 2px;
   text-shadow: 0 0 18px rgba(47,224,208,0.6);
   transition: color 0.3s;
@@ -866,25 +902,25 @@ body::before {
   background: rgba(14,18,48,0.92);
   border: 2px solid rgba(90,80,204,0.45);
   border-radius: 8px; padding: 14px 10px;
-  color: var(--ink); font-family: var(--pixel); font-size:12px;
+  color: var(--ink); font-family: var(--font-body); font-weight: 600; font-size:var(--fs-1);
   cursor: pointer; text-align: center; letter-spacing: 1px;
   transition: all .15s var(--ease);
   box-shadow: 0 2px 10px rgba(0,0,0,0.4);
 }
 .vote-btn:hover { background: rgba(90,80,204,0.32); border-color: var(--indigo);
   box-shadow: 0 0 18px rgba(139,125,255,0.4); }
-.vote-count { font-size: 20px; margin-top: 6px; display: block; color: var(--gold); }
-#vote-status { font-family: var(--pixel); font-size:12px; color: var(--ink-3); }
+.vote-count { font-family: var(--font-num); font-weight: 600; font-size: var(--fs-2); margin-top: 6px; display: block; color: var(--gold); }
+#vote-status { font-family: var(--font-body); font-size:var(--fs-0); color: var(--ink-3); }
 
 /* ── Leaderboard ─────────────────────────────────────── */
 .lb-wrap { margin: 10px 0; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
 .lb-row {
   display: flex; align-items: center; gap: 10px;
   padding: 7px 12px; border-bottom: 1px solid rgba(90,80,204,0.15);
-  font-family: var(--pixel); font-size:12px; color: var(--ink-2);
+  font-family: var(--font-body); font-size:var(--fs-0); color: var(--ink-2);
 }
 .lb-row:last-child { border-bottom: none; }
-.lb-icon { font-size: 14px; flex-shrink: 0; }
+.lb-icon { font-size: var(--fs-1); flex-shrink: 0; }
 .lb-val { color: var(--gold); margin-left: auto; }
 
 /* ── Guardian role badge ──────────────────────────────── */
@@ -897,11 +933,11 @@ body::before {
   background:rgba(8,12,30,0.65);
 }
 .mission-card h4 {
-  font-family:var(--pixel); font-size:12px; color:var(--teal);
+  font-family:var(--font-body); font-weight:700; font-size:var(--fs-1); color:var(--teal);
   margin-bottom:6px; letter-spacing:1px;
 }
-.mission-card p { font-size:13px; color:var(--ink-2); margin-bottom:8px; }
-.mission-done { font-family:var(--pixel); font-size:12px; color:var(--green); margin-top:4px; }
+.mission-card p { font-size:var(--fs-0); color:var(--ink-2); margin-bottom:8px; }
+.mission-done { font-family:var(--font-body); font-weight:600; font-size:var(--fs-0); color:var(--green); margin-top:4px; }
 </style>
 </head>
 <body>
@@ -996,8 +1032,8 @@ body::before {
           <div id="sage-bar-footer">
             <span id="sage-bar-hotkey">[?] · A=ATK H/X/Y/Z=CHARGE M=MEASURE C=CNOT SPC=END</span>
             <span id="sage-bar-controls" style="display:flex;gap:10px;align-items:center">
-              <span id="sage-bar-explain" onclick="event.stopPropagation(); explainSelected();" title="Explain the selected qubit's state (E)" style="cursor:pointer;font-family:var(--pixel);font-size:12px;color:rgba(139,125,255,0.85)">✦ EXPLAIN</span>
-              <span id="sage-bar-coach" onclick="event.stopPropagation(); toggleCoach();" title="Toggle teaching depth (verbose ↔ terse)" style="cursor:pointer;font-family:var(--pixel);font-size:12px;color:rgba(139,125,255,0.85)">◆ TEACH</span>
+              <span id="sage-bar-explain" onclick="event.stopPropagation(); explainSelected();" title="Explain the selected qubit's state (E)" style="cursor:pointer;font-family:var(--font-body);font-weight:700;font-size:var(--fs-1);color:rgba(139,125,255,0.85)">✦ EXPLAIN</span>
+              <span id="sage-bar-coach" onclick="event.stopPropagation(); toggleCoach();" title="Toggle teaching depth (verbose ↔ terse)" style="cursor:pointer;font-family:var(--font-body);font-weight:700;font-size:var(--fs-1);color:rgba(139,125,255,0.85)">◆ TEACH</span>
               <span id="sage-bar-collapse" onclick="event.stopPropagation(); toggleSagePanel();" title="Collapse/expand the Sage panel to reclaim vertical space">▾ HIDE</span>
               <span id="sage-bar-more">▼ MORE</span>
             </span>
@@ -1028,12 +1064,12 @@ body::before {
           <span class="srow-label">X-basis</span>
           <span class="val" id="sel-xbasis">—</span>
         </div>
-        <div id="bloch-caption" style="text-align:center;font-size:11px;color:var(--dim);margin-top:6px;letter-spacing:.02em"
+        <div id="bloch-caption" style="text-align:center;font-size:var(--fs-0);color:var(--dim);margin-top:6px;letter-spacing:.02em"
           title="Arrow up (north pole) = |0⟩, ground state — safe. Arrow down (south pole) = |1⟩, fully charged — a hit here crits. On the equator = superposition (H put it there).">Bloch sphere — your qubit as an arrow</div>
         <canvas id="bloch-canvas" width="100" height="100"
           title="Arrow up = |0⟩ ground state · Arrow down = |1⟩ fully charged · Equator = superposition"
           style="display:block;margin:3px auto 7px;border:1px solid rgba(90,80,204,0.40);border-radius:50%;background:radial-gradient(circle at 40% 35%, #1c2440, #0a0f22);box-shadow:0 4px 16px rgba(0,0,0,0.50);"></canvas>
-        <div id="sel-budget" style="font-size:13px;color:var(--dim);margin:2px 0 4px" title="GD-5 — projects this unit's charge forward using the SAME Lindblad decay QPhysics runs each turn, so the T1 exponential is visible before you commit to a route, not just after."></div>
+        <div id="sel-budget" style="font-size:var(--fs-0);color:var(--dim);margin:2px 0 4px" title="GD-5 — projects this unit's charge forward using the SAME Lindblad decay QPhysics runs each turn, so the T1 exponential is visible before you commit to a route, not just after."></div>
         <div id="sel-hint-toggle" onclick="toggleSelHint()"
           onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleSelHint();}"
           role="button" tabindex="0">▸ What does this mean?</div>
@@ -1352,11 +1388,11 @@ const GATE_MISSION = {
 function openGlossaryIndex() {
   document.getElementById('modal-content').innerHTML = `
 <h2>◈ GLOSSARY ◈</h2>
-<p style="text-align:center;color:var(--dim);font-size:13px;margin-bottom:14px">Every gate in one place — tap any row for the full physics.</p>
+<p style="text-align:center;color:var(--dim);font-size:var(--fs-0);margin-bottom:14px">Every gate in one place — tap any row for the full physics.</p>
 ${Object.keys(GATE_INFO).map(gate => {
   const info = GATE_INFO[gate];
   return `<div class="mission-card" style="cursor:pointer" onclick="showGlossary('${gate}')">
-    <h4>${info.label} <span style="color:var(--dim);font-weight:normal;font-size:12px">— ${info.effect}</span></h4>
+    <h4>${info.label} <span style="color:var(--dim);font-weight:normal;font-size:var(--fs-0)">— ${info.effect}</span></h4>
     <p style="margin:0">${info.short}</p>
   </div>`;
 }).join('')}
@@ -1370,10 +1406,10 @@ function showGlossary(gate) {
   const missionIdx = GATE_MISSION[gate];
   const missionHtml = (missionIdx !== undefined)
     ? `<button class="btn" onclick="closeModal();startMission(${missionIdx})">▶ Play ${CAMPAIGN_MISSIONS[missionIdx].title}</button>`
-    : `<p style="color:var(--dim);font-size:13px">Used throughout the game — no single dedicated training mission yet.</p>`;
+    : `<p style="color:var(--dim);font-size:var(--fs-0)">Used throughout the game — no single dedicated training mission yet.</p>`;
   document.getElementById('modal-content').innerHTML = `
 <h2>◈ ${info.label} ◈</h2>
-<p style="color:var(--teal);font-size:14px;margin:-8px 0 12px">${info.effect} — ${info.short}</p>
+<p style="color:var(--teal);font-size:var(--fs-1);margin:-8px 0 12px">${info.effect} — ${info.short}</p>
 <p style="line-height:1.6">${info.ctrl}</p>
 <h3>TAUGHT IN</h3>
 ${missionHtml}
@@ -2949,7 +2985,7 @@ function drawBoard() {
   });
 
   // ── Rank/file coordinates (crisp, low-key). ──
-  ctx.font=`${canvasFontPx(8)}px 'Press Start 2P',monospace`; ctx.fillStyle='rgba(174,184,230,0.5)';
+  ctx.font=`600 ${canvasFontPx(8,13)}px ${CANVAS_BODY}`; ctx.fillStyle='rgba(174,184,230,0.5)';
   for (let r=0;r<GRID;r++){ ctx.textAlign='left'; ctx.textBaseline='top'; ctx.fillText(GRID-r, 4, r*CELL+4); }
   for (let c=0;c<GRID;c++){ ctx.textAlign='right'; ctx.textBaseline='bottom'; ctx.fillText('abcdefgh'[c], c*CELL+CELL-4, BOARD-4); }
   ctx.textAlign='left'; ctx.textBaseline='alphabetic';
@@ -3262,7 +3298,10 @@ const SAGE_BAR_H=82;  // sage dialogue bar overlays bottom of canvas
 // canvas.width, because canvas.width is now the DPR-scaled physical size.
 function menuDims() {
   const cssScale = canvasCssScale();
-  const growth = Math.max(1, 44/(33*cssScale));
+  // TY-4 — base row height 33 -> 38: the two text lines per row now render
+  // at a 13 CSS px floor (was 10) and need the room; same move as FE-6's
+  // sage bar (the box grows, the text doesn't shrink).
+  const growth = Math.max(1, 44/(38*cssScale));
   // FE-12 — W and IH used to grow by the same factor, but only IH (row
   // height) actually needs to hit a 44px touch target; W was inflating
   // right along with it as an unrelated side effect. Measured at 640px
@@ -3270,7 +3309,7 @@ function menuDims() {
   // board width, well past FE-12's own ~40% "never covers more than"
   // budget — capping W independently (never THIS growth's answer, always
   // FE-12's own ceiling) fixes it without touching the IH growth IN-1 needs.
-  return { W: Math.min(Math.round(192*growth), Math.round(BOARD*0.4)), IH: Math.round(33*growth) };
+  return { W: Math.min(Math.round(192*growth), Math.round(BOARD*0.4)), IH: Math.round(38*growth) };
 }
 
 // FE-4 — canvas TEXT legibility floor, same display-contract story as FE-2's
@@ -3286,8 +3325,14 @@ function canvasCssScale() {
 // a 44px touch target: grows the logical font size just enough that the
 // on-screen text never drops below ~10 CSS px, and never shrinks a font
 // that's already big enough (Math.max(1, ...) floor, same as menuDims()).
-function canvasFontPx(basePx) {
-  return basePx * Math.max(1, 10/(basePx*canvasCssScale()));
+// TY-4 — second arg: the CSS-px floor for this text's tier. Dense canvas
+// text (menu rows, cards, overlay prose) renders in the body face with a
+// 13px floor to match the DOM's --fs-0; the pixel face survives on canvas
+// only for banners (WIN/DRAW headlines), in-world unit glyphs, and FX
+// floats. Default floor stays 10 for legacy callers.
+const CANVAS_BODY = "'Space Grotesk',sans-serif";
+function canvasFontPx(basePx, floorCss = 10) {
+  return basePx * Math.max(1, floorCss/(basePx*canvasCssScale()));
 }
 // Glow behind text this small just smears the edges into mush. Only the
 // UN-grown size matters: canvasFontPx() never grows a font past what's
@@ -3339,7 +3384,7 @@ function drawGateMenu() {
   ctx.fillRect(mx, my+11, MENU_W, 11);
 
   ctx.fillStyle = '#ffffff';
-  ctx.font = `bold ${canvasFontPx(7)}px 'Press Start 2P',monospace`;
+  ctx.font = `700 ${canvasFontPx(7,13)}px ${CANVAS_BODY}`;
   ctx.textAlign = 'center';
   ctx.fillText('⚡ CONTROL PULSES', mx + MENU_W/2, my+15);
   ctx.textAlign = 'left';
@@ -3361,7 +3406,7 @@ function drawGateMenu() {
 
     // Cursor chevron
     ctx.fillStyle = isHov ? '#ffffff' : 'rgba(0,0,0,0)';
-    ctx.font = `${canvasFontPx(7)}px 'Press Start 2P',monospace`;
+    ctx.font = `${canvasFontPx(7,13)}px ${CANVAS_BODY}`;
     ctx.fillText('▶', mx+8, oy + Math.round(MENU_IH*0.58));
 
     // FE-12 — effect-first: the plain-English effect is now the bold/
@@ -3371,13 +3416,13 @@ function drawGateMenu() {
     // dim afterthought. `opt.label` itself is untouched (still "[X] Pauli-X"
     // format) since startCrowdVote() elsewhere depends on that exact shape.
     ctx.fillStyle = isHov ? '#ffffff' : gateCol;
-    ctx.font = `bold ${canvasFontPx(7)}px 'Press Start 2P',monospace`;
-    ctx.fillText(opt.effect || opt.label, mx+20, oy + Math.round(MENU_IH*0.48));
+    ctx.font = `700 ${canvasFontPx(7,13)}px ${CANVAS_BODY}`;
+    ctx.fillText(opt.effect || opt.label, mx+20, oy + Math.round(MENU_IH*0.44));
 
     // Technical name (hotkey + gate name)
     ctx.fillStyle = isHov ? 'rgba(220,224,255,0.72)' : 'rgba(174,184,230,0.58)';
-    ctx.font = `${canvasFontPx(5.5)}px 'Press Start 2P',monospace`;
-    ctx.fillText(opt.label || '', mx+20, oy + Math.round(MENU_IH*0.82));
+    ctx.font = `${canvasFontPx(5.5,13)}px ${CANVAS_BODY}`;
+    ctx.fillText(opt.label || '', mx+20, oy + Math.round(MENU_IH*0.84));
   });
 
   // ── Side detail card on hover ──────────────────────────
@@ -3385,8 +3430,8 @@ function drawGateMenu() {
     const opt     = options[hovered];
     const fullCtrl = GATE_INFO[opt.action]?.ctrl || '';
     if (fullCtrl) {
-      const DW = 188;
-      const DH = 92;
+      const DW = 210;
+      const DH = 120;
       // Prefer right side; fall back to left if near edge
       const detX = (mx + MENU_W + 10 + DW < BOARD) ? mx + MENU_W + 10 : mx - DW - 10;
       const detY = my;
@@ -3417,7 +3462,7 @@ function drawGateMenu() {
       // (worst case SKIP's slate accent at 8.51:1) without touching the shared
       // color palette used elsewhere as text-on-dark-bg (already fine).
       ctx.fillStyle = '#000000';
-      ctx.font = `bold ${canvasFontPx(7)}px 'Press Start 2P',monospace`;
+      ctx.font = `700 ${canvasFontPx(7,13)}px ${CANVAS_BODY}`;
       ctx.textAlign = 'center';
       const lbl = GATE_INFO[opt.action]?.label || opt.action;
       ctx.fillText(lbl, detX + DW/2, detY+15);
@@ -3431,8 +3476,13 @@ function drawGateMenu() {
       // the card's bottom edge; acceptable for now since this card only
       // ever appears on mouse hover, not on touch.
       ctx.fillStyle = '#c8d0f0';
-      ctx.font = `${canvasFontPx(5.5)}px 'Press Start 2P',monospace`;
-      wrapText(ctx, fullCtrl, detX+8, detY+32, DW-16, 12*(canvasFontPx(5.5)/5.5));
+      ctx.font = `${canvasFontPx(5.5,13)}px ${CANVAS_BODY}`;
+      // TY-4 — bound the card text at a word boundary; the full description
+      // is one tap away in the glossary (G on the row / glossary index).
+      const cardTxt = fullCtrl.length > 150
+        ? fullCtrl.slice(0, 147).replace(/\s+\S*$/, '') + '…'
+        : fullCtrl;
+      wrapText(ctx, cardTxt, detX+8, detY+34, DW-16, Math.round(canvasFontPx(5.5,13)*1.35));
     }
   }
 
@@ -3499,7 +3549,7 @@ function drawOverlay() {
       ctx.fillStyle='#8b7dff'; ctx.shadowColor='#8b7dff'; ctx.shadowBlur=canvasGlowOk(18)?22:0;
       ctx.fillText('DRAW', BOARD/2, BOARD*0.444);
       ctx.shadowBlur=0;
-      ctx.font=`${canvasFontPx(9)}px 'Press Start 2P',monospace`; ctx.fillStyle='#cfd6ee';
+      ctx.font=`600 ${canvasFontPx(9,13)}px ${CANVAS_BODY}`; ctx.fillStyle='#cfd6ee';
       ctx.fillText('Mutual annihilation.', BOARD/2, BOARD*0.5);
     } else {
       const col=FACTION[GAME.winner].col;
@@ -3507,21 +3557,21 @@ function drawOverlay() {
       ctx.fillStyle=col; ctx.shadowColor=col; ctx.shadowBlur=canvasGlowOk(20)?26:0;
       ctx.fillText(`${FACTION[GAME.winner].name} WINS`, BOARD/2, BOARD*0.444);
       ctx.shadowBlur=0;
-      ctx.font=`${canvasFontPx(9)}px 'Press Start 2P',monospace`; ctx.fillStyle='#cfd6ee';
+      ctx.font=`600 ${canvasFontPx(9,13)}px ${CANVAS_BODY}`; ctx.fillStyle='#cfd6ee';
       ctx.fillText(`Units left  KNIGHTS ${aliveCount('white')} – ${aliveCount('black')} MAGES`, BOARD/2, BOARD*0.5);
     }
     ctx.fillStyle='#9aa3c4';
-    ctx.font=`${canvasFontPx(7)}px 'Press Start 2P',monospace`;
+    ctx.font=`${canvasFontPx(7,13)}px ${CANVAS_BODY}`;
     ctx.fillText('Click to menu · R to copy replay', BOARD/2, BOARD*0.544);
     // Session stats
-    ctx.font=`${canvasFontPx(6)}px 'Press Start 2P',monospace`; ctx.fillStyle='#9aa3cf';
+    ctx.font=`${canvasFontPx(6,13)}px ${CANVAS_BODY}`; ctx.fillStyle='#9aa3cf';
     ctx.fillText(`Turns: ${GAME.turnCount+1}  |  Criticals: ${GAME.critCount}  |  Entanglements: ${GAME.entanglCount}`, BOARD/2, BOARD*0.584);
     // GD-4 — gate-log debrief: one concrete, this-battle-derived physics
     // pointer, so every battle ends with a takeaway, not just a scoreboard.
     if (GAME.debriefText) {
       ctx.textAlign='left';
-      ctx.font=`${canvasFontPx(7)}px 'Press Start 2P',monospace`; ctx.fillStyle='#cfd6ee';
-      wrapText(ctx, GAME.debriefText, BOARD*0.08, BOARD*0.65, BOARD*0.84, 12*(canvasFontPx(7)/7));
+      ctx.font=`${canvasFontPx(7,13)}px ${CANVAS_BODY}`; ctx.fillStyle='#cfd6ee';
+      wrapText(ctx, GAME.debriefText, BOARD*0.08, BOARD*0.65, BOARD*0.84, Math.round(canvasFontPx(7,13)*1.4));
     }
     ctx.textAlign='left';
   }
@@ -3529,14 +3579,14 @@ function drawOverlay() {
   if (GAME.attackMode) {
     ctx.fillStyle='rgba(255,90,114,0.07)'; ctx.fillRect(0,0,BOARD,BOARD);
     ctx.textAlign='center';
-    ctx.font=`bold ${canvasFontPx(7)}px 'Press Start 2P',monospace`;
+    ctx.font=`700 ${canvasFontPx(7,15)}px ${CANVAS_BODY}`;
     ctx.fillStyle='#ff5a72'; ctx.shadowColor='#ff5a72'; ctx.shadowBlur=canvasGlowOk(7)?8:0;
     ctx.fillText('ATTACK — CLICK AN ADJACENT ENEMY  [ESC to cancel]',BOARD/2, BOARD*0.98);
     ctx.shadowBlur=0; ctx.textAlign='left';
   } else if (GAME.cnotMode) {
     ctx.fillStyle='rgba(255,77,157,0.06)'; ctx.fillRect(0,0,BOARD,BOARD);
     ctx.textAlign='center';
-    ctx.font=`bold ${canvasFontPx(7)}px 'Press Start 2P',monospace`;
+    ctx.font=`700 ${canvasFontPx(7,15)}px ${CANVAS_BODY}`;
     ctx.fillStyle='#ff4d9d'; ctx.shadowColor='#ff4d9d'; ctx.shadowBlur=canvasGlowOk(7)?8:0;
     ctx.fillText('ENTANGLE — CLICK AN ADJACENT UNIT  [ESC to cancel]',BOARD/2, BOARD*0.98);
     ctx.shadowBlur=0; ctx.textAlign='left';
@@ -3565,7 +3615,7 @@ function drawBloch() {
   bx.beginPath(); bx.moveTo(cx,cy-R+2); bx.lineTo(cx,cy+R-2); bx.stroke();
   bx.beginPath(); bx.moveTo(cx-R+2,cy); bx.lineTo(cx+R-2,cy); bx.stroke();
 
-  bx.fillStyle='rgba(207,214,238,0.85)'; bx.font="7px 'Press Start 2P',monospace";
+  bx.fillStyle='rgba(207,214,238,0.85)'; bx.font=`600 11px ${CANVAS_BODY}`;
   bx.fillText('|0⟩',cx+3,cy-R+10); bx.fillText('|1⟩',cx+3,cy+R-2);
   // X-basis poles (|+⟩ / |−⟩) — the basis a GUARD is measured in, where phase decides the crit.
   bx.fillStyle='rgba(123,213,196,0.9)';
@@ -4132,7 +4182,7 @@ function drawFloats() {
   GAME.floats.forEach(f => {
     const baseSize = f.size||11;
     ctx.globalAlpha = Math.min(1, f.life * 1.4);
-    ctx.font = `bold ${canvasFontPx(baseSize)}px 'Press Start 2P',monospace`;
+    ctx.font = `bold ${canvasFontPx(baseSize,13)}px 'Press Start 2P',monospace`;
     ctx.textAlign = 'center';
     ctx.fillStyle = f.color || '#ff5a72';
     // FE-4 — this glow was unconditional at every size (7-11px logical),
@@ -4319,15 +4369,15 @@ const EV_QUIZ_QUESTIONS = [
 function openEvQuiz() {
   document.getElementById('modal-content').innerHTML = `
 <h2>◈ QUICK CHECK ◈</h2>
-<p style="text-align:center;color:var(--dim);font-size:13px;margin-bottom:14px">
+<p style="text-align:center;color:var(--dim);font-size:var(--fs-0);margin-bottom:14px">
   3 questions, optional, for your instructor -- not scored in-game. Included in EXPORT MY GATE LOG if you answer.
 </p>
 <form id="ev-quiz-form">
 ${EV_QUIZ_QUESTIONS.map((item, qi) => `
   <div style="margin:14px 0">
-    <p style="color:var(--teal);font-size:13px">${qi + 1}. ${item.q}</p>
+    <p style="color:var(--teal);font-size:var(--fs-0)">${qi + 1}. ${item.q}</p>
     ${item.options.map((opt, oi) => `
-      <label style="display:block;font-size:13px;margin:4px 0;cursor:pointer">
+      <label style="display:block;font-size:var(--fs-0);margin:4px 0;cursor:pointer">
         <input type="radio" name="ev-q${qi}" value="${oi}"> ${opt}
       </label>`).join('')}
   </div>`).join('')}
@@ -4468,7 +4518,7 @@ function openCampaign() {
   const done = GAME.campaignDone || [];
   document.getElementById('modal-content').innerHTML=`
 <h2>◈ TRAINING PROGRAMS ◈</h2>
-<p style="text-align:center;color:var(--dim);font-size:13px;margin-bottom:16px">${CAMPAIGN_MISSIONS.length} quantum scenarios — each teaches one real physics concept.</p>
+<p style="text-align:center;color:var(--dim);font-size:var(--fs-0);margin-bottom:16px">${CAMPAIGN_MISSIONS.length} quantum scenarios — each teaches one real physics concept.</p>
 ${CAMPAIGN_MISSIONS.map((m,i)=>`
 <div class="mission-card">
   <h4>${m.title}${done.includes(i)?'  ✓':''}</h4>
@@ -4546,7 +4596,7 @@ function startCrowdVote(options) {
 
   grid.innerHTML = voteOpts.map((o,i)=>`
     <div class="vote-btn" id="vb-${i}" onclick="castVote('${o.action}',${i})">
-      <span style="color:var(--gold);font-family:var(--pixel);font-size:13px">[${i+1}]</span>
+      <span style="color:var(--gold);font-family:var(--font-body);font-weight:700;font-size:var(--fs-0)">[${i+1}]</span>
       <br>${o.label.replace(/^\[\w+\]\s*/,'')}
       <span class="vote-count" id="vc-${i}">0</span>
     </div>`).join('');
@@ -5121,17 +5171,17 @@ function openPhysicsLab() {
   explainOnFirstUse('rho-t1-notation', '<b>ρ</b> (rho) is the density matrix — a table of numbers that fully describes a qubit\'s state, including how mixed/uncertain it is. <b>T1</b> is the decay time — how long charge takes to bleed away.');
   const { T1, T2 } = QPhysics.timesFromRate(GAME.decoRate);
   const sel = GAME.selected;
-  let unitBlock = `<p style="color:var(--wood);font-size:13px">Select one of your units on the board to inspect its live density matrix here.</p>`;
+  let unitBlock = `<p style="color:var(--wood);font-size:var(--fs-0)">Select one of your units on the board to inspect its live density matrix here.</p>`;
   if (sel) {
     const b = sel.bloch || QPhysics.blochFromPure(sel.state);
     const rho = QPhysics.rhoFromBloch(b);
     const ch = QPhysics.charge(b), pur = QPhysics.purity(b), coh = QPhysics.coherenceL1(b);
     const fmt = z => (z>=0?' ':'') + z.toFixed(3);
     unitBlock = `
-<p style="color:var(--teal);font-size:13px;margin:4px 0">UNIT ${coord(sel.row,sel.col)} — live state ρ</p>
-<pre style="color:var(--ink-2);font-size:13px;line-height:1.5;background:#0a0f22;border:1px solid var(--border);border-radius:4px;padding:8px;margin:4px 0;overflow:auto">ρ = [ ${fmt(rho[0][0].r)}        ${fmt(rho[0][1].r)}${rho[0][1].i<0?'−':'+'}${Math.abs(rho[0][1].i).toFixed(3)}i ]
+<p style="color:var(--teal);font-size:var(--fs-0);margin:4px 0">UNIT ${coord(sel.row,sel.col)} — live state ρ</p>
+<pre style="color:var(--ink-2);font-size:var(--fs-0);line-height:1.5;background:#0a0f22;border:1px solid var(--border);border-radius:4px;padding:8px;margin:4px 0;overflow:auto">ρ = [ ${fmt(rho[0][0].r)}        ${fmt(rho[0][1].r)}${rho[0][1].i<0?'−':'+'}${Math.abs(rho[0][1].i).toFixed(3)}i ]
     [ ${fmt(rho[1][0].r)}${rho[1][0].i<0?'−':'+'}${Math.abs(rho[1][0].i).toFixed(3)}i   ${fmt(rho[1][1].r)}      ]</pre>
-<p style="color:var(--dim);font-size:13px;margin:2px 0">
+<p style="color:var(--dim);font-size:var(--fs-0);margin:2px 0">
   charge P(|1⟩) = <b style="color:var(--red)">${(ch*100).toFixed(1)}%</b> ·
   purity Tr(ρ²) = <b style="color:var(--gold)">${pur.toFixed(3)}</b> ·
   coherence 2|ρ₀₁| = <b style="color:var(--teal)">${coh.toFixed(3)}</b>
@@ -5144,30 +5194,30 @@ function openPhysicsLab() {
   // MODEL's equation out of the first screenful instead of leading with it.
   document.getElementById('modal-content').innerHTML = `
 <h2>✦ PHYSICS LAB</h2>
-<p style="text-align:center;color:var(--dim);font-size:13px;margin:-8px 0 12px">Charge decays like a real qubit's does — here's the proof, then the math behind it.</p>
-${GAME.importedT1Ns ? `<p style="text-align:center;color:var(--teal);font-size:13px;margin:-4px 0 12px">T₁ imported from the Qubit Simulator page: ${GAME.importedT1Ns}ns there, scaled into this game's turn economy.</p>` : ''}
+<p style="text-align:center;color:var(--dim);font-size:var(--fs-0);margin:-8px 0 12px">Charge decays like a real qubit's does — here's the proof, then the math behind it.</p>
+${GAME.importedT1Ns ? `<p style="text-align:center;color:var(--teal);font-size:var(--fs-0);margin:-4px 0 12px">T₁ imported from the Qubit Simulator page: ${GAME.importedT1Ns}ns there, scaled into this game's turn economy.</p>` : ''}
 
 <canvas id="diag-canvas" width="360" height="190" style="width:100%;max-width:360px;display:block;margin:8px auto;background:#0a0f22;border:1px solid var(--border);border-radius:4px"></canvas>
-<p id="diag-readout" style="text-align:center;color:var(--dim);font-size:13px;margin:4px 0"></p>
-<p style="color:var(--dim);font-size:13px;line-height:1.6">A unit prepared fully charged, left alone: the real curve (teal) is exponential, not the straight line (red) a naive "charge just drains steadily" model would predict.</p>
+<p id="diag-readout" style="text-align:center;color:var(--dim);font-size:var(--fs-0);margin:4px 0"></p>
+<p style="color:var(--dim);font-size:var(--fs-0);line-height:1.6">A unit prepared fully charged, left alone: the real curve (teal) is exponential, not the straight line (red) a naive "charge just drains steadily" model would predict.</p>
 
 <h3>LIVE STATE INSPECTOR</h3>
 ${unitBlock}
 
 <div id="physics-math-toggle" onclick="togglePhysicsMath()"
   onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();togglePhysicsMath();}"
-  role="button" tabindex="0" style="cursor:pointer;color:var(--teal);font-size:13px;margin-top:12px">▸ Show me the math</div>
+  role="button" tabindex="0" style="cursor:pointer;color:var(--teal);font-size:var(--fs-0);margin-top:12px">▸ Show me the math</div>
 <div id="physics-math" style="display:none">
   <h3>THE MODEL</h3>
-  <p style="color:var(--dim);font-size:13px;line-height:1.7">Every unit is a single qubit whose state ρ evolves under the <b style="color:var(--teal)">Lindblad master equation</b> for amplitude damping (T₁) plus dephasing (T₂):</p>
-  <pre style="color:var(--gold);font-size:13px;line-height:1.6;text-align:center;background:#0a0f22;border:1px solid var(--border);border-radius:4px;padding:10px;margin:6px 0">dρ/dt = −(i/ℏ)[H,ρ] + Σ γₖ( Lₖ ρ Lₖ† − ½{Lₖ†Lₖ, ρ} )</pre>
-  <p style="color:var(--dim);font-size:13px;line-height:1.7">Each turn we apply its <b>exact</b> solution toward |0⟩: charge relaxes as <b style="color:var(--red)">e<sup>−t/T₁</sup></b>, transverse coherence as <b style="color:var(--teal)">e<sup>−t/T₂</sup></b> (with T₂ ≤ 2T₁). At the current rate (${GAME.decoRate.toFixed(2)}/turn): <b style="color:var(--gold)">T₁ = ${T1.toFixed(1)}</b>, <b style="color:var(--gold)">T₂ = ${T2.toFixed(1)}</b> turns.${GAME.importedT1Ns ? ` <span style="color:var(--teal)">Imported from the Qubit Simulator page: T₁ = ${GAME.importedT1Ns}ns there, scaled to this game's turn economy.</span>` : ''}</p>
-  <p style="color:var(--dim);font-size:13px;line-height:1.6">The chart above fits the engine's own generated data against this exponential model AND a linear model — confirming the <i>implementation</i> matches what the equation prescribes.</p>
-  <p style="color:var(--wood);font-size:13px;line-height:1.6;margin:2px 0 6px">This validates the implementation against the model; the model itself is standard open-quantum-systems physics — it is not an empirical measurement against a real physical qubit.</p>
+  <p style="color:var(--dim);font-size:var(--fs-0);line-height:1.7">Every unit is a single qubit whose state ρ evolves under the <b style="color:var(--teal)">Lindblad master equation</b> for amplitude damping (T₁) plus dephasing (T₂):</p>
+  <pre style="color:var(--gold);font-size:var(--fs-0);line-height:1.6;text-align:center;background:#0a0f22;border:1px solid var(--border);border-radius:4px;padding:10px;margin:6px 0">dρ/dt = −(i/ℏ)[H,ρ] + Σ γₖ( Lₖ ρ Lₖ† − ½{Lₖ†Lₖ, ρ} )</pre>
+  <p style="color:var(--dim);font-size:var(--fs-0);line-height:1.7">Each turn we apply its <b>exact</b> solution toward |0⟩: charge relaxes as <b style="color:var(--red)">e<sup>−t/T₁</sup></b>, transverse coherence as <b style="color:var(--teal)">e<sup>−t/T₂</sup></b> (with T₂ ≤ 2T₁). At the current rate (${GAME.decoRate.toFixed(2)}/turn): <b style="color:var(--gold)">T₁ = ${T1.toFixed(1)}</b>, <b style="color:var(--gold)">T₂ = ${T2.toFixed(1)}</b> turns.${GAME.importedT1Ns ? ` <span style="color:var(--teal)">Imported from the Qubit Simulator page: T₁ = ${GAME.importedT1Ns}ns there, scaled to this game's turn economy.</span>` : ''}</p>
+  <p style="color:var(--dim);font-size:var(--fs-0);line-height:1.6">The chart above fits the engine's own generated data against this exponential model AND a linear model — confirming the <i>implementation</i> matches what the equation prescribes.</p>
+  <p style="color:var(--wood);font-size:var(--fs-0);line-height:1.6;margin:2px 0 6px">This validates the implementation against the model; the model itself is standard open-quantum-systems physics — it is not an empirical measurement against a real physical qubit.</p>
 </div>
 
 <hr style="border-color:var(--border);margin:10px 0">
-<p style="color:var(--wood);font-size:13px;line-height:1.6">Verify in the browser console: <b style="color:var(--teal)">runDecoherenceDiagnostic()</b> · <b style="color:var(--teal)">QPhysics.selfTest()</b>. Physics engine has no UI dependencies — it is independently testable. Modelled after TLS-defect decoherence studied at the <b>Fitzpatrick Lab, Dartmouth College</b>.</p>
+<p style="color:var(--wood);font-size:var(--fs-0);line-height:1.6">Verify in the browser console: <b style="color:var(--teal)">runDecoherenceDiagnostic()</b> · <b style="color:var(--teal)">QPhysics.selfTest()</b>. Physics engine has no UI dependencies — it is independently testable. Modelled after TLS-defect decoherence studied at the <b>Fitzpatrick Lab, Dartmouth College</b>.</p>
 <button class="btn" style="margin-top:8px" onclick="openMenu()">◀ BACK TO MENU</button>`;
   document.getElementById('modal-overlay').classList.add('show');
   drawDecoherenceDiagram(GAME.decoRate);
@@ -5204,18 +5254,18 @@ const PULSE_EXCESS_DECO_SCALE = 2.0;
 function openPulseForge(unit) {
   document.getElementById('modal-content').innerHTML = `
 <h2>⚡ PULSE FORGE</h2>
-<p style="text-align:center;color:var(--dim);font-size:13px;margin:-8px 0 12px">
+<p style="text-align:center;color:var(--dim);font-size:var(--fs-0);margin:-8px 0 12px">
   Shape a drive pulse: amplitude × duration = 1.0 is a perfect flip (θ=π). Miss it either way and you get a genuine partial charge.
 </p>
 <canvas id="pulse-canvas" width="320" height="140" style="width:100%;max-width:320px;display:block;margin:6px auto;background:#0a0f22;border:1px solid var(--border);border-radius:4px"></canvas>
-<p id="pulse-readout" style="text-align:center;color:var(--gold);font-size:13px;margin:4px 0"></p>
+<p id="pulse-readout" style="text-align:center;color:var(--gold);font-size:var(--fs-0);margin:4px 0"></p>
 <div style="margin:10px 0">
-  <label style="color:var(--teal);font-size:13px">Amplitude (Ω<sub>R</sub>/2π, normalized) — <span id="pulse-amp-val"></span></label>
+  <label style="color:var(--teal);font-size:var(--fs-0)">Amplitude (Ω<sub>R</sub>/2π, normalized) — <span id="pulse-amp-val"></span></label>
   <input id="pulse-amp" type="range" min="0.1" max="${PULSE_MAX_AMPLITUDE}" step="0.05" value="1.0" style="width:100%"
     oninput="updatePulseForgePreview()" aria-label="Pulse amplitude">
 </div>
 <div style="margin:10px 0">
-  <label style="color:var(--teal);font-size:13px">Duration (pulse units) — <span id="pulse-dur-val"></span></label>
+  <label style="color:var(--teal);font-size:var(--fs-0)">Duration (pulse units) — <span id="pulse-dur-val"></span></label>
   <input id="pulse-dur" type="range" min="0.1" max="${PULSE_MAX_DURATION}" step="0.05" value="1.0" style="width:100%"
     oninput="updatePulseForgePreview()" aria-label="Pulse duration">
 </div>
@@ -5319,7 +5369,7 @@ function drawDecoherenceDiagram(decoRate) {
   const y = q => PADT + (H - PADT - PADB) * (1 - q);
   g.clearRect(0, 0, W, H);
   // axes + gridlines
-  g.strokeStyle = 'rgba(140,150,200,0.25)'; g.lineWidth = 1; g.font = "6px 'Press Start 2P',monospace";
+  g.strokeStyle = 'rgba(140,150,200,0.25)'; g.lineWidth = 1; g.font = `600 11px ${CANVAS_BODY}`;
   g.fillStyle = 'rgba(207,214,238,0.65)';
   for (let q = 0; q <= 1; q += 0.25) { g.beginPath(); g.moveTo(PADL, y(q)); g.lineTo(W - PADR, y(q)); g.stroke(); g.fillText((q).toFixed(2), 2, y(q) + 3); }
   g.fillText('0', PADL - 2, H - PADB + 12); g.fillText(String(N) + ' turns', W - PADR - 42, H - PADB + 12);
@@ -5344,11 +5394,11 @@ function openMenu() {
   const diffs=['EASY','MEDIUM','HARD'];
   document.getElementById('modal-content').innerHTML=`
 <h2>◈ QUBLITZ ◈</h2>
-<p style="text-align:center;color:var(--dim);margin:-10px 0 10px;font-size:13px;">Qubit Battle Arena — charge, close in, collapse the enemy</p>
+<p style="text-align:center;color:var(--dim);margin:-10px 0 10px;font-size:var(--fs-0);">Qubit Battle Arena — charge, close in, collapse the enemy</p>
 
 <div style="background:linear-gradient(135deg,rgba(47,224,208,0.10),rgba(139,125,255,0.08));border:1px solid var(--border);border-radius:6px;padding:9px 11px;margin:0 0 14px">
-  <p style="color:var(--gold);font-family:var(--pixel);font-size:12px;margin:0 0 6px">▸ PLAY IN 30 SECONDS</p>
-  <p style="color:var(--ink-2);font-size:13px;line-height:1.7;margin:0">
+  <p style="color:var(--gold);font-family:var(--font-body);font-weight:700;font-size:var(--fs-1);margin:0 0 6px">▸ PLAY IN 30 SECONDS</p>
+  <p style="color:var(--ink-2);font-size:var(--fs-0);line-height:1.7;margin:0">
     <b style="color:var(--teal)">1. CHARGE</b> — tap a unit, fire a gate (X = 100% charge, H = 50%).<br>
     <b style="color:var(--teal)">2. STRIKE</b> — move beside a foe and ATTACK; your hit chance IS the quantum probability — the Born rule.<br>
     <b style="color:var(--teal)">3. BEAT THE CLOCK</b> — charge decays exponentially each turn, because |1⟩ is the fragile, high-energy excited state — that's why it decays, not a game penalty. Strike before it bleeds away. Last army standing wins.
@@ -5367,56 +5417,56 @@ function openMenu() {
 <hr style="border-color:var(--border);margin:12px 0">
 
 <h3>SETTINGS</h3>
-<p style="color:var(--dim);font-size:13px;margin-bottom:6px;">
+<p style="color:var(--dim);font-size:var(--fs-0);margin-bottom:6px;">
   <label style="cursor:pointer">
     <input type="checkbox" id="ev-quiz-toggle" ${GAME.evQuizEnabled?'checked':''}
       onchange="GAME.evQuizEnabled=this.checked">
     End-of-mission quick check (research instrument, off by default)
   </label>
 </p>
-<p style="color:var(--dim);font-size:13px;margin-bottom:6px;">
+<p style="color:var(--dim);font-size:var(--fs-0);margin-bottom:6px;">
   Bot Difficulty:
   <select id="diff-sel" onchange="GAME.difficulty=parseInt(this.value)"
     style="background:#0c1226;border:2px solid var(--border);color:var(--gold);
-           font-family:var(--pixel);font-size:12px;margin-left:8px;padding:2px 6px;">
+           font-family:var(--font-body);font-weight:600;font-size:var(--fs-1);margin-left:8px;padding:2px 6px;">
     <option value="0"${GAME.difficulty===0?' selected':''}>EASY</option>
     <option value="1"${GAME.difficulty===1?' selected':''}>MEDIUM</option>
     <option value="2"${GAME.difficulty===2?' selected':''}>HARD</option>
   </select>
 </p>
-<p style="color:var(--dim);font-size:13px;margin-bottom:6px;">
+<p style="color:var(--dim);font-size:var(--fs-0);margin-bottom:6px;">
   Battlefield:
   <select id="board-sel" onchange="GAME.boardPreset=parseInt(this.value)"
     style="background:#0c1226;border:2px solid var(--border);color:var(--teal);
-           font-family:var(--pixel);font-size:12px;margin-left:8px;padding:2px 6px;">
+           font-family:var(--font-body);font-weight:600;font-size:var(--fs-1);margin-left:8px;padding:2px 6px;">
     ${BOARD_PRESETS.map((p,i)=>`<option value="${i}"${GAME.boardPreset===i?' selected':''}>${p.label}</option>`).join('')}
   </select><br>
-  <span style="color:var(--wood);font-size:13px;">Applies when you start the next battle.</span>
+  <span style="color:var(--wood);font-size:var(--fs-0);">Applies when you start the next battle.</span>
 </p>
-<p style="color:var(--dim);font-size:13px;margin-bottom:6px;">
+<p style="color:var(--dim);font-size:var(--fs-0);margin-bottom:6px;">
   Decoherence rate: <span id="dv" style="color:var(--green)">${GAME.decoRate}</span>/turn<br>
-  <span style="color:var(--wood);font-size:13px;">Higher = charge bleeds away faster (T1 relaxation).</span>
+  <span style="color:var(--wood);font-size:var(--fs-0);">Higher = charge bleeds away faster (T1 relaxation).</span>
 </p>
 <button class="btn" onclick="GAME.decoRate=Math.max(1,GAME.decoRate-1);document.getElementById('dv').textContent=GAME.decoRate">◀ SLOWER DECO</button>
 <button class="btn" onclick="GAME.decoRate=Math.min(12,GAME.decoRate+1);document.getElementById('dv').textContent=GAME.decoRate">▶ FASTER DECO</button>
 <hr style="border-color:var(--border);margin:6px 0">
-<p style="color:var(--dim);font-size:13px;margin-bottom:6px;">
+<p style="color:var(--dim);font-size:var(--fs-0);margin-bottom:6px;">
   ⏱ Blitz Mode (30s/turn):
-  <button class="btn" style="display:inline;width:auto;padding:4px 10px;margin-left:8px;font-size:13px"
+  <button class="btn" style="display:inline;width:auto;padding:4px 10px;margin-left:8px;font-size:var(--fs-0)"
     id="blitz-btn" onclick="GAME.blitzMode=!GAME.blitzMode;this.textContent=GAME.blitzMode?'ON ✓':'OFF'">${GAME.blitzMode?'ON ✓':'OFF'}</button>
 </p>
-<p style="color:var(--dim);font-size:13px;margin-bottom:6px;">
+<p style="color:var(--dim);font-size:var(--fs-0);margin-bottom:6px;">
   👥 Crowd Vote Mode — audience presses 1–4 to vote gates &nbsp;<span style="color:var(--teal)">[V]&nbsp;to&nbsp;toggle&nbsp;anytime</span>:
-  <button class="btn" style="display:inline;width:auto;padding:4px 10px;margin-left:8px;font-size:13px"
+  <button class="btn" style="display:inline;width:auto;padding:4px 10px;margin-left:8px;font-size:var(--fs-0)"
     id="vote-btn" onclick="GAME.voteMode=!GAME.voteMode;this.textContent=GAME.voteMode?'ON ✓':'OFF';_updateVoteBadge();">${GAME.voteMode?'ON ✓':'OFF'}</button>
 </p>
 <hr style="border-color:var(--border);margin:6px 0">
 ${leaderboardHTML()}
-<p style="color:var(--wood);font-size:13px;text-align:center;margin-top:10px;">
+<p style="color:var(--wood);font-size:var(--fs-0);text-align:center;margin-top:10px;">
   Every unit is a qubit · Guardians [G] resist criticals · Charge → strike.<br>
   Warriors attack, Guardians tank. Eliminate the enemy army.
 </p>
-<p style="color:var(--wood);font-size:13px;text-align:center;margin-top:8px;opacity:.8;line-height:1.6">
+<p style="color:var(--wood);font-size:var(--fs-0);text-align:center;margin-top:8px;opacity:.8;line-height:1.6">
   QUBLITZ ${QB_VERSION} · Lindblad T₁/T₂ physics engine (unit-tested)<br>
   Built by David Mukuruva · Fitzpatrick Lab, Dartmouth College
 </p>`;
@@ -5459,11 +5509,11 @@ function openTutorial() {
 
 <h3>▸ DECOHERENCE (Lindblad T1 / T2)</h3>
 <p>Real qubits don't bleed charge linearly — they decay <b>exponentially</b>. QuBlitz evolves every unit with the exact solution of the <b>Lindblad master equation</b>: excited charge relaxes toward |0⟩ as <b>e<sup>−t/T₁</sup></b> (amplitude damping) while superposition coherence fades as <b>e<sup>−t/T₂</sup></b> (dephasing, with T₂ ≤ 2T₁). On the Bloch sphere the state vector <b>contracts inward</b> as it mixes. So load up and strike <b>soon</b> — charge halves every couple of turns; don't charge a unit that can't reach a target. A fully decohered unit collapses to |0⟩.</p>
-<p style="opacity:.72;font-size:.92em">Verify it yourself: open the browser console and run <code>runDecoherenceDiagnostic()</code> — it fits charge-vs-turns to an exponential and a line and prints R² for each (exponential ≈ 1.000 ≫ linear), recovering the input T₁. <code>QPhysics.selfTest()</code> checks the gate &amp; decoherence math against analytic values.</p>
+<p style="opacity:.72;font-size:var(--fs-0)">Verify it yourself: open the browser console and run <code>runDecoherenceDiagnostic()</code> — it fits charge-vs-turns to an exponential and a line and prints R² for each (exponential ≈ 1.000 ≫ linear), recovering the input T₁. <code>QPhysics.selfTest()</code> checks the gate &amp; decoherence math against analytic values.</p>
 
 <h3>▸ ENTANGLEMENT &amp; MEASURE</h3>
 <p><b>Entangle (CNOT)</b> links two <b>adjacent</b> units (friend or foe) into a Bell link — a hit on one bleeds <b>1 damage onto the other</b>. Entangle two enemies for splash value. <b>Measure</b> collapses your unit to an eigenstate and restores coherence (+12) — discharge a dangerously-exposed unit, or stabilize one.</p>
-<p style="color:var(--dim);font-size:13px">What you just did to that unit — collapsing a superposition to a definite outcome — is exactly <b>measurement backaction</b>: the same thing the
+<p style="color:var(--dim);font-size:var(--fs-0)">What you just did to that unit — collapsing a superposition to a definite outcome — is exactly <b>measurement backaction</b>: the same thing the
   <a href="Quantum_Measurement_Tutorial" target="_top" style="color:var(--teal)">Measurement Tutorial page</a>
   plots for a real qubit. (Deep link works when this game is embedded in the lab's app; opened standalone, it's just a pointer to the page name.)</p>
 
@@ -5471,8 +5521,8 @@ function openTutorial() {
 <p>Units glow in their faction color — <b style="color:#2fe0d0">cyan</b> vs <b style="color:#ff4d9d">magenta</b>; the glow turns <b style="color:#ff5a72">hot red</b> as a unit charges toward |1⟩ — physically, the fragile excited state, not a "power level." <b>Green pips</b> above = HP; the bottom bar = charge. The state dot reads green |0⟩ (safe, ground state) · cyan superposition · red |1⟩ (charged, but short-lived). The Sage NPC beside the board calls out the best play each turn.</p>
 
 <h3>▸ SEE THE REAL PHYSICS</h3>
-<p style="color:var(--dim);font-size:13px">Every mechanic above is dramatizing something a real qubit does — these pages on the lab's site formalize it (links work when this game is embedded there):</p>
-<p style="font-size:13px;line-height:2">
+<p style="color:var(--dim);font-size:var(--fs-0)">Every mechanic above is dramatizing something a real qubit does — these pages on the lab's site formalize it (links work when this game is embedded there):</p>
+<p style="font-size:var(--fs-0);line-height:2">
   <a href="Qubit_Simulator" target="_top" style="color:var(--teal)">Qubit Simulator →</a> charge, the Born rule, and what X/H actually do to a real qubit's state.<br>
   <a href="Quantum_Measurement_Tutorial" target="_top" style="color:var(--teal)">Measurement Tutorial →</a> what MEASURE's collapse looks like plotted, not just narrated.<br>
   <a href="Dilution_Refrigerator_Noise_Explorer" target="_top" style="color:var(--teal)">Dilution Refrigerator Noise Explorer →</a> where T1/T2 decoherence — the clock this game runs on — actually comes from.
@@ -5533,7 +5583,7 @@ window.addEventListener('load', () => {
   <div id="vote-subtitle">Press 1–4 on any keyboard to vote! Most votes wins.</div>
   <div id="vote-timer">12</div>
   <div id="vote-grid"></div>
-  <div id="vote-status" style="font-size:13px;color:rgba(255,255,255,0.4);margin-top:6px;">
+  <div id="vote-status" style="font-size:var(--fs-0);color:rgba(255,255,255,0.4);margin-top:6px;">
     [ESC] or [Enter] to resolve immediately
   </div>
 </div>
@@ -5544,7 +5594,7 @@ window.addEventListener('load', () => {
   title="Toggle Crowd Vote (or press V)"
   style="
     position:fixed; bottom:8px; left:50%; transform:translateX(-50%);
-    font-family:var(--pixel); font-size:12px; letter-spacing:1px;
+    font-family:var(--font-body); font-weight:600; font-size:var(--fs-1); letter-spacing:1px;
     padding:5px 14px; border-radius:4px; cursor:pointer;
     border:1px solid rgba(124,140,230,0.2);
     background:rgba(18,24,52,0.5); color:#9aa3cf;
