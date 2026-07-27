@@ -174,6 +174,139 @@ const MINUS = { x: -1, y: 0, z: 0 };
     rAfter < rBefore, `|r| ${rBefore.toFixed(4)} → ${rAfter.toFixed(4)}`);
 }
 
+// ── T-beam vs Z-beam: the anti-camp claim (Clifford / non-Clifford) ───
+// DuelCore's header asserts that a Clifford phase rotation cannot break an
+// X-camp but the non-Clifford T can. That is a physics claim doing tactical
+// work, so it gets tested rather than asserted in prose.
+{
+  const rand = DuelCore.mulberry32(7);
+  // A camper sits at |+⟩: an X-eigenstate, immune to the X attack beam.
+  const camper = PLUS;
+  check('t1. camper at |+⟩ is immune to the X attack beam',
+    DuelCore.resolveBeam(camper, 'X', Math.PI, { rand }).shielded === true);
+
+  // Z (Clifford, π about z) maps |+⟩ → |−⟩ — still an X-eigenstate, still camped.
+  const afterZ = DuelCore.rotateBloch(camper, DuelCore.AXES.Z, Math.PI);
+  check('t2. Z (Clifford) maps |+⟩→|−⟩ — camper STILL immune to X',
+    DuelCore.isEigenstate(afterZ, 'X') === true,
+    `|−⟩ x=${afterZ.x.toFixed(3)}, X-angle ${DuelCore.eigenstateAngleDeg(afterZ,'X').toFixed(1)}°`);
+
+  // T (non-Clifford, π/4 about z) lands them at 45° — off every cardinal axis.
+  const afterT = DuelCore.resolveBeam(camper, 'T', 0, { rand }).bloch;
+  const stillCamped = DuelCore.isEigenstate(afterT, 'X');
+  check('t3. T (non-Clifford) breaks the camp — no longer an X-eigenstate',
+    stillCamped === false,
+    `X-angle after T = ${DuelCore.eigenstateAngleDeg(afterT,'X').toFixed(1)}°`);
+  check('t4. …and off EVERY cardinal axis (not just re-parked elsewhere)',
+    DuelCore.isCardinal(afterT) === false,
+    `cardinal=${DuelCore.isCardinal(afterT)}`);
+  check('t5. T changes MEASURE odds by exactly 0 (it is pure phase)',
+    approx(DuelCore.odds(afterT), DuelCore.odds(camper), 1e-12),
+    `${DuelCore.odds(camper).toFixed(6)} → ${DuelCore.odds(afterT).toFixed(6)}`);
+  // …so the X beam now lands on them.
+  check('t6. after T, the X beam is no longer shielded',
+    DuelCore.resolveBeam(afterT, 'X', Math.PI, { rand }).shielded === false);
+}
+
+// ── Decoherence hotspot: sanctuary bought with your own offence ───────
+{
+  const zones = [{ x: 100, y: 100, r: 60, t1: DuelCore.ZONE.HOT_T1, t2: DuelCore.ZONE.HOT_T2 }];
+  check('h1. zoneAt finds a hotspot inside its radius, not outside',
+    !!DuelCore.zoneAt(120, 110, zones) && !DuelCore.zoneAt(400, 400, zones));
+
+  // Charged up, then 3s inside vs 3s outside.
+  const charged = DuelCore.applyBeamHit(KET0, 'X', Math.PI).bloch;   // odds 1.0
+  const inHot = DuelCore.decayStep(charged, 3, zones[0]);
+  const outside = DuelCore.decayStep(charged, 3);
+  check('h2. 3s in a hotspot discharges far faster than open space',
+    DuelCore.odds(inHot) < DuelCore.odds(outside) - 0.2,
+    `hotspot ${DuelCore.odds(inHot).toFixed(3)} vs open ${DuelCore.odds(outside).toFixed(3)}`);
+  check('h3. …enough to stop being a MEASURE target (odds < 0.5 in 3s)',
+    DuelCore.odds(inHot) < 0.5, `odds ${DuelCore.odds(inHot).toFixed(3)}`);
+  // The cost: it is symmetric. You cannot hold a charge in there either.
+  const tryCharge = DuelCore.decayStep(
+    DuelCore.applyBeamHit(KET0, 'X', Math.PI).bloch, 2, zones[0]);
+  check('h4. the sanctuary is not free — you cannot hold charge inside',
+    DuelCore.odds(tryCharge) < 0.65, `odds after 2s ${DuelCore.odds(tryCharge).toFixed(3)}`);
+}
+
+// ── Gate fidelity: sloppy pulses miss the angle they aimed for ────────
+{
+  const N = 4000;
+  function spread(fid) {
+    const rand = DuelCore.mulberry32(99);
+    const xs = [];
+    for (let i = 0; i < N; i++) xs.push(DuelCore.applyFidelity(Math.PI, fid, rand));
+    // Two-pass variance: the single-pass E[x²]−E[x]² form goes slightly
+    // NEGATIVE here when σ is exactly 0 (every sample is π), and sqrt of that
+    // is NaN — which is how this test first "failed" on a correct product.
+    const mean = xs.reduce((a, b) => a + b, 0) / N;
+    const varr = xs.reduce((a, b) => a + (b - mean) ** 2, 0) / N;
+    return { mean, sd: Math.sqrt(Math.max(0, varr)) };
+  }
+  const sloppy = spread(0.2), tuned = spread(0.95), perfect = spread(1);
+  // σ is exactly 0 at fidelity 1 (sigmaFor(1)===0), so every sample IS π;
+  // the ~1e-13 residual is float error in summing 4000 copies of π, not
+  // scatter in the product.
+  const perfectExact = DuelCore.applyFidelity(Math.PI, 1, DuelCore.mulberry32(1)) === Math.PI;
+  check('f1. perfect fidelity delivers exactly the commanded θ (σ=0)',
+    perfectExact && DuelCore.sigmaFor(1) === 0 && perfect.sd < 1e-9,
+    `sigmaFor(1)=${DuelCore.sigmaFor(1)}, sample===π: ${perfectExact}`);
+  check('f2. lower fidelity → wider angle error, mean still on target',
+    sloppy.sd > tuned.sd && approx(sloppy.mean, Math.PI, 0.05),
+    `σ: fid0.2=${sloppy.sd.toFixed(3)} rad, fid0.95=${tuned.sd.toFixed(3)} rad`);
+  check('f3. σ matches the documented model σ0·(1−fidelity)',
+    approx(sloppy.sd, DuelCore.sigmaFor(0.2), 0.03),
+    `observed ${sloppy.sd.toFixed(4)} vs model ${DuelCore.sigmaFor(0.2).toFixed(4)}`);
+}
+
+// ── Bell trap: entangling resets the round to an honest coin flip ─────
+{
+  const amps = DuelCore.bellPair();
+  check('b1. a fresh Bell pair reads 50% for BOTH halves',
+    approx(DuelCore.bellOdds(amps, 0), 0.5, 1e-12) &&
+    approx(DuelCore.bellOdds(amps, 1), 0.5, 1e-12),
+    `${DuelCore.bellOdds(amps,0).toFixed(6)} / ${DuelCore.bellOdds(amps,1).toFixed(6)}`);
+
+  // Correlated collapse: |Φ+⟩ must give the SAME outcome on both halves, every time.
+  const rand = DuelCore.mulberry32(2024);
+  let ones = 0, correlated = 0;
+  for (let i = 0; i < 5000; i++) {
+    const r = DuelCore.bellMeasure(DuelCore.bellPair(), 0, rand);
+    if (r.outcome === r.partnerOutcome) correlated++;
+    if (r.outcome === 1) ones++;
+  }
+  check('b2. |Φ+⟩ collapse is perfectly correlated (5000 trials)',
+    correlated === 5000, `${correlated}/5000 matched`);
+  check('b3. …and fair — 50/50 over those trials',
+    Math.abs(ones / 5000 - 0.5) < 0.03, `P(1)=${(ones / 5000).toFixed(4)}`);
+
+  // The comeback property: a 5%-vs-95% fight becomes 50/50 for both.
+  const losing = { x: 0, y: 0, z: 1 - 2 * 0.05 };
+  check('b4. entangling a 5% qubit resets it to a 50% coin flip (comeback)',
+    approx(DuelCore.odds(losing), 0.05, 1e-9) &&
+    approx(DuelCore.bellOdds(DuelCore.bellPair(), 0), 0.5, 1e-12),
+    `0.05 → 0.50`);
+}
+
+// ── Zeno lock: a watched qubit cannot evolve ──────────────────────────
+{
+  const rand = DuelCore.mulberry32(5);
+  const pinned = DuelCore.resolveBeam(KET0, 'X', Math.PI,
+    { rand, zenoUntil: 10, now: 8 });
+  check('z1. a Zeno-pinned target ignores an incoming beam entirely',
+    pinned.zenoBlocked === true && approx(pinned.bloch.z, 1, 1e-12),
+    `z stayed ${pinned.bloch.z}`);
+  const freed = DuelCore.resolveBeam(KET0, 'X', Math.PI,
+    { rand, zenoUntil: 10, now: 11 });
+  check('z2. …and takes the hit normally once the lock expires',
+    freed.zenoBlocked === false && approx(DuelCore.odds(freed.bloch), 1, 0.02),
+    `charge ${DuelCore.odds(freed.bloch).toFixed(4)}`);
+  check('z3. lock parameters are declared, not magic',
+    DuelCore.ZENO.NEEDED === 2 && DuelCore.ZENO.WINDOW > 0 && DuelCore.ZENO.HOLD > 0,
+    `${DuelCore.ZENO.NEEDED} measures within ${DuelCore.ZENO.WINDOW}s → ${DuelCore.ZENO.HOLD}s hold`);
+}
+
 // ── Case 8 — the campaign engine is untouched ─────────────────────────
 {
   const st = QPhysics.selfTest();
@@ -190,8 +323,7 @@ for (const r of results) {
   if (r.detail) console.log(`      ${r.detail}`);
 }
 console.log('\n  PENDING (arrive with the mechanics they test):');
-console.log('    · §9.2 eigenstate boundary at ±9°/11° — D1 (shield tuning)');
-console.log('    · §9.4 nebula T2 ratio · §9.5 phase-rift composite — D2 (biomes)');
+console.log('    · §9.5 phase-rift composite rotation — D2 (biome bands)');
 console.log('    · §9.6 bot liveness / no-NaN over a 60s sim — D1 (DuelBot)');
 console.log(failed ? `\n${failed} CHECK(S) FAILED ✗` : '\nALL CHECKS PASSED ✓');
 process.exit(failed ? 1 : 0);
