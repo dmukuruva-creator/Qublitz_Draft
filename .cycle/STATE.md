@@ -9,8 +9,17 @@ waiting: |
   (qphysics, contrast 0-AA, offline 3-fonts, harnesses, captures, live-checks 5/5; extracted
   blocks hash-identical; bot_guard bit-identical, only the known GD-1 bar fails). FE-6's
   pixel-font classification is superseded — see HANDOFF.md's FE-6 amendment. Cycle 03 close
-  (Gate-2) still awaits David; when cycle 04 opens, this plan becomes its PLAN.md. Duel work
-  (D0+) continues on `duel-d0` stacked above. Prior status follows.
+  (Gate-2) still awaits David; when cycle 04 opens, this plan becomes its PLAN.md.
+  **D0 (the Photon Duel spike, PD-1..PD-12) is COMMITTED on `duel-d0` (7894627)** — playable
+  at `?mode=duel` or via the menu button; DuelCore + tests/duel_harness.test.js (17 checks)
+  green, p95 frame 0.30ms vs a 4ms budget, file 561KB of the 2MB cap, story mode unchanged.
+  **D0's exit gate is DAVID'S to run: the PI (Mattias) plays it before D1 opens** (design doc
+  §10 + P6.6 — he is playtester #0). Two things to watch in that session, both pre-registered
+  risks: whether hold-to-charge feels bad on a trackpad (§11.1 — fallback is tap-to-cycle
+  preset θ, not yet built), and the first_shot Δt against the 30s FTUE target (telemetry
+  event 2 records it; read it from the gate-log export). D1 (Z/Y beams, eigenstate shield,
+  echo pickups, Cadet/Duelist bots, debrief cards, landing screen) is NOT started.
+  Prior status follows.
   ---
   nothing structural. BE-8/UP-5/GD-1 closed 2026-07-11 (see prior note below). As of
   2026-07-13, PED-1..5, BR-1..4, GOV-2/3/4, and EV-1/2/3 are ALSO all DONE — every carried-forward
