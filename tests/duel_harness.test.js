@@ -307,6 +307,66 @@ const MINUS = { x: -1, y: 0, z: 0 };
     `${DuelCore.ZENO.NEEDED} measures within ${DuelCore.ZENO.WINDOW}s → ${DuelCore.ZENO.HOLD}s hold`);
 }
 
+// ── Mission gates: the campaign's shield property, ported ─────────────
+// mission_shield_harness proves an X-only player can NEVER clear campaign
+// missions 4-6. Same bar here: a "concept-free" duellist — one who charges,
+// shoots and measures but never entangles, never spends a T, never fires from
+// superposition, never Zeno-pins, never calibrates — must be structurally
+// unable to clear missions 2-7, no matter how lucky the Born roll is.
+{
+  const MISSIONS = DuelCore.DUEL_MISSIONS;
+  check('m0. seven duel missions, each naming its concept',
+    MISSIONS.length === 7 && MISSIONS.every(m => m.concept && m.brief && m.win && m.gate),
+    MISSIONS.map(m => m.concept).join(' · '));
+
+  // The concept-free player: perfect aim, instant, but uses no concept.
+  const naive = { entangled:false, usedT:false, superposedShot:false,
+                  zenoLocked:false, fidelity:0.55, elapsed:1, measuredIdx:0 };
+  const blocked = MISSIONS.filter(m => DuelCore.missionGate(m.id, naive).blocked).map(m => m.id + 1);
+  check('m1. concept-free play is REFUSED by missions 3,4,5,6,7',
+    JSON.stringify(blocked) === JSON.stringify([3,4,5,6,7]),
+    `blocked: ${blocked.join(',') || 'none'}`);
+
+  // Mission 1 is the tutorial (no gate) and mission 2 gates on the clock,
+  // which a fast naive player legitimately beats — that is by design.
+  check('m2. mission 1 has no gate; mission 2 gates on the T₁ clock only',
+    !DuelCore.missionGate(0, naive).blocked &&
+    !DuelCore.missionGate(1, naive).blocked &&
+    DuelCore.missionGate(1, Object.assign({}, naive, { elapsed: 25 })).blocked,
+    'fast run clears M2, slow run does not');
+
+  // Each gate must open for its OWN concept and stay shut for the others —
+  // otherwise a mission is teaching the wrong thing.
+  const withConcept = {
+    2: { entangled:true },
+    3: { superposedShot:true },
+    4: { usedT:true },
+    5: { zenoLocked:true },
+    6: { fidelity:0.95 },
+  };
+  let allOpen = true, crossTalk = [];
+  for (const [idx, ev] of Object.entries(withConcept)) {
+    const i = +idx;
+    if (DuelCore.missionGate(i, Object.assign({}, naive, ev)).blocked) allOpen = false;
+    // the same evidence must NOT unlock a different gated mission
+    for (const other of [2,3,4,5,6]) {
+      if (other === i) continue;
+      if (!DuelCore.missionGate(other, Object.assign({}, naive, ev)).blocked)
+        crossTalk.push(`M${other+1} opened by M${i+1}'s concept`);
+    }
+  }
+  check('m3. each gate opens for its own concept', allOpen);
+  check('m4. …and for NO other mission\'s concept (no cross-talk)',
+    crossTalk.length === 0, crossTalk.join('; ') || 'clean');
+
+  // Every refusal has to TELL the student what to do — a silent block is a
+  // bug report, not a lesson.
+  const reasons = [2,3,4,5,6].map(i => DuelCore.missionGate(i, naive).reason || '');
+  check('m5. every refusal explains the fix in words',
+    reasons.every(r => r.length > 30),
+    `shortest: "${reasons.reduce((a,b)=>a.length<b.length?a:b).slice(0,52)}…"`);
+}
+
 // ── Case 8 — the campaign engine is untouched ─────────────────────────
 {
   const st = QPhysics.selfTest();

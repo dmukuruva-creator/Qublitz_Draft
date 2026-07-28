@@ -1932,7 +1932,78 @@ const DuelCore = (() => {
              deltaOdds: odds(after) - odds(before) };
   }
 
-  return { K, AXES, BEAMS, ZONE, ZENO, mulberry32, chargeToTheta, rotateBloch,
+  // ── Duel missions: the campaign's concept gating, reborn ─────────────
+  // The 7-mission campaign's real value was never the chess board — it was
+  // missionShieldBlocks: a target you CANNOT beat unless you actually use the
+  // concept. Ported here verbatim in spirit. Each mission names a concept and
+  // a gate; the gate inspects EVIDENCE collected during the round and refuses
+  // a win that didn't use it. Pure and data-only so duel_harness can prove
+  // (not assert) that concept-free play never clears missions 2–7.
+  //
+  // evidence = { entangled, usedT, superposedShot, zenoLocked, fidelity,
+  //              elapsed, measuredIdx }
+  const DUEL_MISSIONS = [
+    { id:0, title:'THE BORN RULE', concept:'Born rule',
+      brief:'Their qubit starts in |0⟩ — a MEASURE now is guaranteed to fail. Rotate them toward |1⟩ with the X-beam, then MEASURE. Your hit chance IS P(|1⟩).',
+      win:'Born rule: the probability you read on the HUD is the probability you got.',
+      gate: () => ({ blocked:false }) },
+
+    { id:1, title:'DECOHERENCE RACE', concept:'T₁ relaxation',
+      brief:'They start fully charged, but T₁ is bleeding them back to |0⟩ fast. Land the MEASURE inside 20 seconds — after that the odds are gone and so is the round.',
+      win:'T₁ conquered: an excited state is a perishable asset, not a bank balance.',
+      hurry: 20,
+      gate: ev => ev.elapsed > 20
+        ? { blocked:true, reason:'Too slow — T₁ already drained the charge you were aiming at. Restart and strike inside 20s.' }
+        : { blocked:false } },
+
+    { id:2, title:'THE BELL GAMBIT', concept:'Entanglement & correlated collapse',
+      brief:'This opponent is shielded: a direct MEASURE cannot resolve them. ENTANGLE first (E) — once you share |Φ+⟩, one measurement collapses BOTH, correlated, and that is a result the shield cannot refuse.',
+      win:'Correlated collapse: you did not measure them, you measured the PAIR.',
+      shielded:true,
+      gate: ev => ev.entangled
+        ? { blocked:false }
+        : { blocked:true, reason:'Shielded — a lone qubit cannot be resolved here. Entangle (E) and measure the pair.' } },
+
+    { id:3, title:'SUPERPOSITION GAMBIT', concept:'Superposition',
+      brief:'Their armour only yields to a beam fired from superposition. Put YOUR OWN qubit off the poles first (a partial X-charge, not a full π), then fire.',
+      win:'Superposition: the state between the poles is a real, usable resource.',
+      gate: ev => ev.superposedShot
+        ? { blocked:false }
+        : { blocked:true, reason:'Every hit bounced — you fired from a pole. Charge partway (≈π/2) so your own qubit is in superposition, then fire.' } },
+
+    { id:4, title:'PHASE GAMBIT', concept:'Non-Clifford phase (Gottesman–Knill)',
+      brief:'They camp on an eigenstate, where your attack beams are a no-op. A Clifford phase flip just moves them to the other pole of the same axis — still camped. Spend a T-charge (3): only a non-Clifford π/4 knocks them off every axis.',
+      win:'Non-Clifford phase: T is the gate that buys real quantum power — and breaks a turtle.',
+      camper:true,
+      gate: ev => ev.usedT
+        ? { blocked:false }
+        : { blocked:true, reason:'They re-camped every time. Clifford gates map eigenstates to eigenstates — you need a T-phase (3) to land them off-axis.' } },
+
+    { id:5, title:'THE ZENO CAGE', concept:'Quantum Zeno effect',
+      brief:'This one re-charges the instant you stop watching. Land two MEASUREs inside 4 seconds to pin it — a watched qubit cannot evolve — then finish it while it is frozen.',
+      win:'Quantum Zeno: observation itself is the cage.',
+      regen:true,
+      gate: ev => ev.zenoLocked
+        ? { blocked:false }
+        : { blocked:true, reason:'It out-charged you. Two MEASUREs inside 4s freeze it — pin it first, then finish it.' } },
+
+    { id:6, title:'PULSE FORGE', concept:'Pulse calibration',
+      brief:'Your drive is badly detuned: every beam misses the angle you asked for. Collect calibration pickups until fidelity ≥ 90%, then land a MEASURE. A pulse you cannot aim is not a gate.',
+      win:'Calibration: θ = Ω·t only means something if your Ω is what you think it is.',
+      lowFidelity:0.15,
+      gate: ev => ev.fidelity >= 0.9
+        ? { blocked:false }
+        : { blocked:true, reason:`Fidelity ${Math.round(ev.fidelity*100)}% — your pulses are still guesswork. Reach 90% before you measure.` } },
+  ];
+
+  function missionGate(idx, evidence) {
+    const m = DUEL_MISSIONS[idx];
+    if (!m) return { blocked:false };
+    return m.gate(evidence || {});
+  }
+
+  return { K, AXES, BEAMS, ZONE, ZENO, DUEL_MISSIONS, missionGate,
+           mulberry32, chargeToTheta, rotateBloch,
            eigenstateAngleDeg, isEigenstate, isCardinal, applyBeamHit,
            resolveBeam, decayStep, zoneAt, odds, measureRoll,
            sigmaFor, applyFidelity, bellPair, bellOdds, bellMeasure };
@@ -4441,7 +4512,7 @@ const DUEL = (() => {
     round: { winner: null, method: null, p: 0, endedAt: 0 },
     tele: [], loadedAt: 0, firstShotSent: false, sphereReadSent: false,
     shotCount: 0, thetas: [], axisCounts: { X: 0, Y: 0, T: 0 }, measures: 0,
-    floats: [], bell: null,
+    floats: [], bell: null, mission: -1, ev: null, gateMsg: '', gateMsgT: 0,
     frameMs: [], showPerf: false,
   };
 
@@ -4529,7 +4600,7 @@ const DUEL = (() => {
              inHot: false };
   }
 
-  function start(seed) {
+  function start(seed, mission) {
     initPools();
     S.seed = seed || (Date.now() & 0xffffffff);
     S.rand = DuelCore.mulberry32(S.seed);
@@ -4558,7 +4629,22 @@ const DUEL = (() => {
     S.shotCount = 0; S.thetas = []; S.axisCounts = { X:0, Y:0, T:0 }; S.measures = 0;
     S.floats = [];
     S.frameMs = [];
-    tele('duel_load', { seed: S.seed });
+    // ── Mission setup (concept scenarios; -1 = free duel) ──────────────
+    S.mission = (mission == null) ? -1 : mission;
+    S.ev = { entangled:false, usedT:false, superposedShot:false,
+             zenoLocked:false, fidelity:0, elapsed:0, measuredIdx:-1 };
+    S.gateMsg = ''; S.gateMsgT = 0;
+    const M = DuelCore.DUEL_MISSIONS[S.mission];
+    if (M) {
+      const foe = S.ships[1];
+      if (M.id === 1) foe.bloch = { x:0, y:0, z:-1 };          // pre-charged, racing T1
+      if (M.camper)  foe.bloch = { x:1, y:0, z:0 };            // parked at |+⟩
+      if (M.lowFidelity != null) S.ships[0].fidelity = M.lowFidelity;
+      if (M.id === 4) S.ships[0].tCharges = 1;                 // exactly one T to learn with
+      if (M.shielded || M.camper) S.zones = S.zones.slice(0, 1);
+    }
+    tele('duel_load', { seed: S.seed, mission: S.mission,
+                        concept: M ? M.concept : 'free-duel' });
   }
   function stop() { S.active = false; }
 
@@ -4577,6 +4663,12 @@ const DUEL = (() => {
     p.vx = Math.cos(ship.ang) * K.BEAM_SPEED;
     p.vy = Math.sin(ship.ang) * K.BEAM_SPEED;
     ship.beamCd = K.BEAM_CD_S;
+    if (ship.owner === 0 && S.ev) {
+      if (spec.scarce) S.ev.usedT = true;
+      // "Fired from superposition" = the shooter's own vector is off both
+      // poles when the shot leaves — mission 3's concept, measured not claimed.
+      if (!DuelCore.isEigenstate(ship.bloch, 'Z')) S.ev.superposedShot = true;
+    }
     sfxFire();
     if (ship.owner === 0) {
       S.shotCount++; S.thetas.push(+(theta / Math.PI).toFixed(3));
@@ -4680,10 +4772,26 @@ const DUEL = (() => {
       target.zenoUntil = S.t + DuelCore.ZENO.HOLD;
       target.measStamps = [];
       floatTxt(target, 'ZENO LOCK', '#8b7dff');
+      if (p.owner === 0 && S.ev) S.ev.zenoLocked = true;
       tele('zeno_lock', { by: p.owner === 0 ? 'player' : 'sage' });
     }
 
     if (res.outcome === 1) {
+      // Mission gate: the campaign's shield rule, reborn. A collapse that
+      // did not use the mission's concept does not count — and says why.
+      if (p.owner === 0 && S.mission >= 0) {
+        S.ev.fidelity = S.ships[0].fidelity;
+        S.ev.elapsed = S.t;
+        const g = DuelCore.missionGate(S.mission, S.ev);
+        if (g.blocked) {
+          S.gateMsg = g.reason; S.gateMsgT = 6;
+          spawnParts(20, target.x, target.y, '#9aa3cf', 120, 0.7);
+          floatTxt(target, 'SHIELDED', '#9aa3cf');
+          sfxShield();
+          tele('mission_gate_blocked', { mission: S.mission, reason: g.reason });
+          return;
+        }
+      }
       sfxCollapse();
       spawnParts(60, target.x, target.y, target.col, 260, 1.1);
       endRound(p.owner, method, res.p);
@@ -4703,6 +4811,7 @@ const DUEL = (() => {
     shooter.arc = target.arc = null;
     spawnParts(40, target.x, target.y, '#c97bff', 190, 1.0);
     floatTxt(target, 'ENTANGLED — 50/50', '#c97bff');
+    if (p.owner === 0 && S.ev) S.ev.entangled = true;
     sfxShield();
     tele('entangled', { by: p.owner === 0 ? 'player' : 'sage' });
   }
@@ -4718,6 +4827,12 @@ const DUEL = (() => {
   function endRound(winner, method, p) {
     if (S.over) return;
     S.over = true;
+    if (winner === 0 && S.mission >= 0) {
+      GAME.duelDone = GAME.duelDone || [];
+      if (!GAME.duelDone.includes(S.mission)) GAME.duelDone.push(S.mission);
+      tele('mission_clear', { mission: S.mission,
+        concept: (DuelCore.DUEL_MISSIONS[S.mission] || {}).concept });
+    }
     S.round = { winner, method, p, endedAt: S.t };
     tele('round_end', {
       winner: winner === 0 ? 'player' : 'sage',
@@ -4773,6 +4888,13 @@ const DUEL = (() => {
       // pair holds the state), so skip local decay while linked.
       if (sh.bellIdx < 0) sh.bloch = DuelCore.decayStep(sh.bloch, dt, zone);
       sh.entCd = Math.max(0, (sh.entCd || 0) - dt);
+      // Mission 5's cage re-charges itself unless Zeno-pinned.
+      const MM = DuelCore.DUEL_MISSIONS[S.mission];
+      if (MM && MM.regen && sh.owner === 1 && sh.zenoUntil <= S.t && sh.bellIdx < 0) {
+        const want = { x:0, y:0, z:-1 };
+        sh.bloch = { x: sh.bloch.x*0.9, y: sh.bloch.y*0.9,
+                     z: sh.bloch.z + (want.z - sh.bloch.z) * Math.min(1, dt*0.9) };
+      }
       if (sh.arc) { sh.arc.t += dt * 1000 / K.ARC_MS; if (sh.arc.t >= 1) sh.arc = null; }
       // MEASURE wind-up (telegraph), then launch.
       if (sh.winding > 0) {
@@ -4780,6 +4902,7 @@ const DUEL = (() => {
         if (sh.winding === 0) fireMeasure(sh);
       }
     }
+    if (S.gateMsgT > 0) S.gateMsgT = Math.max(0, S.gateMsgT - dt);
     me.ang = Math.atan2(S.aim.y - me.y, S.aim.x - me.x);
     if (S.charging) S.chargeT += dt;
 
@@ -4952,8 +5075,11 @@ const DUEL = (() => {
     if (S.paused) banner('PAUSED', 'Esc to resume');
     if (S.over) {
       const won = S.round.winner === 0;
-      banner(won ? 'ROUND WON' : 'ROUND LOST',
-             `MEASURE collapsed at P=${(S.round.p * 100).toFixed(0)}%  ·  R to rematch  ·  Esc for menu`);
+      const MM = DuelCore.DUEL_MISSIONS[S.mission];
+      banner(won ? (MM ? 'MISSION CLEAR' : 'ROUND WON') : 'ROUND LOST',
+             won && MM ? MM.win
+                       : `MEASURE collapsed at P=${(S.round.p * 100).toFixed(0)}%  ·  R to rematch  ·  Esc for menu`,
+             won && MM ? `P=${(S.round.p * 100).toFixed(0)}%  ·  R to replay  ·  Esc for mission list` : null);
     }
   }
 
@@ -5106,8 +5232,43 @@ const DUEL = (() => {
                    : 'their qubit — rotate it to |1⟩, then MEASURE',
             118, 112, S.bell ? '#c97bff' : '#6f79a8');
     if (foe.zenoUntil > S.t) hudText('ZENO-PINNED — cannot be rotated', 118, 130, '#8b7dff');
-    else if (DuelCore.isCardinal(foe.bloch) && !S.bell)
-      hudText('CAMPED on an axis — a T-phase (3) knocks them off', 118, 130, '#f5b73c');
+    else if (!S.bell && DuelCore.BEAMS[S.beam] && DuelCore.BEAMS[S.beam].kind === 'attack'
+             && DuelCore.isEigenstate(foe.bloch, DuelCore.BEAMS[S.beam].axis))
+      // Only when the camp actually blocks the beam you have SELECTED —
+      // otherwise this fires on any cardinal state and reads as noise.
+      hudText(`CAMPED against your ${S.beam}-beam — a T-phase (3) knocks them off`,
+              118, 130, '#f5b73c');
+
+    // Mission brief — the concept, stated once, where it is needed.
+    const M = DuelCore.DUEL_MISSIONS[S.mission];
+    if (M) {
+      ctx.font = `700 ${Math.round(BOARD * 0.0175)}px ${CANVAS_BODY}`;
+      ctx.fillStyle = '#f5b73c';
+      ctx.fillText(`MISSION ${M.id + 1} · ${M.title}`, 118, 30);
+      wrapHud(M.brief, 118, BAND + 22, BOARD - 150, '#8f9ac4');
+      if (M.hurry) {
+        const left = Math.max(0, M.hurry - S.t);
+        ctx.textAlign = 'right';
+        hudText(`T₁ WINDOW ${left.toFixed(1)}s`, BOARD - 16, 78,
+                left < 6 ? '#ff5a72' : '#f5b73c');
+        ctx.textAlign = 'left';
+      }
+    }
+    // Gate feedback — why a collapse did not count.
+    if (S.gateMsgT > 0 && S.gateMsg) {
+      ctx.globalAlpha = Math.min(1, S.gateMsgT);
+      const gy = BOARD - BAND - 54;
+      ctx.fillStyle = 'rgba(5,7,15,0.88)';
+      ctx.fillRect(60, gy - 20, BOARD - 120, 40);
+      ctx.strokeStyle = '#9aa3cf'; ctx.lineWidth = 1;
+      ctx.strokeRect(60, gy - 20, BOARD - 120, 40);
+      ctx.textAlign = 'center';
+      ctx.font = `700 ${Math.round(BOARD * 0.0163)}px ${CANVAS_BODY}`;
+      ctx.fillStyle = '#cfd6ee';
+      ctx.fillText(S.gateMsg.slice(0, 96), BOARD / 2, gy + 5);
+      ctx.textAlign = 'left';
+      ctx.globalAlpha = 1;
+    }
 
     // Round pips — top-right (best-of-3 lands in D1; D0 shows one round).
     ctx.textAlign = 'right';
@@ -5174,13 +5335,28 @@ const DUEL = (() => {
     hudText('ESC  pause · menu', kx, by + 102, '#6f79a8');
   }
 
+  // Tiny word-wrapper for the mission brief (the one place duel HUD has prose).
+  function wrapHud(txt, x, y, maxW, col) {
+    ctx.font = `500 ${Math.round(BOARD * 0.0155)}px ${CANVAS_BODY}`;
+    ctx.fillStyle = col;
+    const words = txt.split(' ');
+    let line = '', ly = y;
+    for (const w of words) {
+      const test = line ? line + ' ' + w : w;
+      if (ctx.measureText(test).width > maxW && line) {
+        ctx.fillText(line, x, ly); line = w; ly += Math.round(BOARD * 0.021);
+      } else line = test;
+    }
+    if (line) ctx.fillText(line, x, ly);
+  }
+
   function hudText(txt, x, y, col) {
     ctx.font = `600 ${Math.round(BOARD * 0.0163)}px ${CANVAS_BODY}`;
     ctx.fillStyle = col || '#aeb8e6';
     ctx.fillText(txt, x, y);
   }
 
-  function banner(title, sub) {
+  function banner(title, sub, sub2) {
     ctx.fillStyle = 'rgba(5,7,15,0.72)';
     ctx.fillRect(0, BAND, BOARD, VIEW_H);
     ctx.textAlign = 'center';
@@ -5190,6 +5366,11 @@ const DUEL = (() => {
     ctx.font = `600 ${Math.round(BOARD * 0.019)}px ${CANVAS_BODY}`;
     ctx.fillStyle = '#cfd6ee';
     ctx.fillText(sub, BOARD / 2, BOARD * 0.52);
+    if (sub2) {
+      ctx.font = `500 ${Math.round(BOARD * 0.017)}px ${CANVAS_BODY}`;
+      ctx.fillStyle = '#8f9ac4';
+      ctx.fillText(sub2, BOARD / 2, BOARD * 0.57);
+    }
     ctx.textAlign = 'left';
   }
 
@@ -5198,11 +5379,11 @@ const DUEL = (() => {
     if (MODE !== 'duel') return;
     const k = e.key.toLowerCase();
     if (down && k === 'escape') {
-      if (S.over) { exitDuel(); }
+      if (S.over) { exitDuel(S.mission >= 0); }
       else S.paused = !S.paused;
       e.preventDefault(); return;
     }
-    if (down && k === 'r' && S.over) { start(); e.preventDefault(); return; }
+    if (down && k === 'r' && S.over) { start(S.seed, S.mission); e.preventDefault(); return; }
     // Beam select — 1 X (attack), 2 Y (attack), 3 T (phase, scarce).
     if (down && (k === '1' || k === '2' || k === '3')) {
       S.beam = { '1':'X', '2':'Y', '3':'T' }[k];
@@ -5265,19 +5446,43 @@ const DUEL = (() => {
 
 // PD-1 — mode seams. Kept tiny and outside the DUEL closure so the D1
 // landing screen (PD-26) can call them directly.
-function startDuel(seed) {
+function startDuel(seed, mission) {
   closeModal();
   MODE = 'duel';
   document.body.classList.add('duel-mode');
-  DUEL.start(seed);
+  DUEL.start(seed, mission);
 }
-function exitDuel() {
+function exitDuel(toMissions) {
   MODE = 'story';
   document.body.classList.remove('duel-mode');
   DUEL.stop();
   updateHUD();
-  openMenu();
+  if (toMissions) openDuelMissions(); else openMenu();
 }
+
+// The mission list — the campaign's TRAINING PROGRAMS screen, rebuilt for
+// the duel. Each row names the concept its gate enforces, so a student can
+// see the syllabus rather than infer it.
+function openDuelMissions() {
+  const done = GAME.duelDone || [];
+  const rows = DuelCore.DUEL_MISSIONS.map(m => `
+    <div class="mission-card">
+      <h4>${m.id + 1}. ${m.title}</h4>
+      <p><b style="color:var(--teal)">${m.concept}</b> — ${m.brief}</p>
+      ${done.includes(m.id) ? '<div class="mission-done">✓ CLEARED</div>' : ''}
+      <button class="btn" onclick="startDuel(undefined, ${m.id})">▶ FLY MISSION ${m.id + 1}</button>
+    </div>`).join('');
+  document.getElementById('modal-content').innerHTML = `
+<h2>◈ DUEL TRAINING ◈</h2>
+<p style="text-align:center;color:var(--dim);font-size:var(--fs-0);margin:-8px 0 14px">
+  Seven concepts, seven duels. Each one is built so it CANNOT be cleared without
+  actually using its concept — the win is refused, with a reason, if you try.</p>
+${rows}
+<button class="btn" onclick="startDuel()">⚡ FREE DUEL (no mission)</button>
+<button class="btn close-btn" onclick="openMenu()">◀ BACK</button>`;
+  document.getElementById('modal-overlay').classList.add('show');
+}
+if (typeof window !== 'undefined') window.openDuelMissions = openDuelMissions;
 if (typeof window !== 'undefined') { window.startDuel = startDuel; window.DUEL = DUEL; }
 
 function loop(ts) {
@@ -6651,7 +6856,9 @@ function openMenu() {
   onclick="closeModal();resetGame('vsBot');GAME.difficulty=parseInt(document.getElementById('diff-sel')?document.getElementById('diff-sel').value:1)||1">▶ PLAY vs BOT (1P)</button>
 <button class="btn" onclick="closeModal();resetGame('vs2P')">▶ LOCAL vs FRIEND (2P)</button>
 <button class="btn" style="background:linear-gradient(135deg,rgba(245,183,60,0.20),rgba(255,90,114,0.14));border-color:var(--gold);color:var(--gold)"
-  onclick="startDuel()" title="Real-time arcade duel — your opponent's health bar IS their qubit (D0 spike)">⚡ PHOTON DUEL — real-time (spike)</button>
+  onclick="startDuel()" title="Real-time arcade duel — your opponent's health bar IS their qubit">⚡ PHOTON DUEL — free duel</button>
+<button class="btn" style="border-color:var(--teal);color:var(--teal)"
+  onclick="openDuelMissions()" title="Seven concept missions, each unwinnable without its concept">◈ DUEL TRAINING — 7 concept missions</button>
 <hr style="border-color:var(--border);margin:12px 0">
 <button class="btn" onclick="openCampaign()">◈ TRAINING PROGRAMS (${CAMPAIGN_MISSIONS.length} missions)</button>
 <button class="btn" onclick="closeModal();openTutorial()">▸ BATTLE MANUAL</button>
