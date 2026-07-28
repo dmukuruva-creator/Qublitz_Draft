@@ -19,6 +19,18 @@ waiting: |
   preset θ, not yet built), and the first_shot Δt against the 30s FTUE target (telemetry
   event 2 records it; read it from the gate-log export). D1 (Z/Y beams, eigenstate shield,
   echo pickups, Cadet/Duelist bots, debrief cards, landing screen) is NOT started.
+  **2026-07-27 — David steered the revamp: the laser duel becomes the product.**
+  Two more commits on `duel-d0`: (a) `3dc374d` the mechanics layer — decoherence
+  hotspots (flee-to-discharge sanctuary), pulse fidelity + calibration pickups,
+  T-charge scarcity (Clifford/non-Clifford as the anti-turtle tactic), Bell
+  entangle traps (the 95%-vs-5% comeback reset), Zeno lock; (b) `56eaf19` the
+  7 campaign concepts PORTED into duel missions, each with a pure gate that
+  refuses a win which didn't use the concept — the missionShieldBlocks property,
+  proven by harness cases m1/m3/m4/m5 and verified live. duel_harness is at 43
+  checks. **DECISION (David, 2026-07-27): the turn-based board is retired as the
+  delivery vehicle for the campaign** — its concepts now live in the duel. The
+  old CAMPAIGN_MISSIONS code is still present and reachable via Story Mode; it
+  has not been deleted, and deleting it is a separate call.
   Prior status follows.
   ---
   nothing structural. BE-8/UP-5/GD-1 closed 2026-07-11 (see prior note below). As of
