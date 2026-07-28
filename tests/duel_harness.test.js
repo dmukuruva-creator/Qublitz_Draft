@@ -367,6 +367,56 @@ const MINUS = { x: -1, y: 0, z: 0 };
     `shortest: "${reasons.reduce((a,b)=>a.length<b.length?a:b).slice(0,52)}…"`);
 }
 
+// ── BELL TRIAL (CHSH): the classical bound is real and beatable ───────
+// This minigame's entire premise is that 75% is a wall for any classical
+// strategy and quantum angles get past it. If either half of that is wrong
+// the game is a lie, so both are asserted here.
+{
+  const C = DuelCore.CHSH;
+  const opt = DuelCore.chshWinRate(C.OPTIMAL_A, C.OPTIMAL_B);
+  check('c1. textbook angles hit Tsirelson\'s bound cos²(π/8) ≈ 85.36%',
+    approx(opt, C.TSIRELSON, 1e-12), `${(opt*100).toFixed(3)}%`);
+  check('c2. …which beats the 75% classical bound', opt > C.CLASSICAL + 0.1,
+    `${(opt*100).toFixed(2)}% vs ${(C.CLASSICAL*100).toFixed(0)}%`);
+
+  // S = 2√2 at the optimum, 2 at the classical bound — the numbers a paper quotes.
+  check('c3. S-parameter reads 2√2 at the optimum, 2 at the classical bound',
+    approx(DuelCore.chshS(opt), 2*Math.SQRT2, 1e-12) &&
+    approx(DuelCore.chshS(C.CLASSICAL), 2, 1e-12),
+    `S_opt=${DuelCore.chshS(opt).toFixed(6)}, S_classical=${DuelCore.chshS(C.CLASSICAL).toFixed(6)}`);
+
+  // EXHAUSTIVE: every deterministic local strategy (a lookup table from the
+  // referee's bit to an answer — i.e. every local hidden-variable model) is
+  // enumerated. All 16 must fail to exceed 75%. This is the proof that the
+  // wall is real, not a tuning constant.
+  let bestClassical = 0;
+  for (let s = 0; s < 16; s++) {
+    const A = [(s>>0)&1, (s>>1)&1], B = [(s>>2)&1, (s>>3)&1];
+    let wins = 0;
+    for (let x = 0; x < 2; x++) for (let y = 0; y < 2; y++)
+      if (((A[x] ^ B[y]) === (x & y))) wins++;
+    bestClassical = Math.max(bestClassical, wins / 4);
+  }
+  check('c4. all 16 deterministic local strategies cap at exactly 75%',
+    approx(bestClassical, 0.75, 1e-12), `best local-realist strategy = ${(bestClassical*100).toFixed(0)}%`);
+
+  // Sampled play must reproduce the analytic rate (the game you play is the
+  // game the maths describes).
+  const rand = DuelCore.mulberry32(31337);
+  let wins = 0; const N = 20000;
+  for (let i = 0; i < N; i++) {
+    const x = rand() < 0.5 ? 1 : 0, y = rand() < 0.5 ? 1 : 0;
+    if (DuelCore.chshRound(C.OPTIMAL_A, C.OPTIMAL_B, x, y, rand).won) wins++;
+  }
+  check('c5. 20,000 sampled rounds match the analytic rate (±1.5%)',
+    Math.abs(wins/N - opt) < 0.015, `sampled ${(wins/N*100).toFixed(2)}% vs analytic ${(opt*100).toFixed(2)}%`);
+
+  // Bad angles must LOSE — otherwise the player isn't really choosing anything.
+  const aligned = DuelCore.chshWinRate([0,0],[0,0]);
+  check('c6. badly chosen angles fall to (or below) the classical bound',
+    aligned <= C.CLASSICAL + 1e-12, `all-zero angles = ${(aligned*100).toFixed(1)}%`);
+}
+
 // ── Case 8 — the campaign engine is untouched ─────────────────────────
 {
   const st = QPhysics.selfTest();

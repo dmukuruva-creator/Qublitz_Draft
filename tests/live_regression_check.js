@@ -21,11 +21,8 @@
 //   3. FE-3 click-during-bot-turn feedback — force GAME.turn to the bot's
 //      color, click the board, and confirm a floating "bot is acting…" cue
 //      appears in GAME.floats well under the 100ms done-when.
-//   4. FE-11 log dedupe + sage-bar scroll — run resetGame() twice (as a
-//      normal session does: finishBoot()'s eager default match, then the
-//      player's own mode pick) and confirm "Battle start" appears exactly
-//      once in #log; confirm #sage-bar-text is scrollable, not silently
-//      clipped, once its content overflows the fixed-height bar.
+//   (FE-3 and FE-11 retired with the board — see the note by their old
+//    definitions below.)
 //
 // Run: node tests/live_regression_check.js
 'use strict';
@@ -103,9 +100,8 @@ async function checkDprAndClick(chromium) {
     const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 }, deviceScaleFactor: dpr });
     const page = await ctx.newPage();
     await startMatch(page);
-    const playBtn = page.locator('button:has-text("PLAY vs BOT")');
-    await playBtn.click({ timeout: 5000 }).catch(() => {});
-    await page.waitForTimeout(500);
+    await page.evaluate(() => startDuel(7));
+    await page.waitForTimeout(600);
 
     const dims = await page.evaluate(() => {
       const c = document.getElementById('game-canvas');
@@ -115,13 +111,19 @@ async function checkDprAndClick(chromium) {
     const deliveredDensity = dims.canvasWidth / dims.rectWidth;
     const crispOk = deliveredDensity >= dims.dpr - 0.01;
 
+    // Pointer reach: hold on the canvas must start a charge. The duel's
+    // mousedown/mouseup registrations were lost once during the board's
+    // removal and only a live playthrough noticed — this pins them.
     const canvas = await page.$('#game-canvas');
     const box = await canvas.boundingBox();
-    const before = await page.evaluate(() => (typeof GAME !== 'undefined' && GAME.selected) ? (GAME.selected.row + ',' + GAME.selected.col) : null);
-    await page.mouse.click(box.x + box.width * 0.18, box.y + box.height * 0.94);
-    await page.waitForTimeout(250);
-    const after = await page.evaluate(() => (typeof GAME !== 'undefined' && GAME.selected) ? (GAME.selected.row + ',' + GAME.selected.col) : null);
-    const clickOk = before !== after;
+    await page.mouse.move(box.x + box.width * 0.5, box.y + box.height * 0.5);
+    await page.mouse.down();
+    await page.waitForTimeout(220);
+    const charging = await page.evaluate(() => DUEL.state.charging === true);
+    await page.mouse.up();
+    await page.waitForTimeout(150);
+    const fired = await page.evaluate(() => DUEL.state.shotCount > 0);
+    const clickOk = charging && fired;
 
     await browser.close();
     return { dpr, deliveredDensity, crispOk, clickOk };
@@ -131,86 +133,17 @@ async function checkDprAndClick(chromium) {
   const r2 = await checkOne(2);
   const pass = r1.crispOk && r1.clickOk && r2.crispOk && r2.clickOk;
   return {
-    name: 'FE-2 DPR crispness + click accuracy (dpr 1 & 2)',
+    name: 'FE-2 DPR crispness + duel pointer reach (dpr 1 & 2)',
     pass,
-    detail: `dpr1: density=${r1.deliveredDensity.toFixed(2)} crisp=${r1.crispOk} click=${r1.clickOk} | `
-      + `dpr2: density=${r2.deliveredDensity.toFixed(2)} crisp=${r2.crispOk} click=${r2.clickOk}`,
+    detail: `dpr1: density=${r1.deliveredDensity.toFixed(2)} crisp=${r1.crispOk} charge+fire=${r1.clickOk} | `
+      + `dpr2: density=${r2.deliveredDensity.toFixed(2)} crisp=${r2.crispOk} charge+fire=${r2.clickOk}`,
   };
 }
 
-async function checkClickFeedbackFloor(chromium) {
-  const browser = await chromium.launch();
-  const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
-  await startMatch(page);
-  const playBtn = page.locator('button:has-text("PLAY vs BOT")');
-  await playBtn.click({ timeout: 5000 }).catch(() => {});
-  await page.waitForTimeout(500);
-
-  await page.evaluate(() => {
-    GAME.mode = 'vsBot';
-    GAME.turn = GAME.botColor;
-    GAME.floats = GAME.floats || [];
-  });
-  const canvas = await page.$('#game-canvas');
-  const box = await canvas.boundingBox();
-  const t0 = Date.now();
-  await page.mouse.click(box.x + box.width * 0.5, box.y + box.height * 0.5);
-  const floats = await page.evaluate(() => GAME.floats.map(f => f.text));
-  const elapsedMs = Date.now() - t0;
-  const gotFeedback = floats.some(t => /bot is acting/i.test(t));
-  await browser.close();
-  return {
-    name: 'FE-3 click-during-bot-turn feedback (<100ms)',
-    pass: gotFeedback && elapsedMs < 100,
-    detail: `feedback shown=${gotFeedback}, elapsed=${elapsedMs}ms`,
-  };
-}
-
-// FE-11 — two independent bugs found in screenshot captures: (a) resetGame()
-// runs at least twice in a normal session (finishBoot() eagerly starts a
-// default vsBot match, then the mode-select menu's "PLAY vs BOT" calls it
-// again for real) but never cleared the #log DOM, so the "Battle start" line
-// appeared twice; (b) #sage-bar-text was `overflow:hidden` with no scroll/
-// ellipsis, so a message longer than the fixed-height bar was silently cut
-// off mid-sentence. Both fixed by: clearing #log's children at the top of
-// resetGame(), and switching #sage-bar-text to overflow-y:auto (+min-height:0,
-// required for a flex:1 child to actually shrink and let overflow trigger).
-async function checkLogDedupeAndSageScroll(chromium) {
-  const browser = await chromium.launch();
-  const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
-  await startMatch(page); // finishBoot() already ran resetGame('vsBot') once
-  const playBtn = page.locator('button:has-text("PLAY vs BOT")');
-  await playBtn.click({ timeout: 5000 }).catch(() => {}); // resetGame('vsBot') again
-  await page.waitForTimeout(300);
-
-  const battleStartCount = await page.evaluate(() =>
-    Array.from(document.getElementById('log').children)
-      .filter(el => /Battle start/.test(el.textContent)).length
-  );
-
-  const sageCheck = await page.evaluate(() => {
-    // SM-1 — the bar now defaults collapsed; this check's contract is the
-    // EXPANDED bar's scroll-not-clip behavior, so expand it first.
-    if (typeof _sageCollapsed !== 'undefined' && _sageCollapsed) toggleSagePanel();
-    const el = document.getElementById('sage-bar-text');
-    el.textContent = 'A very long sage message that must not be silently clipped mid-sentence. '.repeat(6);
-    const cs = getComputedStyle(el);
-    return {
-      overflowY: cs.overflowY,
-      overflows: el.scrollHeight > el.clientHeight,
-      textIntact: el.textContent.startsWith('A very long sage message'),
-    };
-  });
-
-  await browser.close();
-  const pass = battleStartCount === 1 && sageCheck.overflowY !== 'hidden' && sageCheck.overflows && sageCheck.textIntact;
-  return {
-    name: 'FE-11 log dedupe + sage-bar scroll (not clip)',
-    pass,
-    detail: `"Battle start" lines after 2x resetGame()=${battleStartCount} (want 1) | `
-      + `sage-bar-text overflow-y=${sageCheck.overflowY} overflows=${sageCheck.overflows} textIntact=${sageCheck.textIntact}`,
-  };
-}
+// FE-3 (click-during-bot-turn feedback) and FE-11 (log dedupe + sage-bar
+// scroll) were removed with the turn-based board on 2026-07-27: there is no
+// bot turn to click through and no event log or sage bar to scroll. Their
+// display-contract lesson lives on in FE-2's pointer-reach assertion above.
 
 // BE-3 — animateBg() used to be a second, permanent rAF loop with no
 // pause/reduced-motion handling at all. Two independently measurable claims:
@@ -225,8 +158,9 @@ async function checkBgReducedMotionAndVisibility(chromium) {
   // click "PLAY vs BOT" to close it, same as the other checks in this file.
   async function clearToBoard(p) {
     await startMatch(p);
-    const playBtn = p.locator('button:has-text("PLAY vs BOT")');
-    await playBtn.click({ timeout: 5000 }).catch(() => {});
+    // The hub modal opens ~200ms after boot and bgCovered() correctly idles
+    // the background draw while it is up — close it so the loop is live.
+    await p.evaluate(() => { try { closeModal(); } catch (e) {} });
     await p.waitForTimeout(300);
   }
 
@@ -285,12 +219,10 @@ async function checkBgReducedMotionAndVisibility(chromium) {
     process.exit(1);
   }
 
-  console.log('=== Live regression checks (FE-1/FE-2/FE-3/FE-11/BE-3) ===\n');
+  console.log('=== Live regression checks (FE-1/FE-2/BE-3) ===\n');
   const results = [
     await checkFrameTiming(chromium),
     await checkDprAndClick(chromium),
-    await checkClickFeedbackFloor(chromium),
-    await checkLogDedupeAndSageScroll(chromium),
     await checkBgReducedMotionAndVisibility(chromium),
   ];
   let anyFail = false;

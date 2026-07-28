@@ -1,5 +1,35 @@
 # HANDOFF v2 — QuBlitz: Frontend + Whole-Platform Remediation
 
+> # ⚠️ ARCHITECTURE CHANGED — READ THIS FIRST (2026-07-28)
+>
+> **The turn-based board game is GONE.** David retired it on 2026-07-27 and QuBlitz is now a
+> collection of **adversarial quantum minigames** built on the same unchanged `QPhysics` engine:
+>
+> | Mode | What it is |
+> |---|---|
+> | **Photon Duel** | Real-time laser duel; your opponent's health bar IS their qubit's Bloch vector. Hotspots, pulse fidelity, T-charge scarcity, Bell traps, Zeno locks. |
+> | **Duel Training** | The old 7 campaign concepts, rebuilt as duel scenarios whose gates REFUSE a win that didn't use the concept (`DuelCore.DUEL_MISSIONS`). |
+> | **Bell Trial** | CHSH game — set four analyzer angles and push S past the classical bound of 2. |
+>
+> **~3,400 lines deleted**: `BotAI`, `CAMPAIGN_MISSIONS`, `missionShieldBlocks`, board rendering,
+> turn logic, combat, gate menu, crowd vote, attract mode, Sage advisor, Pulse Forge, the sprite
+> sheets, the side panels and the event log. `quantum_chess.html` went 7,052 → ~3,960 lines.
+>
+> **Consequently these harnesses were DELETED** — they tested code that no longer exists:
+> `bot_guard_harness`, `mission_shield_harness`, `debrief_harness`, `coherence_budget_harness`.
+> Their replacement is `tests/duel_harness.test.js` (49 checks), which carries the same
+> concept-gating proof forward (cases m1–m5). `capture_responsive` and `live_regression_check`
+> were retargeted at the duel; FE-3 and FE-11 retired with the board.
+>
+> **Still true and still load-bearing:** `QPhysics` is byte-identical (hash `88aa9cf9…`),
+> `node tests/qphysics.test.js` is still the hard gate, the FE-5 font pipeline, the TY-* type
+> system, QB-8/GOV-4 accessibility regions, and the EV-1/2 instructor export (now schema v3,
+> carrying duel telemetry + cleared concepts).
+>
+> Anything below this box that describes the board, its units, its bot or its missions is
+> **historical**. Read it for the reasoning, not the current shape of the code.
+
+
 *Generated 2026-07-07 from THREE 5-advisor LLM-council pressure-tests (advisor round + anonymous
 peer review + chairman synthesis each). **Council #2** covered the Arena frontend — visual
 design, UI/UX, accessibility, gameplay feel (Phases A–D). **Council #3** covered the game/backend

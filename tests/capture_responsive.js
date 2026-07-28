@@ -116,13 +116,15 @@ async function captureWidth(chromium, width) {
   // Skip the boot screen via click (works for both mouse-only and touch users).
   await page.mouse.click(10, 10).catch(() => {});
   await page.waitForTimeout(300);
-  const playBtn = page.locator('button:has-text("PLAY vs BOT")');
-  if (await playBtn.count() === 0) {
+  // The board's "PLAY vs BOT" button retired with the board (2026-07-27).
+  // Capture the Photon Duel — that is what this page now is.
+  if (await page.locator('#boot').isVisible().catch(() => false)) {
     await page.locator('#boot').click({ timeout: 3000 }).catch(() => {});
     await page.waitForTimeout(300);
   }
-  await playBtn.click({ timeout: 5000 }).catch(e => errors.push('could not start match: ' + e.message));
-  await page.waitForTimeout(500);
+  await page.evaluate(() => startDuel(11))
+    .catch(e => errors.push('could not start duel: ' + e.message));
+  await page.waitForTimeout(600);
 
   // Select + move a white unit so the side panels and gate menu have real
   // content in the screenshot, not placeholder dashes.

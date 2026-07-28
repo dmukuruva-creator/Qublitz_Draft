@@ -31,7 +31,16 @@ waiting: |
   delivery vehicle for the campaign** — its concepts now live in the duel. The
   old CAMPAIGN_MISSIONS code is still present and reachable via Story Mode; it
   has not been deleted, and deleting it is a separate call.
-  Prior status follows.
+  **2026-07-28 — THE BOARD IS DELETED.** David: "delete the old board first, continue
+  development... it's okay if QuBlitz can have multiple minigames within it as long as they're
+  adversarial or duel-based." ~3,400 lines removed (BotAI, CAMPAIGN_MISSIONS, board render/turn/
+  combat, gate menu, crowd vote, attract, Sage advisor, Pulse Forge, panels, event log);
+  quantum_chess.html 7,052 -> ~3,960 lines, 337KB. New hub lists three adversarial modes:
+  Photon Duel, Duel Training (the 7 concept missions), and **Bell Trial** — a CHSH game where
+  winning means pushing S past the classical bound of 2 (DuelCore.CHSH; harness cases c1-c6
+  include an EXHAUSTIVE proof that all 16 deterministic local-hidden-variable strategies cap at
+  75%). Four harnesses deleted with their subject; duel_harness is at 49 checks. QPhysics
+  byte-identical throughout. Prior status follows.
   ---
   nothing structural. BE-8/UP-5/GD-1 closed 2026-07-11 (see prior note below). As of
   2026-07-13, PED-1..5, BR-1..4, GOV-2/3/4, and EV-1/2/3 are ALSO all DONE — every carried-forward

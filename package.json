@@ -2,11 +2,14 @@
   "name": "qublitz",
   "version": "1.1.0",
   "private": true,
-  "description": "QuBlitz — a quantum qubit-battle arena (canonical app: quantum_chess.html).",
+  "description": "QuBlitz — adversarial quantum minigames (canonical app: quantum_chess.html).",
   "scripts": {
     "test": "node tests/qphysics.test.js",
+    "test:duel": "node tests/duel_harness.test.js",
     "capture": "node tests/capture_responsive.js",
     "live-check": "node tests/live_regression_check.js",
+    "contrast": "node tests/contrast_check.js",
+    "offline": "node tests/offline_check.js",
     "playwright:install": "playwright install chromium"
   },
   "devDependencies": {
