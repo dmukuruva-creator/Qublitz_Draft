@@ -52,8 +52,17 @@ waiting: |
   (b) `5fd830a` ECHO SIEGE, minigame #3: real-time dynamical decoupling — a
   Saboteur dephases you and you drop π-pulses to refocus (Hahn/CPMG). Live:
   no echo 37.6%, one echo at T/2 → 93.7%. duel_harness now 69 checks.
-  QuBlitz is three adversarial minigames + concept training. Prior status
-  follows.
+  QuBlitz is three adversarial minigames + concept training.
+  **2026-07-29 — DEMO CLEANUP (`acefc9f`), demo-ready.** Best-of-3 matches with a
+  3-line debrief card (what won · concept · one pattern-keyed tip, pure + tested
+  D1-D5). Dead code purged: 73 CSS rules, ~16 orphan JS symbols, and ASSET_GRASS
+  (103KB of unreferenced base64 — a third of the file). 366KB -> 254KB.
+  Re-wired rather than deleted, since they only lost their call sites: the
+  leaderboard (rebuilt on duel stats), EV-1's quick check (now offered after a
+  mission clear), and the Physics Lab's decoherence chart. Two self-inflicted
+  breakages caught and fixed (an over-eager regex ate the C complex helpers; the
+  lab read a trimmed GAME field). duel_harness 74 checks; C/GATES/QPhysics/π all
+  hash-identical to the pre-rework baseline. Prior status follows.
   ---
   nothing structural. BE-8/UP-5/GD-1 closed 2026-07-11 (see prior note below). As of
   2026-07-13, PED-1..5, BR-1..4, GOV-2/3/4, and EV-1/2/3 are ALSO all DONE — every carried-forward

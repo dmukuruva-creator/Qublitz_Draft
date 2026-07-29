@@ -26,6 +26,26 @@
 > system, QB-8/GOV-4 accessibility regions, and the EV-1/2 instructor export (now schema v3,
 > carrying duel telemetry + cleared concepts).
 >
+> **DEMO-READY STATE (2026-07-29).** `quantum_chess.html` is 4,374 lines / 254KB.
+> Three adversarial modes plus training, all reachable from the hub:
+>
+> | Mode | Physics it makes you use |
+> |---|---|
+> | **Photon Duel** (best-of-3) | Born rule, T₁/T₂, eigenstates, Gottesman–Knill, entanglement, Zeno |
+> | **Duel Training** (7 missions) | one gated concept each — the win is *refused* without it |
+> | **Bell Trial** | CHSH: push S past the classical bound of 2 |
+> | **Echo Siege** | dynamical decoupling — time π-pulses to refocus (Hahn/CPMG) |
+>
+> Opponent: `DuelBot` at Cadet / Duelist / Decoherent Menace, which parks on
+> eigenstates, spends T-charges to break your camp, flees to hotspots and entangles when
+> losing. Defence: right-mouse **self-pulse**. Every round ends in a 3-line **debrief card**
+> (what won · the concept · one tip), which is the transfer evidence the instructor export
+> carries. `tests/duel_harness.test.js` is at **74 checks**.
+>
+> Not done, deliberately: the D1 landing screen (the hub modal serves), biomes/Phase Rift
+> (D2), CC0 art and jsfxr (procedural audio stands in), and any PI/student playtesting —
+> David's instruction was to finish the code without gating on it.
+>
 > Anything below this box that describes the board, its units, its bot or its missions is
 > **historical**. Read it for the reasoning, not the current shape of the code.
 
