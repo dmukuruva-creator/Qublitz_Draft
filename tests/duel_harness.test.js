@@ -611,6 +611,33 @@ const MINUS = { x: -1, y: 0, z: 0 };
     `f=${shot.fidelity.toFixed(4)}, phi=${shot.phi.toFixed(3)}`);
 }
 
+// ── Debrief card: three lines, and the tip must match what happened ───
+{
+  const base = { won:true, method:'measure', p:0.93, theta:'1.00',
+                 shieldedAgainstYou:0, duds:0, selfPulses:1, hotspotTime:1 };
+  const win = DuelCore.debriefLines(base);
+  check('D1. a debrief is exactly three lines: outcome, concept, tip',
+    win.length === 3 && /won/i.test(win[0]) && /^Concept:/.test(win[1]) && /^Tip:/.test(win[2]),
+    win[0]);
+  check('D2. it quotes the actual P and pulse from the round',
+    win[0].includes('93%') && win[0].includes('1.00'), win[0]);
+
+  const bell = DuelCore.debriefLines(Object.assign({}, base, { method:'bell-measure' }));
+  check('D3. a Bell win names entanglement, not the Born rule',
+    /entanglement/i.test(bell[1]), bell[1]);
+
+  // The tip is keyed to the dominant pattern, so each pattern gets its own.
+  const shielded = DuelCore.debriefLines(Object.assign({}, base, { won:false, shieldedAgainstYou:4 }));
+  const noSelf   = DuelCore.debriefLines(Object.assign({}, base, { won:false, selfPulses:0 }));
+  const duds     = DuelCore.debriefLines(Object.assign({}, base, { won:false, duds:3 }));
+  check('D4. tips are pattern-specific (eigenstate / self-pulse / duds differ)',
+    new Set([shielded[2], noSelf[2], duds[2]]).size === 3 &&
+    /T-phase/.test(shielded[2]) && /Right-mouse/.test(noSelf[2]) && /lockout/.test(duds[2]),
+    shielded[2].slice(0, 58) + '…');
+  check('D5. a loss never claims you won',
+    /lost/i.test(shielded[0]) && !/You won/.test(shielded[0]), shielded[0]);
+}
+
 // ── Case 8 — the campaign engine is untouched ─────────────────────────
 {
   const st = QPhysics.selfTest();
