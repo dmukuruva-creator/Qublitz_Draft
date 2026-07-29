@@ -570,6 +570,47 @@ const MINUS = { x: -1, y: 0, z: 0 };
     vsHalfCamp.beam === 'Y', `beam=${vsHalfCamp.beam}`);
 }
 
+// ── ECHO SIEGE: does a pi-pulse actually refocus the noise? ───────────
+// The whole minigame rests on one claim — a well-timed echo undoes slow
+// dephasing, and more echoes undo more of it. If that is not true in the
+// model, the game is teaching a lie.
+{
+  const T = DuelCore.ECHO.T_READ;
+  const trains = DuelCore.echoTrains(T);
+  const vis = name => DuelCore.echoVisibility(trains[name], DuelCore.mulberry32(4242), 4000);
+
+  const none = vis('none'), hahn = vis('hahn'), cpmg2 = vis('cpmg2'), cpmg4 = vis('cpmg4');
+  check('E1. a single centred Hahn echo beats doing nothing',
+    hahn > none + 0.05, `no pulse ${none.toFixed(3)} → Hahn ${hahn.toFixed(3)}`);
+  check('E2. …and more pulses refocus more (CPMG ordering holds)',
+    cpmg2 >= hahn - 0.02 && cpmg4 >= cpmg2 - 0.02 && cpmg4 > none + 0.1,
+    `none ${none.toFixed(3)} < hahn ${hahn.toFixed(3)} ≤ cpmg2 ${cpmg2.toFixed(3)} ≤ cpmg4 ${cpmg4.toFixed(3)}`);
+  check('E3. CPMG-4 recovers most of the lost coherence (> 0.9)',
+    cpmg4 > 0.9, `visibility ${cpmg4.toFixed(4)}`);
+
+  // The mechanism, not just the outcome: for CONSTANT detuning a centred
+  // pulse must cancel the phase EXACTLY. This is the Hahn echo in one line.
+  const seg = DuelCore.ECHO.SEGMENTS;
+  const flat = new Array(seg).fill(0.9);
+  check('E4. constant detuning + centred pi-pulse → phase exactly zero',
+    Math.abs(DuelCore.echoPhase(flat, [T/2], T, seg)) < 1e-12,
+    `phi = ${DuelCore.echoPhase(flat, [T/2], T, seg).toExponential(2)}`);
+  check('E5. …and with NO pulse the same noise runs the phase right up',
+    Math.abs(DuelCore.echoPhase(flat, [], T, seg)) > 3,
+    `phi = ${DuelCore.echoPhase(flat, [], T, seg).toFixed(3)} rad`);
+
+  // Timing has to MATTER — otherwise the player is not really playing.
+  const early = DuelCore.echoVisibility([T*0.1], DuelCore.mulberry32(4242), 4000);
+  check('E6. a badly-timed echo is much worse than a centred one',
+    hahn > early + 0.05, `centred ${hahn.toFixed(3)} vs early ${early.toFixed(3)}`);
+
+  // And fidelity must be a real probability.
+  const shot = DuelCore.echoShot(trains.hahn, DuelCore.mulberry32(7));
+  check('E7. fidelity is a probability in [0,1]',
+    shot.fidelity >= 0 && shot.fidelity <= 1 && isFinite(shot.phi),
+    `f=${shot.fidelity.toFixed(4)}, phi=${shot.phi.toFixed(3)}`);
+}
+
 // ── Case 8 — the campaign engine is untouched ─────────────────────────
 {
   const st = QPhysics.selfTest();

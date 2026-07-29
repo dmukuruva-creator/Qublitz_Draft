@@ -1070,6 +1070,29 @@ function beep(freq, type='square', dur=0.09, vol=0.18) {
   o.start(); o.stop(c.currentTime + dur);
 }
 
+// Frequency sweep + noise burst, on the same WebAudio path as beep(). Shared
+// by every minigame; DUEL keeps private copies inside its closure.
+function _sweep(f0, f1, dur, type, vol) {
+  const c = ac(); if (!c) return;
+  const o = c.createOscillator(), g = c.createGain();
+  o.connect(g); g.connect(c.destination);
+  o.type = type; o.frequency.setValueAtTime(f0, c.currentTime);
+  o.frequency.exponentialRampToValueAtTime(Math.max(1, f1), c.currentTime + dur);
+  g.gain.setValueAtTime(vol, c.currentTime);
+  g.gain.exponentialRampToValueAtTime(0.0001, c.currentTime + dur);
+  o.start(); o.stop(c.currentTime + dur);
+}
+function _noise(dur, vol) {
+  const c = ac(); if (!c) return;
+  const buf = c.createBuffer(1, Math.max(1, (c.sampleRate * dur) | 0), c.sampleRate);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / d.length);
+  const s = c.createBufferSource(), g = c.createGain();
+  s.buffer = buf; s.connect(g); g.connect(c.destination);
+  g.gain.setValueAtTime(vol, c.currentTime);
+  s.start(); s.stop(c.currentTime + dur);
+}
+
 // Shared "collapse" sting — used by any minigame outside the DUEL closure
 // (Bell Trial), built on the same WebAudio path as beep(). No audio files.
 function sfxCollapse() {
@@ -1980,7 +2003,83 @@ const DuelCore = (() => {
   // S = 4·(2·winRate − 1); |S| ≤ 2 classically, ≤ 2√2 quantum mechanically.
   const chshS = winRate => 4 * (2 * winRate - 1);
 
-  return { parkPulse, CHSH, chshAgreeProb, chshRound, chshWinRate, chshS,
+  // ── ECHO SIEGE — minigame #3 (dynamical decoupling) ─────────────────
+  // The adversarial framing of the single most useful trick in experimental
+  // quantum computing. A Saboteur injects slow, low-frequency noise: a random
+  // detuning that makes your qubit precess at a rate you do not know and
+  // cannot see. Left alone, those random phases spread and your coherence
+  // dies (that is pure dephasing, T2*).
+  //
+  // Your one move is a pi-pulse — an ECHO. It flips the accumulated phase, so
+  // the SAME noise that was pulling you apart now pulls you back. Time it
+  // right and the phase error refocuses to zero at the read-out; that is the
+  // Hahn echo, and a train of them (CPMG) beats slow noise almost completely.
+  //
+  // Model: piecewise-constant detuning d(t) (rad/s). Accumulated phase is
+  // phi = integral of s(t)*d(t) dt where s(t) flips sign at every pi-pulse.
+  // Fidelity at read-out is cos^2(phi/2) — 1 when refocused, 0 when the phase
+  // has run to pi. Sampling many noise draws gives the visibility you would
+  // actually measure on hardware.
+  const ECHO = {
+    T_READ: 4,          // seconds until read-out
+    NOISE_SIGMA: 1.1,   // rad/s spread of the unknown detuning
+    SEGMENTS: 8,        // how many pieces the noise is drawn in
+  };
+
+  // Phase accumulated over [0, T] with sign flips at `pulses` (sorted times).
+  function echoPhase(detunings, pulses, T, segments) {
+    const segT = T / segments;
+    let phi = 0;
+    for (let i = 0; i < segments; i++) {
+      const t0 = i * segT, t1 = t0 + segT;
+      // Split this segment at any pulse inside it; sign flips at each.
+      let cursor = t0;
+      let sign = 1;
+      for (const p of pulses) if (p <= t0) sign = -sign;
+      for (const p of pulses) {
+        if (p <= t0 || p >= t1) continue;
+        phi += sign * detunings[i] * (p - cursor);
+        cursor = p; sign = -sign;
+      }
+      phi += sign * detunings[i] * (t1 - cursor);
+    }
+    return phi;
+  }
+
+  const echoFidelity = phi => Math.cos(phi / 2) ** 2;
+
+  // One shot: draw a noise realisation, apply the pulse train, read out.
+  function echoShot(pulses, rand, opts) {
+    const o = Object.assign({}, ECHO, opts || {});
+    const det = [];
+    // Slow noise: a random offset plus a gentle drift, so it is CORRELATED
+    // across the window — which is precisely what an echo can undo. White
+    // noise could not be refocused, and neither can it here.
+    const base = (rand() * 2 - 1) * o.NOISE_SIGMA;
+    const drift = (rand() * 2 - 1) * o.NOISE_SIGMA * 0.35;
+    for (let i = 0; i < o.SEGMENTS; i++)
+      det.push(base + drift * (i / (o.SEGMENTS - 1) - 0.5) * 2);
+    const phi = echoPhase(det, pulses, o.T_READ, o.SEGMENTS);
+    return { phi, fidelity: echoFidelity(phi), detunings: det };
+  }
+
+  // Average visibility over N noise draws — the number a real experiment quotes.
+  function echoVisibility(pulses, rand, n, opts) {
+    let s = 0;
+    for (let i = 0; i < n; i++) s += echoShot(pulses, rand, opts).fidelity;
+    return s / n;
+  }
+
+  // The textbook trains, for scoring and for the "show me" button.
+  const echoTrains = (T = ECHO.T_READ) => ({
+    none: [],
+    hahn: [T / 2],                                     // one pi-pulse, centred
+    cpmg2: [T / 4, 3 * T / 4],
+    cpmg4: [T / 8, 3 * T / 8, 5 * T / 8, 7 * T / 8],
+  });
+
+  return { ECHO, echoPhase, echoFidelity, echoShot, echoVisibility, echoTrains,
+           parkPulse, CHSH, chshAgreeProb, chshRound, chshWinRate, chshS,
            K, AXES, BEAMS, ZONE, ZENO, DUEL_MISSIONS, missionGate,
            mulberry32, chargeToTheta, rotateBloch,
            eigenstateAngleDeg, isEigenstate, isCardinal, applyBeamHit,
@@ -2345,6 +2444,7 @@ canvas.addEventListener('contextmenu', e => { if (MODE === 'duel') e.preventDefa
 document.addEventListener('keydown', e => {
   if (MODE === 'duel') { DUEL.onKey(e, true); return; }
   if (MODE === 'bell') { BELL.onKey(e, true); return; }
+  if (MODE === 'echo') { ECHOG.onKey(e, true); return; }
   if (e.key === 'Escape') { closeModal(); }
 });
 
@@ -3633,6 +3733,192 @@ function startBellTrial() {
 if (typeof window !== 'undefined') { window.startBellTrial = startBellTrial; window.BELL = BELL; }
 
 // ═══════════════════════════════════════════════════════
+// ECHO SIEGE — minigame #3 (dynamical decoupling)
+// ═══════════════════════════════════════════════════════
+// A Saboteur floods your qubit with slow noise you cannot see. Your only
+// move is a pi-pulse, and its whole power is TIMING: flip the accumulated
+// phase at the right moment and the same noise that was destroying you
+// refocuses you instead. A sweep runs the read-out window in real time and
+// you drop echoes into it — a rhythm game whose scoring function is the
+// Hahn/CPMG echo (rules and proof in DuelCore.echo*, harness cases E1-E7).
+const ECHOG = (() => {
+  const S = { active:false, t:0, pulses:[], round:1, sigma:0, lives:3,
+              phase:'sweep', vis:0, lastPhi:0, best:0, rand:null, msg:'',
+              hist:[], done:false };
+  const T = () => DuelCore.ECHO.T_READ;
+  const need = () => Math.max(0.55, 0.92 - S.round * 0.03);   // required visibility
+  const sigmaFor = r => DuelCore.ECHO.NOISE_SIGMA * (1 + (r - 1) * 0.45);
+
+  function start() {
+    S.active = true; S.rand = DuelCore.mulberry32((Date.now() & 0xffff) || 3);
+    S.round = 1; S.lives = 3; S.best = 0; S.hist = []; S.done = false;
+    beginRound();
+    tele('echo_siege_start', {});
+  }
+  const stop = () => { S.active = false; };
+
+  function beginRound() {
+    S.t = 0; S.pulses = []; S.phase = 'sweep';
+    S.sigma = sigmaFor(S.round); S.vis = 0; S.msg = '';
+  }
+
+  function readout() {
+    S.phase = 'result';
+    // 300 noise draws at this round's severity — the visibility a real
+    // experiment would quote, not a single lucky shot.
+    S.vis = DuelCore.echoVisibility(S.pulses.slice().sort((a,b)=>a-b), S.rand, 300,
+                                    { NOISE_SIGMA: S.sigma });
+    S.best = Math.max(S.best, S.vis);
+    const ok = S.vis >= need();
+    S.hist.push({ round:S.round, vis:S.vis, pulses:S.pulses.length, ok });
+    if (ok) {
+      S.msg = `REFOCUSED — visibility ${(S.vis*100).toFixed(1)}% ≥ ${(need()*100).toFixed(0)}%`;
+      sfxCollapse();
+      tele('echo_round_cleared', { round:S.round, visibility:+S.vis.toFixed(4),
+                                   pulses:S.pulses.length, sigma:+S.sigma.toFixed(3) });
+    } else {
+      S.lives--;
+      S.msg = `DEPHASED — ${(S.vis*100).toFixed(1)}% < ${(need()*100).toFixed(0)}% needed`;
+      _sweep(300, 90, 0.35, 'sawtooth', 0.16);
+      if (S.lives <= 0) {
+        S.done = true;
+        tele('echo_siege_end', { rounds:S.round - 1, best:+S.best.toFixed(4) });
+      }
+    }
+  }
+
+  function next() {
+    if (S.done) { start(); return; }
+    if (S.hist.length && S.hist[S.hist.length-1].ok) S.round++;
+    beginRound();
+  }
+
+  function step(dt) {
+    if (!S.active || S.phase !== 'sweep') return;
+    S.t += dt;
+    if (S.t >= T()) { S.t = T(); readout(); }
+  }
+
+  function dropEcho() {
+    if (S.phase !== 'sweep' || S.pulses.length >= 6) return;
+    S.pulses.push(S.t);
+    beep(880, 'square', 0.05, 0.16);
+  }
+
+  function draw() {
+    ctx.clearRect(0, 0, BOARD, BOARD);
+    ctx.fillStyle = '#05070f'; ctx.fillRect(0, 0, BOARD, BOARD);
+    ctx.textAlign = 'center';
+    ctx.font = `bold ${canvasFontPx(17, 17)}px 'Press Start 2P',monospace`;
+    ctx.fillStyle = '#ffa83c';
+    ctx.fillText('ECHO SIEGE', BOARD/2, 52);
+    ctx.font = `500 ${Math.round(BOARD*0.017)}px ${CANVAS_BODY}`;
+    ctx.fillStyle = '#8f9ac4';
+    ctx.fillText('The Saboteur is dephasing your qubit with noise you cannot see.', BOARD/2, 78);
+    ctx.fillText('Drop π-pulses to flip the phase — the same noise then undoes itself.', BOARD/2, 100);
+
+    // Round / lives / target
+    ctx.font = `600 ${Math.round(BOARD*0.019)}px 'Rajdhani','Space Grotesk',sans-serif`;
+    ctx.fillStyle = '#cfd6ee';
+    ctx.fillText(`ROUND ${S.round}   ·   NOISE σ ${S.sigma.toFixed(2)} rad/s   ·   TARGET ${(need()*100).toFixed(0)}%   ·   ` +
+                 `${'♥'.repeat(Math.max(0,S.lives))}`, BOARD/2, 132);
+
+    // ── The read-out window ──
+    const bx = 90, bw = BOARD - 180, by = 250, bh = 84;
+    ctx.fillStyle = 'rgba(255,255,255,0.05)';
+    roundRect(bx, by, bw, bh, 5); ctx.fill();
+    ctx.strokeStyle = 'rgba(140,150,200,0.35)'; ctx.lineWidth = 1;
+    roundRect(bx, by, bw, bh, 5); ctx.stroke();
+    // centre line = the ideal single-echo moment
+    ctx.strokeStyle = 'rgba(63,224,138,0.35)'; ctx.setLineDash([5,5]);
+    ctx.beginPath(); ctx.moveTo(bx+bw/2, by-6); ctx.lineTo(bx+bw/2, by+bh+6); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.font = `500 ${Math.round(BOARD*0.014)}px ${CANVAS_BODY}`;
+    ctx.fillStyle = '#3fe08a';
+    ctx.fillText('T/2', bx+bw/2, by-12);
+
+    // placed echoes
+    for (const p of S.pulses) {
+      const x = bx + bw * (p / T());
+      ctx.strokeStyle = '#ffa83c'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(x, by+4); ctx.lineTo(x, by+bh-4); ctx.stroke();
+      ctx.fillStyle = '#ffa83c';
+      ctx.font = `700 ${Math.round(BOARD*0.0145)}px ${CANVAS_BODY}`;
+      ctx.fillText('π', x, by+bh+18);
+    }
+    // live sweep
+    if (S.phase === 'sweep') {
+      const x = bx + bw * (S.t / T());
+      ctx.strokeStyle = '#2fe0d0'; ctx.lineWidth = 2;
+      ctx.shadowColor = '#2fe0d0'; ctx.shadowBlur = 12;
+      ctx.beginPath(); ctx.moveTo(x, by-8); ctx.lineTo(x, by+bh+8); ctx.stroke();
+      ctx.shadowBlur = 0;
+    }
+    ctx.font = `500 ${Math.round(BOARD*0.015)}px ${CANVAS_BODY}`;
+    ctx.fillStyle = '#6f79a8';
+    ctx.textAlign = 'left';  ctx.fillText('0', bx, by+bh+34);
+    ctx.textAlign = 'right'; ctx.fillText(`${T()}s  read-out`, bx+bw, by+bh+34);
+    ctx.textAlign = 'center';
+
+    // ── Result ──
+    if (S.phase === 'result') {
+      const ok = S.vis >= need();
+      const my = 400;
+      ctx.font = `600 ${Math.round(BOARD*0.034)}px 'Rajdhani','Space Grotesk',sans-serif`;
+      ctx.fillStyle = ok ? '#3fe08a' : '#ff5a72';
+      ctx.fillText(`${(S.vis*100).toFixed(1)}%`, BOARD/2, my + 60);
+      ctx.font = `600 ${Math.round(BOARD*0.019)}px ${CANVAS_BODY}`;
+      ctx.fillStyle = '#cfd6ee';
+      ctx.fillText(S.msg, BOARD/2, my + 92);
+      ctx.font = `500 ${Math.round(BOARD*0.016)}px ${CANVAS_BODY}`;
+      ctx.fillStyle = '#8f9ac4';
+      ctx.fillText(S.pulses.length === 0
+        ? 'No echo at all — the phase just ran away. One π-pulse at T/2 undoes a constant detuning exactly.'
+        : `${S.pulses.length} echo(es). Evenly spaced pulses (CPMG) beat one, and one beats none.`,
+        BOARD/2, my + 118);
+      ctx.fillStyle = '#6f79a8';
+      ctx.fillText(S.done ? 'Siege over — R to start again · ESC menu'
+                          : 'SPACE / ENTER for the next round · ESC menu', BOARD/2, my + 150);
+    } else {
+      ctx.font = `500 ${Math.round(BOARD*0.017)}px ${CANVAS_BODY}`;
+      ctx.fillStyle = '#6f79a8';
+      ctx.fillText('SPACE drops a π-pulse as the sweep passes  ·  up to 6  ·  ESC menu',
+                   BOARD/2, 430);
+    }
+
+    if (S.done) {
+      ctx.font = `bold ${canvasFontPx(16, 17)}px 'Press Start 2P',monospace`;
+      ctx.fillStyle = '#ff5a72';
+      ctx.fillText('COHERENCE LOST', BOARD/2, 190);
+    }
+    ctx.textAlign = 'left';
+  }
+
+  function onKey(e, down) {
+    if (!down || MODE !== 'echo') return;
+    const k = e.key.toLowerCase();
+    if (k === 'escape') { MODE='story'; stop(); document.body.classList.remove('duel-mode');
+                          sizeCanvasBackingStore(); openMenu(); e.preventDefault(); return; }
+    if (k === 'r' && S.done) { start(); e.preventDefault(); return; }
+    if (k === ' ' || k === 'enter') {
+      if (S.phase === 'sweep') dropEcho(); else next();
+      e.preventDefault(); return;
+    }
+  }
+
+  return { start, stop, step, draw, onKey, state: S, need, readout, dropEcho };
+})();
+
+function startEchoSiege() {
+  closeModal();
+  MODE = 'echo';
+  document.body.classList.add('duel-mode');
+  sizeCanvasBackingStore();
+  ECHOG.start();
+}
+if (typeof window !== 'undefined') { window.startEchoSiege = startEchoSiege; window.ECHOG = ECHOG; }
+
+// ═══════════════════════════════════════════════════════
 // HUB — the home screen
 // ═══════════════════════════════════════════════════════
 // QuBlitz is a collection of adversarial quantum minigames now, not one
@@ -3657,6 +3943,8 @@ function openMenu() {
   onclick="openDuelMissions()">◈ DUEL TRAINING — 7 concept missions${cleared ? ` (${cleared}/7 cleared)` : ''}</button>
 <button class="btn" style="border-color:var(--rose);color:var(--rose)"
   onclick="startBellTrial()">⚛ BELL TRIAL — beat the classical bound</button>
+<button class="btn" style="border-color:var(--amber);color:var(--amber)"
+  onclick="startEchoSiege()">〰 ECHO SIEGE — refocus the Saboteur's noise</button>
 <hr style="border-color:var(--border);margin:12px 0">
 <button class="btn" onclick="openGlossaryIndex()">▸ GLOSSARY — every gate, one tap away</button>
 <button class="btn" onclick="openPhysicsLab()">✦ PHYSICS LAB — inspect the real engine</button>
@@ -3723,9 +4011,18 @@ function loop(ts) {
   _frameTicks = _frameDt / MS_PER_TICK;
   _t += _frameTicks;
 
-  if (MODE === 'duel') DUEL.frame(ts);
-  else if (MODE === 'bell') BELL.draw();
-  else ctx.clearRect(0, 0, BOARD, BOARD);   // menus render over an empty board
+  // A throw inside a mode used to take the rAF chain with it — the whole game
+  // froze on one bad frame, and the symptom (an echo recorded at t=0) looked
+  // nothing like the cause (an undefined sound helper). Never again: log it
+  // once and keep the loop alive.
+  try {
+    if (MODE === 'duel') DUEL.frame(ts);
+    else if (MODE === 'bell') BELL.draw();
+    else if (MODE === 'echo') { ECHOG.step(Math.min(0.05, _frameDt/1000)); ECHOG.draw(); }
+    else ctx.clearRect(0, 0, BOARD, BOARD);   // menus render over an empty board
+  } catch (err) {
+    if (!loop._warned) { loop._warned = true; console.error('[qublitz] frame error', err); }
+  }
 
   requestAnimationFrame(loop);
 }
