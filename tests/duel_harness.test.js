@@ -38,10 +38,11 @@ const cSrc     = findBlock(/^const C = \{/,                    /^};$/);
 const gatesSrc = findBlock(/^const GATES = \{/,                /^};$/);
 const qSrc     = findBlock(/^const QPhysics = \(\(\) => \{/,   /^\}\)\(\);$/);
 const duelSrc  = findBlock(/^const DuelCore = \(\(\) => \{/,   /^\}\)\(\);$/);
+const botSrc   = findBlock(/^const DuelBot = \(\(\) => \{/,    /^\}\)\(\);$/);
 
-const code = [piSrc, cSrc, gatesSrc, qSrc, duelSrc,
-  'module.exports = { C, GATES, QPhysics, DuelCore };'].join('\n');
-const { GATES, QPhysics, DuelCore } = eval('(function(){' + code + '\nreturn module.exports;})()');
+const code = [piSrc, cSrc, gatesSrc, qSrc, duelSrc, botSrc,
+  'module.exports = { C, GATES, QPhysics, DuelCore, DuelBot };'].join('\n');
+const { GATES, QPhysics, DuelCore, DuelBot } = eval('(function(){' + code + '\nreturn module.exports;})()');
 
 const K = DuelCore.K;
 const results = [];
@@ -417,6 +418,158 @@ const MINUS = { x: -1, y: 0, z: 0 };
     aligned <= C.CLASSICAL + 1e-12, `all-zero angles = ${(aligned*100).toFixed(1)}%`);
 }
 
+// ── parkPulse: you cannot reach an X-eigenstate with an X-pulse ───────
+{
+  // The invariant that makes parkPulse necessary, stated directly.
+  const start = { x: 0, y: 0.6, z: 0.8 };
+  const xPulsed = DuelCore.rotateBloch(start, DuelCore.AXES.X, 1.1);
+  check('p1. an X-rotation cannot change X-alignment (the trap)',
+    approx(xPulsed.x, start.x, 1e-12),
+    `x stayed ${xPulsed.x.toFixed(12)} — so an X-pulse can never park you on X`);
+
+  // The two-phase controller must converge onto the axis within 2 pulses,
+  // from many starting states — not just the easy ones.
+  function parkIn(r0, target, maxPulses) {
+    let r = r0, n = 0;
+    while (n < maxPulses && !DuelCore.isEigenstate(r, target)) {
+      // NOTE: phase 1 deliberately pulses the TARGET axis — not a no-op, it
+      // clears the blocking component that the perpendicular pulse can't touch.
+      const pp = DuelCore.parkPulse(r, target);
+      r = DuelCore.rotateBloch(r, DuelCore.AXES[pp.beam], pp.theta);
+      n++;
+    }
+    return { n, r };
+  }
+  const seeds = [ {x:0,y:0.6,z:0.8}, {x:0,y:0,z:1}, {x:0.3,y:-0.5,z:0.81},
+                  {x:-0.7,y:0.7,z:0.14}, {x:0,y:1,z:0}, {x:0.6,y:0.0,z:-0.8} ];
+  for (const target of ['X','Y']) {
+    const runs = seeds.map(s => parkIn(s, target, 2));
+    check(`p2-${target}. parkPulse converges onto the ${target}-axis in ≤2 pulses (6 starts)`,
+      runs.every(r => r.n <= 2),
+      `pulses needed: ${runs.map(r => r.n).join(', ')}`);
+  }
+
+  // …and a parked state really is immune to that axis's beam.
+  const parked = parkIn(start, 'X', 2).r;
+  check('p3. the parked state shields a full π X-beam',
+    DuelCore.resolveBeam(parked, 'X', Math.PI, { rand: DuelCore.mulberry32(1) }).shielded === true,
+    `X-angle ${DuelCore.eigenstateAngleDeg(parked,'X').toFixed(3)}°`);
+}
+
+// ── Case 6 (§9) — DuelBot liveness: 60s headless, every level ─────────
+// The D0 stand-in drone was replaced by a real opponent, so §9.6's bar
+// applies for the first time: over a full simulated minute each level must
+// keep acting, must never produce a NaN, and must actually use the mechanics
+// its tier unlocks. This runs the PURE decide() against a scripted world —
+// no DOM, no canvas, no timers.
+{
+  function simulate(levelIdx, seconds, seed) {
+    const rand = DuelCore.mulberry32(seed);
+    const L = DuelBot.levelOf(levelIdx);
+    const dt = 1/60;
+    let me = { x: 900, y: 400, bloch: { x:0, y:0, z:1 }, tCharges: 2 };
+    let foe = { x: 300, y: 400, bloch: { x:0, y:0, z:1 } };
+    let acted = 0, nan = false, sinceAct = 0, maxGap = 0, tick = 0;
+    let incoming = 1.5, shielded = 0, parkingAxis = null;
+    const used = { fire:0, selfPulse:0, measure:0, entangle:0, T:0 };
+    for (let t = 0; t < seconds; t += dt) {
+      // decay both, as the real loop does
+      me.bloch = DuelCore.decayStep(me.bloch, dt);
+      foe.bloch = DuelCore.decayStep(foe.bloch, dt);
+      // …and let the scripted player SHOOT BACK on the X-axis every ~1.5s.
+      // Without this the bot is never exposed, so it correctly never needs to
+      // park — which made the tiering assertion vacuous rather than false.
+      incoming -= dt;
+      if (incoming <= 0) {
+        incoming = 1.5;
+        const hit = DuelCore.resolveBeam(me.bloch, 'X', Math.PI/2, { rand, fidelity: 1 });
+        if (!hit.shielded) me.bloch = hit.bloch; else shielded++;
+      }
+      tick -= dt;
+      if (tick <= 0) {
+        tick = L.tick;
+        const view = {
+          me: { x: me.x, y: me.y, inHot:false, tCharges: me.tCharges,
+                beamReady:true, measReady:true, entReady:true },
+          foe: { x: foe.x, y: foe.y, measReady:true },
+          foeOdds: DuelCore.odds(foe.bloch),
+          foeOddsFalling: false,
+          myOdds: DuelCore.odds(me.bloch),
+          myEigen: { X:DuelCore.isEigenstate(me.bloch,'X'), Y:DuelCore.isEigenstate(me.bloch,'Y'), Z:DuelCore.isEigenstate(me.bloch,'Z') },
+          foeEigen:{ X:DuelCore.isEigenstate(foe.bloch,'X'), Y:DuelCore.isEigenstate(foe.bloch,'Y'), Z:DuelCore.isEigenstate(foe.bloch,'Z') },
+          foeAxisCounts: { X: 12, Y: 1 },
+          myMeasStreak: 1,
+          myBloch: me.bloch,
+          parkingAxis: (parkingAxis && !DuelCore.isEigenstate(me.bloch, parkingAxis)) ? parkingAxis : null,
+          nearestZone: { x: 640, y: 200, r: 110 },
+          bell: false, t,
+        };
+        const it = DuelBot.decide(view, levelIdx, rand, 0);
+        parkingAxis = it.parkingAxis || null;   // shell mirrors the commitment
+        if (!isFinite(it.aim) || !isFinite(it.moveX) || !isFinite(it.moveY) || !isFinite(it.hold)) nan = true;
+        const did = it.fire || it.selfPulse || it.measure || it.entangle;
+        if (it.fire) { used.fire++; if (it.beam === 'T') { used.T++; me.tCharges = Math.max(0, me.tCharges-1); } }
+        if (it.selfPulse) { used.selfPulse++;
+          const th = it.theta != null ? it.theta : DuelCore.chargeToTheta(it.hold);
+          me.bloch = DuelCore.rotateBloch(me.bloch, DuelCore.AXES[it.beam], th); }
+        if (it.measure) used.measure++;
+        if (it.entangle) used.entangle++;
+        if (it.fire) foe.bloch = DuelCore.rotateBloch(foe.bloch, DuelCore.AXES[it.beam==='Y'?'Y':'X'], DuelCore.chargeToTheta(it.hold));
+        if (did) { acted++; maxGap = Math.max(maxGap, sinceAct); sinceAct = 0; }
+      }
+      sinceAct += dt;   // one clock only — adding L.tick here too double-counted
+    }
+    return { acted, nan, maxGap, used, shielded };
+  }
+
+  const runs = [0,1,2].map(i => simulate(i, 60, 1000 + i));
+  check('6. every bot level keeps acting over 60s (no stalls, gap < 3s)',
+    runs.every(r => r.acted > 20 && r.maxGap < 3),
+    runs.map((r,i) => `${DuelBot.LEVELS[i].name}: ${r.acted} acts, max gap ${r.maxGap.toFixed(2)}s`).join(' · '));
+  check('6a. …and never produces a NaN in 60s of decisions',
+    runs.every(r => !r.nan));
+
+  // Tiering must be real: a Cadet is not a Duelist with worse aim, it is a
+  // Duelist that has not learned to park, phase or entangle.
+  const cadet = runs[0].used, duelist = runs[1].used, menace = runs[2].used;
+  check('6b. Cadet never parks, phases or entangles (its tier is locked)',
+    cadet.selfPulse === 0 && cadet.T === 0 && cadet.entangle === 0,
+    `cadet: park=${cadet.selfPulse} T=${cadet.T} bell=${cadet.entangle}`);
+  check('6c. higher tiers DO park once the player starts landing hits',
+    (duelist.selfPulse + menace.selfPulse) > 0,
+    `duelist park=${duelist.selfPulse} · menace park=${menace.selfPulse}`);
+  check('6h. parking actually WORKS — parked levels shield incoming beams',
+    (runs[1].shielded + runs[2].shielded) > 0 && runs[0].shielded === 0,
+    `shielded hits — cadet ${runs[0].shielded}, duelist ${runs[1].shielded}, menace ${runs[2].shielded}`);
+  check('6d. aim error tightens monotonically Cadet → Duelist → Menace',
+    DuelBot.LEVELS[0].sigma > DuelBot.LEVELS[1].sigma &&
+    DuelBot.LEVELS[1].sigma > DuelBot.LEVELS[2].sigma,
+    DuelBot.LEVELS.map(l => `${l.name} ${(l.sigma*180/Math.PI).toFixed(0)}°`).join(' > '));
+  check('6e. the 3-loss assist widens aim by 15% and is level-relative',
+    Math.abs(DuelBot.assistedSigma(DuelBot.LEVELS[1], 3) / DuelBot.LEVELS[1].sigma - 1.15) < 1e-12 &&
+    DuelBot.assistedSigma(DuelBot.LEVELS[1], 2) === DuelBot.LEVELS[1].sigma,
+    'streak 2 → no help; streak 3 → ×1.15');
+
+  // The anti-camp rule must actually fire: a camped player draws a T.
+  const campedView = {
+    me:{x:900,y:400,inHot:false,tCharges:2,beamReady:true,measReady:false,entReady:true},
+    foe:{x:300,y:400,measReady:false},
+    foeOdds:0.3, foeOddsFalling:false, myOdds:0.1,
+    myEigen:{X:true,Y:false,Z:false}, foeEigen:{X:true,Y:true,Z:false},
+    foeAxisCounts:{X:9,Y:0}, myMeasStreak:0, nearestZone:null, bell:false, t:5,
+  };
+  const vsCamper = DuelBot.decide(campedView, 2, DuelCore.mulberry32(5), 0);
+  check('6f. a player camped on BOTH attack axes draws a T-phase',
+    vsCamper.beam === 'T' && vsCamper.fire === true,
+    `beam=${vsCamper.beam} reason="${vsCamper.reason}"`);
+
+  // …and the bot must NOT waste a scarce T when a free axis is still open.
+  const oneAxisCamp = Object.assign({}, campedView, { foeEigen:{X:true,Y:false,Z:false} });
+  const vsHalfCamp = DuelBot.decide(oneAxisCamp, 2, DuelCore.mulberry32(5), 0);
+  check('6g. …but spends nothing when a free axis is open (Y instead of T)',
+    vsHalfCamp.beam === 'Y', `beam=${vsHalfCamp.beam}`);
+}
+
 // ── Case 8 — the campaign engine is untouched ─────────────────────────
 {
   const st = QPhysics.selfTest();
@@ -434,6 +587,5 @@ for (const r of results) {
 }
 console.log('\n  PENDING (arrive with the mechanics they test):');
 console.log('    · §9.5 phase-rift composite rotation — D2 (biome bands)');
-console.log('    · §9.6 bot liveness / no-NaN over a 60s sim — D1 (DuelBot)');
 console.log(failed ? `\n${failed} CHECK(S) FAILED ✗` : '\nALL CHECKS PASSED ✓');
 process.exit(failed ? 1 : 0);

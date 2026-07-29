@@ -1771,6 +1771,36 @@ const DuelCore = (() => {
     };
   }
 
+  // Which self-pulse moves me toward parking on ±targetAxis?
+  //
+  // Two traps live here, both found by the harness rather than by reasoning:
+  //
+  //  1. You CANNOT reach an X-eigenstate with an X-pulse. A rotation leaves
+  //     its own axis's component untouched, so the obvious "pulse the axis you
+  //     want" is the one move guaranteed not to work (case p1).
+  //  2. A single perpendicular pulse is not always enough either. Parking on X
+  //     with the Y-beam can only ever reach |x| = √(x²+z²), because a
+  //     Y-rotation cannot touch y — so from (0, 0.6, 0.8) it stalls at 36.9°
+  //     off-axis, forever (case p2-X).
+  //
+  // So this is a two-phase controller, and the duel only offers continuous-θ
+  // pulses about X and Y (Z is the fixed-π/4 T):
+  //     park on X → clear y with an X-pulse, then fold z into x with a Y-pulse
+  //     park on Y → clear x with a Y-pulse, then fold z into y with an X-pulse
+  // Conventions below are read off rotateBloch's own Rodrigues form.
+  function parkPulse(r, targetAxis) {
+    const TOL = 1e-3;
+    if (targetAxis === 'X') {
+      // Phase 1: a Y-rotation can never change y, so clear it first (X-pulse).
+      if (Math.abs(r.y) > TOL) return { beam: 'X', theta: Math.atan2(r.y, r.z) };
+      // Phase 2: fold z into x (Y-pulse); x' = x·cosθ + z·sinθ.
+      return { beam: 'Y', theta: Math.atan2(r.z, r.x) };
+    }
+    // targetAxis === 'Y'
+    if (Math.abs(r.x) > TOL) return { beam: 'Y', theta: Math.atan2(-r.x, r.z) };
+    return { beam: 'X', theta: Math.atan2(-r.z, r.y) };
+  }
+
   // ── Bell trap (entangle beam) ────────────────────────────────────────
   // Landing an entangle beam puts both duellists into |Φ+⟩. From that moment
   // NEITHER qubit has its own charge: each reads 50%, and a MEASURE on either
@@ -1950,7 +1980,7 @@ const DuelCore = (() => {
   // S = 4·(2·winRate − 1); |S| ≤ 2 classically, ≤ 2√2 quantum mechanically.
   const chshS = winRate => 4 * (2 * winRate - 1);
 
-  return { CHSH, chshAgreeProb, chshRound, chshWinRate, chshS,
+  return { parkPulse, CHSH, chshAgreeProb, chshRound, chshWinRate, chshS,
            K, AXES, BEAMS, ZONE, ZENO, DUEL_MISSIONS, missionGate,
            mulberry32, chargeToTheta, rotateBloch,
            eigenstateAngleDeg, isEigenstate, isCardinal, applyBeamHit,
@@ -1976,6 +2006,170 @@ const GAME = {
 };
 
 const ALL_GATE_IDS = ['H','X','Y','Z','S','T','Rx','Ry','CNOT','MEASURE'];
+
+// ═══════════════════════════════════════════════════════
+// DuelBot — pure, DOM-free opponent for Photon Duel (PD-24).
+// ═══════════════════════════════════════════════════════
+// Deliberately NOT the old BotAI (which went with the board): that one played
+// a turn-based grid. This one plays the real-time duel and, unlike the D0
+// stand-in drone, actually knows the mechanics exist — it parks on
+// eigenstates, spends T-charges to break YOUR camp, runs to a decoherence
+// hotspot to dump a dangerous charge, and entangles when it is losing.
+//
+// Pure: decide() takes a snapshot and returns an intent. No DOM, no canvas,
+// no timers — so tests/duel_harness.test.js can run it headless for a full
+// 60s of simulated play and assert it never stalls and never NaNs (§9.6).
+//
+// Levels are the design doc's §3.7 table. The three knobs that matter are
+// aim error, decision cadence, and how much of the mechanic set is unlocked;
+// a Cadet is not a Duelist with worse aim, it is a Duelist that has not
+// learned to park, phase or entangle.
+const DuelBot = (() => {
+  const D = Math.PI / 180;
+  const LEVELS = [
+    { key:0, name:'CADET',   sigma:14*D, tick:0.90, park:'never',
+      measureAt:0.75, useT:false, useBell:false, useZeno:false, useHotspot:false },
+    { key:1, name:'DUELIST', sigma: 8*D, tick:0.60, park:'threatened',
+      measureAt:0.85, useT:true,  useBell:true,  useZeno:false, useHotspot:true },
+    { key:2, name:'MENACE',  sigma: 4*D, tick:0.35, park:'proactive',
+      measureAt:null, useT:true,  useBell:true,  useZeno:true,  useHotspot:true },
+  ];
+  const levelOf = i => LEVELS[Math.max(0, Math.min(LEVELS.length-1, i|0))];
+
+  const dist = (a, b) => Math.hypot(a.x-b.x, a.y-b.y);
+  const gauss = rand => {
+    let u=0,v=0; while(u===0)u=rand(); while(v===0)v=rand();
+    return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);
+  };
+
+  // Which axis has the opponent been hitting us with? That is the axis worth
+  // parking on. Falls back to X (the workhorse beam).
+  function threatAxis(view) {
+    const h = view.foeAxisCounts || {};
+    let best = 'X', n = -1;
+    for (const k of ['X','Y']) if ((h[k]||0) > n) { n = h[k]||0; best = k; }
+    return best;
+  }
+
+  // Optimal-EV measure timing (Menace): a MEASURE that fails costs a 6s
+  // lockout during which their charge keeps decaying, so it is worth waiting
+  // for a high P — but not past the peak, because T1 only takes it away.
+  function shouldMeasure(view, L) {
+    const p = view.foeOdds;
+    if (L.measureAt != null) return p >= L.measureAt;
+    if (p >= 0.88) return true;
+    return p >= 0.65 && view.foeOddsFalling;      // past the peak — take it
+  }
+
+  // The one assist, and it is DISCLOSED in the UI, never silent: three losses
+  // in a row widen the bot's aim by 15%. Students talk; discovered fake
+  // difficulty destroys trust in the physics (OVERHAUL_PLAN P6.4).
+  const assistedSigma = (L, lossStreak) =>
+    L.sigma * (lossStreak >= 3 ? 1.15 : 1);
+
+  function decide(view, levelIdx, rand, lossStreak) {
+    const L = levelOf(levelIdx);
+    const me = view.me, foe = view.foe;
+    const out = { moveX:0, moveY:0, aim:0, beam:'X', fire:false, hold:0,
+                  selfPulse:false, measure:false, entangle:false, reason:'' };
+
+    const d = dist(me, foe);
+    const toFoe = Math.atan2(foe.y-me.y, foe.x-me.x);
+    out.aim = toFoe + gauss(rand) * assistedSigma(L, lossStreak||0);
+
+    // ── Defensive reads first ──────────────────────────────────────────
+    const myOdds = view.myOdds;                    // how measurable I am
+    const inDanger = myOdds > 0.6 && foe.measReady;
+
+    // Sanctuary: a hotspot dumps my charge fast, so it is the answer to being
+    // dangerously charged — at the price of my own offence.
+    if (L.useHotspot && inDanger && view.nearestZone && !me.inHot) {
+      const z = view.nearestZone;
+      out.moveX = z.x - me.x; out.moveY = z.y - me.y;
+      out.reason = 'running to a decoherence hotspot to dump my charge';
+      return out;
+    }
+
+    // Park on an eigenstate of the axis they keep using: their beam becomes a
+    // no-op against me. Proactive levels do it pre-emptively.
+    const axis = threatAxis(view);
+    const parked = view.myEigen[axis];
+    // Only worth parking if I am actually worth shooting at. Near |0> I am
+    // already a poor MEASURE target, so parking there would just starve my
+    // own offence — which is exactly what an unconditioned 'proactive' rule
+    // did: 41 self-pulses and zero attacks across a 60s sim (harness case 6).
+    // Parking takes up to two pulses (see DuelCore.parkPulse). Phase 1 dumps
+    // charge toward a pole, which drops myOdds below the threshold — so a
+    // purely odds-driven trigger ABANDONS every park half-finished and never
+    // actually shields anything (harness case 6h caught exactly that). Once
+    // committed, finish: view.parkingAxis is the shell's commitment flag.
+    const committed = view.parkingAxis === axis;
+    const worthParking = myOdds > 0.3;
+    const wantPark = (committed || worthParking) && (L.park === 'proactive'
+      || (L.park === 'threatened' && (inDanger || committed)));
+    if (wantPark && !parked && me.beamReady) {
+      const pp = DuelCore.parkPulse(view.myBloch, axis);
+      out.selfPulse = true; out.beam = pp.beam; out.theta = pp.theta;
+      out.hold = Math.min(1.2, Math.abs(pp.theta) / Math.PI * 1.2);
+      out.parkingAxis = axis;   // shell keeps this until isEigenstate(axis)
+      out.reason = `parking on the ${axis}-axis so your ${axis}-beam does nothing`;
+      return out;
+    }
+
+    // Comeback: if I am far behind on odds, entangling resets us both to 50/50.
+    if (L.useBell && !view.bell && me.entReady && view.foeOdds < 0.25 && myOdds > 0.7) {
+      out.entangle = true;
+      out.reason = 'entangling — a coin flip beats the fight I am losing';
+      return out;
+    }
+
+    // ── Offence ────────────────────────────────────────────────────────
+    if (shouldMeasure(view, L) && me.measReady) {
+      out.measure = true;
+      out.reason = `measuring at P=${(view.foeOdds*100).toFixed(0)}%`;
+      return out;
+    }
+    // Zeno denial: pin them at |0> so they cannot build a threat.
+    if (L.useZeno && me.measReady && view.foeOdds < 0.15 && view.myMeasStreak >= 1) {
+      out.measure = true;
+      out.reason = 'measuring again to Zeno-pin you';
+      return out;
+    }
+    // They are camped: only a non-Clifford T knocks them off.
+    if (L.useT && me.tCharges > 0 && view.foeEigen[axisForAttack(view)] && me.beamReady) {
+      out.fire = true; out.beam = 'T'; out.hold = 0.1;
+      out.reason = 'spending a T-phase to break your eigenstate camp';
+      return out;
+    }
+    // Otherwise: close to a workable range and charge a real pulse.
+    if (d > 420) { out.moveX = foe.x-me.x; out.moveY = foe.y-me.y; }
+    else if (d < 150) { out.moveX = me.x-foe.x; out.moveY = me.y-foe.y; }
+    else { out.moveX = -(foe.y-me.y); out.moveY = (foe.x-me.x); }   // strafe
+
+    if (me.beamReady) {
+      out.fire = true;
+      out.beam = axisForAttack(view);
+      // Aim for the angle that maximises their charge: a full pi from |0>,
+      // less if they are already part-way up. Capped at 0.9s — always charging
+      // the full 1.2s pi made the bots fire roughly once every eleven seconds,
+      // which is not a duel. (Tuning, not law: the design doc gates these
+      // numbers on a playtest, so treat this as a liveness floor.)
+      out.hold = Math.min(0.9, 1.2 * (1 - view.foeOdds * 0.6));
+      out.reason = `charging a ${out.beam}-beam`;
+    }
+    return out;
+  }
+
+  // Attack on an axis they are NOT parked on, when we have a choice.
+  function axisForAttack(view) {
+    if (view.foeEigen && view.foeEigen.X && !view.foeEigen.Y) return 'Y';
+    return 'X';
+  }
+
+  return { LEVELS, levelOf, decide, threatAxis, shouldMeasure, assistedSigma,
+           axisForAttack };
+})();
+if (typeof window !== 'undefined') window.DuelBot = DuelBot;
 
 // ═══════════════════════════════════════════════════════
 // MOTION PREFERENCE
@@ -2190,7 +2384,7 @@ const DUEL = (() => {
     pickupTimer: 0, beam: 'X',
     keys: Object.create(null),
     aim: { x: K.WORLD_W / 2, y: 0 },
-    charging: false, chargeT: 0,
+    charging: false, chargeT: 0, selfAim: false, selfPulses: 0,
     round: { winner: null, method: null, p: 0, endedAt: 0 },
     tele: [], loadedAt: 0, firstShotSent: false, sphereReadSent: false,
     shotCount: 0, thetas: [], axisCounts: { X: 0, Y: 0, T: 0 }, measures: 0,
@@ -2311,6 +2505,9 @@ const DUEL = (() => {
     S.shotCount = 0; S.thetas = []; S.axisCounts = { X:0, Y:0, T:0 }; S.measures = 0;
     S.floats = [];
     S.frameMs = [];
+    _botT = 0; _botIntent = null; _botHold = 0; _botPrevOdds = 0;
+    try { S.lossStreak = parseInt(localStorage.getItem('qb_loss_streak') || '0', 10) || 0; }
+    catch (e) { S.lossStreak = 0; }
     // ── Mission setup (concept scenarios; -1 = free duel) ──────────────
     S.mission = (mission == null) ? -1 : mission;
     S.ev = { entangled:false, usedT:false, superposedShot:false,
@@ -2361,6 +2558,33 @@ const DUEL = (() => {
       }
     }
   }
+  // Apply a pulse to your OWN qubit. Same θ, same axis, same cooldown as the
+  // beam you'd have fired — you simply spend the shot on defence instead of
+  // offence. This is what makes eigenstate parking playable: rotate yourself
+  // onto ±the axis they keep firing and their beam becomes a literal no-op
+  // (DuelCore.resolveBeam returns shielded). It is also the only way to
+  // shed charge on purpose, i.e. to stop being worth measuring.
+  function selfPulse(ship, theta, beamKey) {
+    const spec = DuelCore.BEAMS[beamKey] || DuelCore.BEAMS.X;
+    if (spec.scarce) {
+      if (ship.tCharges <= 0) { sfxDud(); return; }
+      ship.tCharges--;
+    }
+    const th = spec.fixedTheta != null ? spec.fixedTheta
+      : DuelCore.applyFidelity(theta, ship.fidelity, S.rand);
+    const before = ship.bloch;
+    ship.bloch = DuelCore.rotateBloch(before, DuelCore.AXES[spec.axis], th);
+    ship.arc = { from: before, to: ship.bloch, t: 0 };
+    ship.beamCd = K.BEAM_CD_S;
+    spawnParts(10, ship.x, ship.y, spec.color, 70, 0.45);
+    floatTxt(ship, 'SELF ' + beamKey, spec.color);
+    sweep(300, 620, 0.14, 'sine', 0.12);
+    if (ship.owner === 0 && S.ev) {
+      S.selfPulses = (S.selfPulses || 0) + 1;
+      if (!DuelCore.isEigenstate(ship.bloch, 'Z')) S.ev.superposedShot = true;
+    }
+  }
+
   function fireMeasure(ship) {
     const p = take(S.proj); if (!p) return;
     p.live = true; p.kind = 'measure'; p.owner = ship.owner; p.ttl = 5;
@@ -2509,6 +2733,8 @@ const DUEL = (() => {
   function endRound(winner, method, p) {
     if (S.over) return;
     S.over = true;
+    S.lossStreak = winner === 1 ? (S.lossStreak || 0) + 1 : 0;
+    try { localStorage.setItem('qb_loss_streak', String(S.lossStreak)); } catch (e) {}
     if (winner === 0 && S.mission >= 0) {
       GAME.duelDone = GAME.duelDone || [];
       if (!GAME.duelDone.includes(S.mission)) GAME.duelDone.push(S.mission);
@@ -2588,10 +2814,10 @@ const DUEL = (() => {
     me.ang = Math.atan2(S.aim.y - me.y, S.aim.x - me.x);
     if (S.charging) S.chargeT += dt;
 
-    // PD-8 — throwaway target drone. Not the bot: it drifts, keeps its
-    // distance, aims with heavy error and fires on a timer, purely so the
-    // spike is playable. The real Cadet/Duelist/Menace bots are D1.
-    droneThink(foe, me, dt);
+    // PD-24 — the real opponent (see DuelBot). It parks on eigenstates,
+    // spends T-charges to break YOUR camp, flees to a hotspot to dump a
+    // dangerous charge, and entangles when it is losing.
+    botThink(foe, me, dt);
 
     // Projectiles
     for (const p of S.proj) {
@@ -2659,23 +2885,94 @@ const DUEL = (() => {
     }
   }
 
-  let _droneT = 0, _droneDir = 1;
-  function droneThink(foe, me, dt) {
-    if (S.over) return;
-    _droneT -= dt;
-    // Drift perpendicular to the player, bouncing off the arena edges.
-    foe.vy += _droneDir * 260 * dt;
-    if (foe.y < 120 || foe.y > K.WORLD_H - 120) _droneDir *= -1;
-    const dx = me.x - foe.x, dy = me.y - foe.y;
-    const want = Math.atan2(dy, dx) + (S.rand() - 0.5) * 0.5;   // sloppy aim
-    foe.ang = want;
-    if (_droneT <= 0 && foe.beamCd === 0) {
-      _droneT = 1.1 + S.rand() * 0.9;
-      fireBeam(foe, DuelCore.chargeToTheta(0.4 + S.rand() * 0.8), 'X');
+  // ── The opponent (PD-24) ────────────────────────────────────────────
+  // Builds the snapshot DuelBot.decide() wants, then executes the intent it
+  // returns over the following frames. The bot itself stays pure; all the
+  // timing, cooldown and charge-hold bookkeeping lives here.
+  let _botT = 0, _botIntent = null, _botHold = 0, _botPrevOdds = 0;
+
+  function botView(foe, me) {
+    const eig = b => ({ X: DuelCore.isEigenstate(b, 'X'),
+                        Y: DuelCore.isEigenstate(b, 'Y'),
+                        Z: DuelCore.isEigenstate(b, 'Z') });
+    let nearestZone = null, best = Infinity;
+    for (const z of S.zones) {
+      const d = Math.hypot(z.x - foe.x, z.y - foe.y);
+      if (d < best) { best = d; nearestZone = z; }
     }
-    // Occasionally take a measure shot when the odds are decent.
-    if (foe.measCd === 0 && foe.winding === 0 && DuelCore.odds(me.bloch) > 0.8 && S.rand() < 0.02) {
-      foe.winding = K.MEASURE_WIND_S; sfxWind();
+    const foeOdds = S.bell ? 0.5 : DuelCore.odds(me.bloch);     // odds on the PLAYER
+    return {
+      me: { x: foe.x, y: foe.y, inHot: foe.inHot, tCharges: foe.tCharges,
+            beamReady: foe.beamCd === 0, measReady: foe.measCd === 0 && foe.winding === 0,
+            entReady: (foe.entCd || 0) <= 0 },
+      foe: { x: me.x, y: me.y, measReady: me.measCd === 0 },
+      foeOdds,                                   // what the bot can win with
+      foeOddsFalling: foeOdds < _botPrevOdds - 1e-4,
+      myOdds: S.bell ? 0.5 : DuelCore.odds(foe.bloch),
+      myEigen: eig(foe.bloch), foeEigen: eig(me.bloch),
+      myBloch: foe.bloch,
+      foeAxisCounts: S.axisCounts,
+      parkingAxis: (S.botParkingAxis &&
+        !DuelCore.isEigenstate(foe.bloch, S.botParkingAxis)) ? S.botParkingAxis : null,
+      myMeasStreak: (me.measStamps || []).length,
+      nearestZone, bell: !!S.bell, t: S.t,
+    };
+  }
+
+  function botThink(foe, me, dt) {
+    if (S.over) return;
+    const L = DuelBot.levelOf(GAME.difficulty);
+    _botT -= dt;
+    const view = botView(foe, me);
+    // Do NOT re-decide mid-charge. A Duelist thinks every 0.6s but a full
+    // pulse takes ~1.2s to charge, so an unconditional re-decide reset the
+    // hold timer forever and the bot never released a single shot (caught by
+    // counting projectiles in a live 12s idle test, not by the harness —
+    // decide() was correct, the shell around it deadlocked). Being committed
+    // while charging also mirrors the player, who is slowed mid-charge.
+    const busy = _botIntent && (_botIntent.fire || _botIntent.selfPulse) && _botHold > 0;
+    if (_botT <= 0 && !busy) {
+      _botT = L.tick;
+      _botIntent = DuelBot.decide(view, GAME.difficulty, S.rand, S.lossStreak || 0);
+      // Hold the park commitment until it actually lands on the axis.
+      S.botParkingAxis = _botIntent.parkingAxis || null;
+      _botPrevOdds = view.foeOdds;
+      if (_botIntent.reason) GAME.botLastReason = _botIntent.reason;
+      _botHold = _botIntent.hold || 0;
+    }
+    const it = _botIntent;
+    if (!it) return;
+
+    // Steering
+    const m = Math.hypot(it.moveX, it.moveY);
+    if (m > 1e-6) {
+      foe.vx += (it.moveX / m) * K.SHIP_ACCEL * dt * 0.85;
+      foe.vy += (it.moveY / m) * K.SHIP_ACCEL * dt * 0.85;
+    }
+    foe.ang = it.aim;
+
+    // One-shot actions, cleared so they fire once per decision.
+    if (it.measure && foe.measCd === 0 && foe.winding === 0) {
+      foe.winding = K.MEASURE_WIND_S; sfxWind(); it.measure = false;
+    } else if (it.entangle && !S.bell && (foe.entCd || 0) <= 0) {
+      const q = take(S.proj);
+      if (q) {
+        q.live = true; q.kind = 'entangle'; q.owner = 1; q.ttl = 4;
+        q.x = foe.x + Math.cos(foe.ang) * K.SHIP_R;
+        q.y = foe.y + Math.sin(foe.ang) * K.SHIP_R;
+        q.vx = Math.cos(foe.ang) * 520; q.vy = Math.sin(foe.ang) * 520;
+        foe.entCd = 12;
+      }
+      it.entangle = false;
+    } else if ((it.fire || it.selfPulse) && foe.beamCd === 0) {
+      // Charge for the requested hold, then release.
+      _botHold -= dt;
+      if (_botHold <= 0) {
+        const theta = it.theta != null ? it.theta : DuelCore.chargeToTheta(it.hold || 0.6);
+        if (it.selfPulse) selfPulse(foe, theta, it.beam);
+        else fireBeam(foe, theta, it.beam);
+        it.fire = it.selfPulse = false;
+      }
     }
   }
 
@@ -2875,7 +3172,7 @@ const DUEL = (() => {
     // Charging tell: a ring that fills toward the π-pulse.
     if (sh === S.ships[0] && S.charging) {
       const frac = Math.min(1, S.chargeT / K.CHARGE_FULL_S);
-      ctx.strokeStyle = '#f5b73c'; ctx.lineWidth = 2.5;
+      ctx.strokeStyle = S.selfAim ? '#2fe0d0' : '#f5b73c'; ctx.lineWidth = 2.5;
       ctx.beginPath(); ctx.arc(x, y, R * 1.7, -Math.PI / 2, -Math.PI / 2 + frac * Math.PI * 2);
       ctx.stroke();
     }
@@ -2985,8 +3282,9 @@ const DUEL = (() => {
       hudText(lab, tx, byy + bh + 15, '#6f79a8');
     });
     ctx.textAlign = 'left';
-    hudText(S.charging ? 'RELEASE TO FIRE' : 'HOLD MOUSE / SPACE-FREE TO CHARGE X-BEAM',
-            bx, byy - 6, S.charging ? '#f5b73c' : '#6f79a8');
+    hudText(S.charging ? (S.selfAim ? 'RELEASE — PULSE YOURSELF (defence)' : 'RELEASE TO FIRE')
+                       : 'LEFT-HOLD attack  ·  RIGHT-HOLD pulse yourself',
+            bx, byy - 6, S.charging ? (S.selfAim ? '#2fe0d0' : '#f5b73c') : '#6f79a8');
 
     // Resource row: fidelity + T-charges + selected beam.
     const rx = 118, ry = byy + bh + 34;
@@ -3110,15 +3408,19 @@ const DUEL = (() => {
   function onMouseDown(e) {
     if (MODE !== 'duel' || S.paused || S.over) return;
     ac();                                          // unlock audio on gesture
-    S.charging = true; S.chargeT = 0; e.preventDefault();
+    S.charging = true; S.chargeT = 0;
+    S.selfAim = (e.button === 2);                  // right button = self-pulse
+    e.preventDefault();
   }
   function onMouseUp(e) {
     if (MODE !== 'duel' || !S.charging) return;
     S.charging = false;
     const me = S.ships[0];
-    if (!S.paused && !S.over && me.beamCd === 0)
-      fireBeam(me, DuelCore.chargeToTheta(S.chargeT), S.beam);
-    S.chargeT = 0; e.preventDefault();
+    if (!S.paused && !S.over && me.beamCd === 0) {
+      if (S.selfAim) selfPulse(me, DuelCore.chargeToTheta(S.chargeT), S.beam);
+      else fireBeam(me, DuelCore.chargeToTheta(S.chargeT), S.beam);
+    }
+    S.chargeT = 0; S.selfAim = false; e.preventDefault();
   }
 
   return { start, stop, frame, onKey, onMouseMove, onMouseDown, onMouseUp,
