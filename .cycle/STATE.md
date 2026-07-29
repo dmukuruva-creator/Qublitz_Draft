@@ -40,7 +40,20 @@ waiting: |
   winning means pushing S past the classical bound of 2 (DuelCore.CHSH; harness cases c1-c6
   include an EXHAUSTIVE proof that all 16 deterministic local-hidden-variable strategies cap at
   75%). Four harnesses deleted with their subject; duel_harness is at 49 checks. QPhysics
-  byte-identical throughout. Prior status follows.
+  byte-identical throughout.
+  **2026-07-29 — iteration 2.** (a) `118a134` the REAL bot: DuelBot
+  (Cadet/Duelist/Menace), pure and harness-extractable, which parks on
+  eigenstates, spends a T-charge to break your camp, flees to hotspots and
+  entangles when losing — plus SELF-PULSE (right mouse), the missing
+  defensive half without which eigenstate parking was literally unreachable.
+  Two physics bugs and two shell bugs found en route (see the commit body);
+  §9.6 bot liveness is closed. Measured live per 11s: Cadet 6 actions and
+  harmless, Duelist 9 and pushes you to 0.68, Menace 4 and WINS the round.
+  (b) `5fd830a` ECHO SIEGE, minigame #3: real-time dynamical decoupling — a
+  Saboteur dephases you and you drop π-pulses to refocus (Hahn/CPMG). Live:
+  no echo 37.6%, one echo at T/2 → 93.7%. duel_harness now 69 checks.
+  QuBlitz is three adversarial minigames + concept training. Prior status
+  follows.
   ---
   nothing structural. BE-8/UP-5/GD-1 closed 2026-07-11 (see prior note below). As of
   2026-07-13, PED-1..5, BR-1..4, GOV-2/3/4, and EV-1/2/3 are ALSO all DONE — every carried-forward
