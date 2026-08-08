@@ -588,6 +588,32 @@ const MINUS = { x: -1, y: 0, z: 0 };
   check('E3. CPMG-4 recovers most of the lost coherence (> 0.9)',
     cpmg4 > 0.9, `visibility ${cpmg4.toFixed(4)}`);
 
+  // ── E8/E9 — the two properties the 2026-08-08 rebuild exists to create. ──
+  // Before it, the noise was `constant + linear drift`, which CPMG-2 cancels
+  // EXACTLY: visibility was 1.0000 for n=2 at every sigma from 1.1 to 4.57, so
+  // rising difficulty changed nothing and the pulse budget was decorative.
+  // These two cases fail loudly if anyone reverts to a model that simple.
+  const newRand = () => DuelCore.mulberry32(20260808);
+  const scoreN = (n, sigma) => DuelCore.echoScore(
+    DuelCore.echoEvenTrain(n, T), newRand(), 1200, { NOISE_SIGMA: sigma });
+
+  // E8 — difficulty must actually bite: no train may be free at high noise.
+  const easyBest = DuelCore.echoBestTrain(newRand, 800, { NOISE_SIGMA: 0.9 }, 8);
+  const hardBest = DuelCore.echoBestTrain(newRand, 800, { NOISE_SIGMA: 3.9 }, 8);
+  check('E8. the achievable ceiling FALLS as the Saboteur strengthens',
+    easyBest.score > hardBest.score + 0.1 && easyBest.score < 0.999,
+    `sigma 0.9 → best ${easyBest.score.toFixed(3)} (n=${easyBest.n}) ; ` +
+    `sigma 3.9 → best ${hardBest.score.toFixed(3)} (n=${hardBest.n})`);
+
+  // E9 — there must be a real decision: the optimum pulse count has to MOVE,
+  // and spending every pulse must be punished. If either fails, the round has
+  // one fixed answer again and the minigame is hollow.
+  const spamPenalised = scoreN(8, 0.9) < easyBest.score - 0.05;
+  check('E9. the optimum pulse count rises with noise, and spam is punished',
+    hardBest.n > easyBest.n && spamPenalised,
+    `optimum n: ${easyBest.n} → ${hardBest.n} ; ` +
+    `n=8 at low noise scores ${scoreN(8, 0.9).toFixed(3)} vs best ${easyBest.score.toFixed(3)}`);
+
   // The mechanism, not just the outcome: for CONSTANT detuning a centred
   // pulse must cancel the phase EXACTLY. This is the Hahn echo in one line.
   const seg = DuelCore.ECHO.SEGMENTS;

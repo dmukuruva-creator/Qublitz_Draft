@@ -1706,9 +1706,22 @@ const DuelCore = (() => {
   // actually measure on hardware.
   const ECHO = {
     T_READ: 4,          // seconds until read-out
-    NOISE_SIGMA: 1.1,   // rad/s spread of the unknown detuning
-    SEGMENTS: 8,        // how many pieces the noise is drawn in
+    NOISE_SIGMA: 0.9,   // rad/s spread of the unknown detuning
+    SEGMENTS: 256,      // how many pieces the noise is drawn in
+    // 1/f noise: MODES tones, log-spaced in [F_MIN, F_MAX] cycles per window,
+    // amplitude ~ 1/sqrt(f) so the POWER spectrum goes as 1/f. This is what a
+    // superconducting qubit actually dephases against.
+    MODES: 24, F_MIN: 0.10, F_MAX: 8.0,
+    // Every real pi-pulse is imperfect. Without a cost, "spam the maximum" is
+    // strictly optimal and there is no decision to make.
+    PULSE_INFIDELITY: 0.05,
   };
+
+  // Log-spaced mode table + normalisation, computed once.
+  const _echoFreqs = Array.from({ length: ECHO.MODES }, (_, k) =>
+    ECHO.F_MIN * Math.pow(ECHO.F_MAX / ECHO.F_MIN, k / (ECHO.MODES - 1)));
+  const _echoAmps = _echoFreqs.map(f => 1 / Math.sqrt(f));
+  const _echoNorm = Math.sqrt(_echoAmps.reduce((s, a) => s + a * a, 0) / 2);
 
   // Phase accumulated over [0, T] with sign flips at `pulses` (sorted times).
   function echoPhase(detunings, pulses, T, segments) {
@@ -1733,26 +1746,79 @@ const DuelCore = (() => {
   const echoFidelity = phi => Math.cos(phi / 2) ** 2;
 
   // One shot: draw a noise realisation, apply the pulse train, read out.
+  //
+  // The noise is 1/f — a sum of tones, log-spaced and NOT commensurate with the
+  // read-out window, each with a random phase. Two properties matter and both
+  // are load-bearing:
+  //
+  //  · It is CORRELATED across the window, which is what makes it refocusable.
+  //    White noise could not be echoed away, and neither can it here.
+  //  · It has power at MANY frequencies. A pulse train is a band-stop filter
+  //    whose stop-band climbs with the number of pulses, so faster noise
+  //    genuinely REQUIRES more pulses. That is the CPMG filter-function result,
+  //    and it is the whole lesson of the minigame.
+  //
+  // Superseded 2026-08-08: the old model was `constant + linear drift`, which a
+  // 2-pulse CPMG train cancels EXACTLY. Measured consequence — visibility was
+  // 1.0000 for n=2 at every difficulty from sigma 1.1 to 4.57, so the rising
+  // "Saboteur strength" changed nothing, the 6-pulse budget was decorative, and
+  // the mode had one correct answer forever. Non-commensurate frequencies also
+  // matter: with exact integer harmonics every tone integrates to zero over the
+  // window and DOING NOTHING scores a perfect 1.0.
   function echoShot(pulses, rand, opts) {
     const o = Object.assign({}, ECHO, opts || {});
+    const phases = _echoFreqs.map(() => rand() * Math.PI * 2);
     const det = [];
-    // Slow noise: a random offset plus a gentle drift, so it is CORRELATED
-    // across the window — which is precisely what an echo can undo. White
-    // noise could not be refocused, and neither can it here.
-    const base = (rand() * 2 - 1) * o.NOISE_SIGMA;
-    const drift = (rand() * 2 - 1) * o.NOISE_SIGMA * 0.35;
-    for (let i = 0; i < o.SEGMENTS; i++)
-      det.push(base + drift * (i / (o.SEGMENTS - 1) - 0.5) * 2);
+    for (let i = 0; i < o.SEGMENTS; i++) {
+      const t = (i / (o.SEGMENTS - 1)) * o.T_READ;
+      let d = 0;
+      for (let k = 0; k < _echoFreqs.length; k++)
+        d += _echoAmps[k] * Math.sin(2 * Math.PI * _echoFreqs[k] * t / o.T_READ + phases[k]);
+      det.push(o.NOISE_SIGMA * d / _echoNorm);
+    }
     const phi = echoPhase(det, pulses, o.T_READ, o.SEGMENTS);
     return { phi, fidelity: echoFidelity(phi), detunings: det };
   }
 
   // Average visibility over N noise draws — the number a real experiment quotes.
+  // This is the RAW refocusing quality; it ignores what the pulses themselves cost.
   function echoVisibility(pulses, rand, n, opts) {
     let s = 0;
     for (let i = 0; i < n; i++) s += echoShot(pulses, rand, opts).fidelity;
     return s / n;
   }
+
+  // What the player is actually scored on: refocusing quality DISCOUNTED by the
+  // infidelity of every pulse used. Without this term more pulses are never
+  // worse, "use all six" is strictly dominant, and there is no decision left.
+  // With it the optimum is finite and climbs as the noise gets worse.
+  function echoScore(pulses, rand, n, opts) {
+    const o = Object.assign({}, ECHO, opts || {});
+    const raw = echoVisibility(pulses, rand, n, opts);
+    return raw * Math.pow(1 - o.PULSE_INFIDELITY, pulses.length);
+  }
+
+  // Best score reachable this round, over perfectly-spaced trains of 0..maxN
+  // pulses — used for the debrief ("n=4 was the play") and to set thresholds
+  // from what is actually achievable rather than from a guess.
+  //
+  // Takes a FACTORY, not an rng: every candidate n must see the same noise
+  // draws, or the comparison is between pulse counts *and* luck. `newRand()`
+  // must return a freshly-seeded generator each call.
+  function echoBestTrain(newRand, draws, opts, maxN = 8) {
+    const o = Object.assign({}, ECHO, opts || {});
+    let best = { n: 0, score: -1 };
+    for (let n = 0; n <= maxN; n++) {
+      const train = Array.from({ length: n }, (_, i) => o.T_READ * (2 * i + 1) / (2 * n));
+      const s = echoScore(train, newRand(), draws, opts);
+      if (s > best.score) best = { n, score: s };
+    }
+    return best;
+  }
+
+  // The perfectly-spaced train of n pulses — the shape the player is aiming at.
+  const echoEvenTrain = (n, T = ECHO.T_READ) =>
+    Array.from({ length: n }, (_, i) => T * (2 * i + 1) / (2 * n));
 
   // The textbook trains, for scoring and for the "show me" button.
   const echoTrains = (T = ECHO.T_READ) => ({
@@ -1763,6 +1829,7 @@ const DuelCore = (() => {
   });
 
   return { debriefLines, ECHO, echoPhase, echoFidelity, echoShot, echoVisibility, echoTrains,
+           echoScore, echoBestTrain, echoEvenTrain,
            parkPulse, CHSH, chshAgreeProb, chshRound, chshWinRate, chshS,
            K, AXES, BEAMS, ZONE, ZENO, DUEL_MISSIONS, missionGate,
            mulberry32, chargeToTheta, rotateBloch,
@@ -3509,19 +3576,28 @@ if (typeof window !== 'undefined') { window.startBellTrial = startBellTrial; win
 // ═══════════════════════════════════════════════════════
 // ECHO SIEGE — minigame #3 (dynamical decoupling)
 // ═══════════════════════════════════════════════════════
-// A Saboteur floods your qubit with slow noise you cannot see. Your only
-// move is a pi-pulse, and its whole power is TIMING: flip the accumulated
-// phase at the right moment and the same noise that was destroying you
-// refocuses you instead. A sweep runs the read-out window in real time and
-// you drop echoes into it — a rhythm game whose scoring function is the
-// Hahn/CPMG echo (rules and proof in DuelCore.echo*, harness cases E1-E7).
+// A Saboteur floods your qubit with 1/f noise you cannot see. Your only move
+// is a pi-pulse, and it has two costs and one power. The power: flipping the
+// accumulated phase makes the same noise that was destroying you refocus you
+// instead. The costs: every pulse carries real infidelity, and the pulses must
+// be evenly spaced or they refocus nothing.
+//
+// So each round asks a genuine question — HOW MANY echoes is this noise worth?
+// More pulses reject faster noise (the stop-band of a CPMG train climbs with
+// pulse count) but each one bleeds 5% fidelity. The optimum is finite and it
+// climbs with the Saboteur's strength: n=3 at round 1, n=6 by round 6, and by
+// round 7 no train clears the bar at all. Rules and proof: DuelCore.echo*,
+// harness cases E1-E9.
 const ECHOG = (() => {
   const S = { active:false, t:0, pulses:[], round:1, sigma:0, lives:3,
               phase:'sweep', vis:0, lastPhi:0, best:0, rand:null, msg:'',
-              hist:[], done:false };
+              hist:[], done:false, bestN:0, bestScore:0 };
   const T = () => DuelCore.ECHO.T_READ;
-  const need = () => Math.max(0.55, 0.92 - S.round * 0.03);   // required visibility
-  const sigmaFor = r => DuelCore.ECHO.NOISE_SIGMA * (1 + (r - 1) * 0.45);
+  // Fixed bar. It used to FALL (0.92 - round*0.03) while the only correct
+  // answer stayed exactly 1.0000 at every noise level — the difficulty curve
+  // ran backwards. Now the bar holds still and the achievable ceiling drops.
+  const need = () => 0.62;
+  const sigmaFor = r => DuelCore.ECHO.NOISE_SIGMA * Math.pow(1.28, r - 1);
 
   function start() {
     S.active = true; S.rand = DuelCore.mulberry32((Date.now() & 0xffff) || 3);
@@ -3538,27 +3614,48 @@ const ECHOG = (() => {
 
   function readout() {
     S.phase = 'result';
-    // 300 noise draws at this round's severity — the visibility a real
-    // experiment would quote, not a single lucky shot.
-    S.vis = DuelCore.echoVisibility(S.pulses.slice().sort((a,b)=>a-b), S.rand, 300,
-                                    { NOISE_SIGMA: S.sigma });
+    const opts = { NOISE_SIGMA: S.sigma };
+    // 300 noise draws at this round's severity — the number a real experiment
+    // would quote, not a single lucky shot. Scored, so the pulses the player
+    // spent are charged for.
+    S.vis = DuelCore.echoScore(S.pulses.slice().sort((a,b)=>a-b), S.rand, 300, opts);
+    // What the best evenly-spaced train would have scored on the same noise —
+    // this is the round's answer, shown in the debrief so a loss teaches.
+    const bt = DuelCore.echoBestTrain(
+      () => DuelCore.mulberry32(0x5eed ^ (S.round * 2654435761)), 200, opts, 8);
+    S.bestN = bt.n; S.bestScore = bt.score;
     S.best = Math.max(S.best, S.vis);
     const ok = S.vis >= need();
-    S.hist.push({ round:S.round, vis:S.vis, pulses:S.pulses.length, ok });
+    S.hist.push({ round:S.round, vis:S.vis, pulses:S.pulses.length, ok, bestN:bt.n });
+    const n = S.pulses.length;
+    // The teaching line: name the play that would have won. Distinguish the two
+    // ways to be wrong, because they are opposite mistakes.
+    const verdict =
+      n === bt.n     ? `${n} echoes was the right count — spacing is what cost you.`
+      : n < bt.n     ? `Too few: ${n} echo${n===1?'':'es'} left the fast noise unfiltered. ${bt.n} was the play.`
+      :                `Too many: ${n} echoes each bled 5% fidelity. ${bt.n} was the play.`;
     if (ok) {
-      S.msg = `REFOCUSED — visibility ${(S.vis*100).toFixed(1)}% ≥ ${(need()*100).toFixed(0)}%`;
+      S.msg = `REFOCUSED — ${(S.vis*100).toFixed(1)}% ≥ ${(need()*100).toFixed(0)}%`;
       sfxCollapse();
       tele('echo_round_cleared', { round:S.round, visibility:+S.vis.toFixed(4),
-                                   pulses:S.pulses.length, sigma:+S.sigma.toFixed(3) });
+                                   pulses:n, bestN:bt.n, bestScore:+bt.score.toFixed(4),
+                                   sigma:+S.sigma.toFixed(3) });
     } else {
       S.lives--;
       S.msg = `DEPHASED — ${(S.vis*100).toFixed(1)}% < ${(need()*100).toFixed(0)}% needed`;
       _sweep(300, 90, 0.35, 'sawtooth', 0.16);
+      tele('echo_round_failed', { round:S.round, visibility:+S.vis.toFixed(4),
+                                  pulses:n, bestN:bt.n, bestScore:+bt.score.toFixed(4),
+                                  sigma:+S.sigma.toFixed(3) });
       if (S.lives <= 0) {
         S.done = true;
         tele('echo_siege_end', { rounds:S.round - 1, best:+S.best.toFixed(4) });
       }
     }
+    S.verdict = verdict;
+    // Ceiling below the bar means the Saboteur has simply won — say so, rather
+    // than letting the player think they misplayed a winnable round.
+    if (bt.score < need()) S.verdict = `Unwinnable: even a perfect ${bt.n}-echo train only reaches ${(bt.score*100).toFixed(0)}%. The Saboteur has outrun dynamical decoupling.`;
   }
 
   function next() {
@@ -3574,7 +3671,9 @@ const ECHOG = (() => {
   }
 
   function dropEcho() {
-    if (S.phase !== 'sweep' || S.pulses.length >= 6) return;
+    // Budget 8: the optimum reaches n=6 by round 6, so a 6-cap would silently
+    // make the late rounds unplayable rather than hard.
+    if (S.phase !== 'sweep' || S.pulses.length >= 8) return;
     S.pulses.push(S.t);
     beep(880, 'square', 0.05, 0.16);
   }
@@ -3588,8 +3687,8 @@ const ECHOG = (() => {
     ctx.fillText('ECHO SIEGE', BOARD/2, 52);
     ctx.font = `500 ${Math.round(BOARD*0.017)}px ${CANVAS_BODY}`;
     ctx.fillStyle = '#8f9ac4';
-    ctx.fillText('The Saboteur is dephasing your qubit with noise you cannot see.', BOARD/2, 78);
-    ctx.fillText('Drop π-pulses to flip the phase — the same noise then undoes itself.', BOARD/2, 100);
+    ctx.fillText('The Saboteur floods your qubit with 1/f noise you cannot see.', BOARD/2, 78);
+    ctx.fillText('More echoes reject faster noise — but every π-pulse bleeds 5%. How many?', BOARD/2, 100);
 
     // Round / lives / target
     ctx.font = `600 ${Math.round(BOARD*0.019)}px 'Rajdhani','Space Grotesk',sans-serif`;
@@ -3646,17 +3745,14 @@ const ECHOG = (() => {
       ctx.fillText(S.msg, BOARD/2, my + 92);
       ctx.font = `500 ${Math.round(BOARD*0.016)}px ${CANVAS_BODY}`;
       ctx.fillStyle = '#8f9ac4';
-      ctx.fillText(S.pulses.length === 0
-        ? 'No echo at all — the phase just ran away. One π-pulse at T/2 undoes a constant detuning exactly.'
-        : `${S.pulses.length} echo(es). Evenly spaced pulses (CPMG) beat one, and one beats none.`,
-        BOARD/2, my + 118);
+      ctx.fillText(S.verdict || '', BOARD/2, my + 118);
       ctx.fillStyle = '#6f79a8';
       ctx.fillText(S.done ? 'Siege over — R to start again · ESC menu'
                           : 'SPACE / ENTER for the next round · ESC menu', BOARD/2, my + 150);
     } else {
       ctx.font = `500 ${Math.round(BOARD*0.017)}px ${CANVAS_BODY}`;
       ctx.fillStyle = '#6f79a8';
-      ctx.fillText('SPACE drops a π-pulse as the sweep passes  ·  up to 6  ·  ESC menu',
+      ctx.fillText(`SPACE drops a π-pulse as the sweep passes  ·  up to 8  ·  each costs 5%  ·  ESC menu`,
                    BOARD/2, 430);
     }
 
