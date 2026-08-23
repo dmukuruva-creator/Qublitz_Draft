@@ -155,7 +155,14 @@ async function checkBgReducedMotionAndVisibility(chromium) {
   // Both sub-checks need nothing covering the background: startMatch() only
   // clears the boot screen, but finishBoot() opens the mode-select modal
   // ~200ms later (bgCovered() correctly idles the draw path under either) —
-  // click "PLAY vs BOT" to close it, same as the other checks in this file.
+  // so close it via closeModal() below.
+  //
+  // QB-A02 (2026-08-22): this comment used to say the modal was dismissed by
+  // clicking "PLAY vs BOT", a control that retired with the board on
+  // 2026-07-27. The CODE was already correct — it calls closeModal() — so
+  // only the comment was stale. Recorded rather than silently deleted,
+  // because a comment naming a control that no longer exists is how a reader
+  // concludes the suite still tests the old product.
   async function clearToBoard(p) {
     await startMatch(p);
     // The hub modal opens ~200ms after boot and bgCovered() correctly idles

@@ -126,6 +126,15 @@ async function captureWidth(chromium, width) {
     .catch(e => errors.push('could not start duel: ' + e.message));
   await page.waitForTimeout(600);
 
+  // QB-A02 (2026-08-22) — startDuel() resolving is not proof it took effect:
+  // a no-op would resolve too, and the screenshot would then be captured of
+  // the hub while the run reported success. Assert the mode actually changed.
+  const inDuel = await page.evaluate(
+    () => typeof MODE !== 'undefined' && MODE === 'duel' && !!(DUEL && DUEL.state.active),
+  ).catch(() => false);
+  if (!inDuel) errors.push('startDuel(11) resolved but the game is not in duel mode —'
+    + ' this capture would show the hub, not gameplay');
+
   // Select + move a white unit so the side panels and gate menu have real
   // content in the screenshot, not placeholder dashes.
   const canvas = await page.$('#game-canvas');

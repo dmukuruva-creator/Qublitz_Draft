@@ -26,6 +26,23 @@ const path = require('path');
 
 const GAME_URL = 'file://' + path.join(__dirname, '..', 'quantum_chess.html');
 
+// QB-A02 — the canonical hub's three play modes, as openMenu() renders them.
+// These are the product's actual entry points (HANDOFF: Photon Duel, Bell
+// Trial, Echo Siege), and they are what this check asserts it reached before
+// it claims to have measured anything. Substring matching, so the leading
+// glyph and the trailing tagline can change without breaking the check —
+// but a mode disappearing cannot. Deliberately NOT listing GLOSSARY, PHYSICS
+// LAB or EXPORT MY LOG: those are tools around the game rather than the game,
+// and pinning them here would make routine hub edits fail a contrast check.
+const HUB_CONTROLS = ['PHOTON DUEL', 'BELL TRIAL', 'ECHO SIEGE'];
+
+// A floor on the DOM walk, so "0 failures" can never mean "0 elements".
+// Measured on the hub at 1440x1000: see the run recorded in
+// .cycle/cycles/cycle-01/REPORT.md. Set well below the observed count so
+// ordinary copy edits do not trip it; the point is to catch a surface that
+// collapsed, not to pin an exact number.
+const MIN_DOM_ELEMENTS = 10;
+
 function relLuminance([r, g, b]) {
   const lin = (c) => { c /= 255; return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; };
   return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
@@ -194,27 +211,54 @@ async function checkDom(page) {
 
   const browser = await chromium.launch();
   const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+  const setupErrors = [];
   await page.goto(GAME_URL, { waitUntil: 'load' });
   await page.waitForTimeout(500);
-  await page.mouse.click(10, 10).catch(() => {});
+  await page.mouse.click(10, 10).catch(() => {});     // skip the boot screen
   await page.waitForTimeout(300);
-  const playBtn = page.locator('button:has-text("PLAY vs BOT")');
-  await playBtn.click({ timeout: 5000 }).catch(() => {});
-  await page.waitForTimeout(500);
-  // Select a unit so the Selected Qubit panel has real content, not dashes.
-  const canvas = await page.$('#game-canvas');
-  if (canvas) {
-    const box = await canvas.boundingBox();
-    await page.mouse.click(box.x + box.width * 0.18, box.y + box.height * 0.94);
-    await page.waitForTimeout(300);
+  if (await page.locator('#boot').isVisible().catch(() => false)) {
+    await page.locator('#boot').click({ timeout: 3000 }).catch(() => {});
+  }
+
+  // QB-A02 (2026-08-22) — this used to click a "PLAY vs BOT" button that
+  // retired with the board on 2026-07-27, swallow the failure, then click
+  // two board squares that no longer exist. Nothing failed, so the run went
+  // green while measuring whatever happened to be on screen.
+  //
+  // The correct target was never a play mode. Since the board retired,
+  // every piece of DOM text this game renders lives in #modal-content —
+  // the hub, the mission list, the glossary, the debrief. The in-play HUD
+  // is drawn on canvas and is covered by the curated pair list above, not
+  // by a DOM walk. Entering a play mode would HIDE the only text this pass
+  // can measure. So: stay on the hub, but prove the hub is really there,
+  // really open, and really carries the canonical controls — otherwise
+  // "0 failures" is just "0 elements".
+  await page.locator('#modal-overlay.show').waitFor({ state: 'visible', timeout: 8000 })
+    .catch(e => setupErrors.push('hub modal never opened: ' + e.message));
+  for (const label of HUB_CONTROLS) {
+    const n = await page.locator(`#modal-content button:has-text("${label}")`).count();
+    if (n !== 1) setupErrors.push(`hub control "${label}" — expected exactly 1 button, found ${n}`);
   }
 
   const domResults = await checkDom(page);
   await browser.close();
 
+  // A floor on the walk itself: the hub alone yields ~14 text elements.
+  // If a future change empties the surface, that must read as a broken
+  // check, not as a clean bill of health.
+  if (domResults.length < MIN_DOM_ELEMENTS) {
+    setupErrors.push(`DOM walk found only ${domResults.length} text element(s);`
+      + ` the hub should yield at least ${MIN_DOM_ELEMENTS}. This pass measured nothing.`);
+  }
+
   const canvasResults = checkCanvasPairs();
 
   console.log('=== FE-14c contrast check ===\n');
+  if (setupErrors.length) {
+    console.log('--- Setup (did this check reach the surface it claims to measure?) ---');
+    for (const e of setupErrors) console.log(`✗ ${e}`);
+    console.log('');
+  }
   console.log(`--- DOM pass (${domResults.length} elements with direct text) ---`);
   const domFails = domResults.filter(r => !r.pass);
   for (const r of domFails) {
@@ -228,7 +272,8 @@ async function checkDom(page) {
     console.log(`${r.pass ? '✓' : '✗'} ${r.name} — ${r.ratio.toFixed(2)}:1 (need ${r.need}:1)`);
   }
 
-  const anyFail = domFails.length > 0 || canvasFails.length > 0;
-  console.log(`\n${anyFail ? 'FAIL' : 'PASS'} — ${domFails.length} DOM failure(s), ${canvasFails.length} canvas failure(s)`);
+  const anyFail = setupErrors.length > 0 || domFails.length > 0 || canvasFails.length > 0;
+  console.log(`\n${anyFail ? 'FAIL' : 'PASS'} — ${setupErrors.length} setup failure(s),`
+    + ` ${domFails.length} DOM failure(s), ${canvasFails.length} canvas failure(s)`);
   process.exit(anyFail ? 1 : 0);
 })();
