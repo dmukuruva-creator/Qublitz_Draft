@@ -2198,6 +2198,29 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape') { closeModal(); }
 });
 
+// The other half of the lifecycle, and it was missing. DUEL.onKey ends with
+// `S.keys[k] = down`, but keydown was its ONLY caller — so `down` was
+// structurally always true and nothing could ever write false. Hold W, let
+// go, and the sim kept reading W as held: the ship accelerated forever.
+// BELL and ECHOG carry no per-frame key state (both early-out on !down);
+// they are routed anyway so the two halves stay symmetric and a future
+// held key in either mode is already wired.
+document.addEventListener('keyup', e => {
+  if (MODE === 'duel') { DUEL.onKey(e, false); return; }
+  if (MODE === 'bell') { BELL.onKey(e, false); return; }
+  if (MODE === 'echo') { ECHOG.onKey(e, false); return; }
+});
+
+// A key released while the window is unfocused, or while the tab is hidden,
+// never delivers its keyup to this document — same latch, different cause.
+// Drop every held key when focus or visibility is lost. (The unrelated
+// visibilitychange listener further down owns the background rAF chain and
+// deliberately touches no input state; this one is the input half.)
+window.addEventListener('blur', () => { DUEL.clearKeys(); });
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) DUEL.clearKeys();
+});
+
 // ═══════════════════════════════════════════════════════
 // MAIN GAME LOOP
 // ═══════════════════════════════════════════════════════
@@ -3338,6 +3361,13 @@ const DUEL = (() => {
       e.preventDefault();
   }
 
+  // Held-key state must not outlive the focus that produced it. A key let go
+  // while the window is blurred or the tab is hidden never sends its keyup
+  // here, so without this the sim would read it as held forever.
+  function clearKeys() {
+    for (const k in S.keys) S.keys[k] = false;
+  }
+
   function onMouseMove(e) {
     if (MODE !== 'duel') return;
     const rect = canvas.getBoundingClientRect();
@@ -3364,7 +3394,7 @@ const DUEL = (() => {
     S.chargeT = 0; S.selfAim = false; e.preventDefault();
   }
 
-  return { start, stop, frame, onKey, onMouseMove, onMouseDown, onMouseUp,
+  return { start, stop, frame, onKey, clearKeys, onMouseMove, onMouseDown, onMouseUp,
            state: S, p95, telemetry: () => S.tele.slice(),
            togglePerf: () => (S.showPerf = !S.showPerf) };
 })();
