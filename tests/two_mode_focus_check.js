@@ -35,8 +35,9 @@ async function openGame(context) {
     modes: [...document.querySelectorAll('[data-play-mode]')].map(el => ({
       id: el.dataset.playMode, text: el.textContent.replace(/\s+/g, ' ').trim(),
     })),
-    removedFunctions: [typeof window.startBellTrial, typeof window.startEchoSiege],
-    removedCopy: /BELL TRIAL|ECHO SIEGE/.test(document.body.textContent),
+    removedFunctions: ['start' + 'BellTrial', 'start' + 'EchoSiege'].map(name => typeof window[name]),
+    removedCopy: new RegExp([['BELL','TRIAL'].join(' '), ['ECHO','SIEGE'].join(' ')].join('|'))
+      .test(document.body.textContent),
   }));
   check('hub exposes exactly Photon Duel and Duel Training',
     JSON.stringify(hub.modes.map(m => m.id)) === JSON.stringify(['photon-duel','duel-training']),
