@@ -724,6 +724,14 @@ body::before {
 }
 .mission-card p { font-size:var(--fs-0); color:var(--ink-2); margin-bottom:8px; }
 .mission-done { font-family:var(--font-body); font-weight:600; font-size:var(--fs-0); color:var(--green); margin-top:4px; }
+.mission-record { color:var(--gold); font:600 var(--fs-0) var(--font-body); margin:5px 0; }
+.mastery-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:7px; margin:9px 0 15px; }
+.mastery-card { padding:9px; border:1px solid rgba(201,123,255,.32); border-radius:7px; background:rgba(15,12,35,.7); }
+.mastery-card strong { display:block; color:#c97bff; font:700 var(--fs-0) var(--font-body); letter-spacing:.7px; }
+.mastery-card span { display:block; margin-top:4px; color:var(--dim); font:500 var(--fs-0) var(--font-body); line-height:1.35; }
+.mastery-card.earned { border-color:rgba(63,224,138,.5); }
+.mastery-card.earned strong { color:var(--green); }
+@media (max-width:700px) { .mastery-grid { grid-template-columns:1fr; } }
 </style>
 </head>
 <body>
@@ -761,7 +769,7 @@ body::before {
     <div id="canvas-wrap">
       <canvas id="game-canvas" width="800" height="800"
               role="application"
-              aria-label="QuBlitz Photon Duel arena. WASD to fly, mouse to aim, hold to charge a beam, space to measure."
+              aria-label="QuBlitz Photon Duel arena. WASD moves; arrow keys or pointer aim; Shift charges an attack; F charges a self-pulse; Space measures. Standard gamepads are supported."
               tabindex="0"></canvas>
       <!-- Screen-reader announcements (QB-8 / GOV-4): status is polite,
            events are assertive. Both survive the board's retirement because
@@ -1704,6 +1712,217 @@ if (typeof window !== 'undefined') {
   window.nextTrainingMission = nextTrainingMission;
 }
 
+// C03-T1/T2 — durable, local-only duel mastery. The pure updater is shared
+// by production and the deterministic harness so record comparison and badge
+// predicates cannot quietly drift apart.
+const DUEL_PROFILE_KEY = 'qublitz_duel_profile_v1';
+const DuelProgress = (() => {
+  const BADGES = Object.freeze([
+    { id:'bell-collapse', title:'CORRELATED FINISH',
+      requirement:'Win through a Bell-pair MEASURE so both qubits collapse together.' },
+    { id:'phase-breaker', title:'PHASE BREAKER',
+      requirement:'Break an eigenstate camp with a landed T-phase, then win the duel.' },
+    { id:'hotspot-guard', title:'HOTSPOT GUARD',
+      requirement:'Discharge in a hotspot for at least 0.5s while exposed, then win.' },
+  ]);
+
+  const finite = (v, min, max) => Number.isFinite(v) && v >= min && v <= max ? v : null;
+  const whole = (v, min, max) => Number.isInteger(v) && v >= min && v <= max ? v : null;
+  const blank = () => ({ version:1, missions:{}, free:{ wins:0, losses:0, streak:0, bestStreak:0 }, badges:[] });
+
+  function sanitize(raw) {
+    const out = blank();
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return out;
+    const srcMissions = raw.missions && typeof raw.missions === 'object' ? raw.missions : {};
+    for (let i = 0; i < DuelCore.DUEL_MISSIONS.length; i++) {
+      const src = srcMissions[i];
+      if (!src || typeof src !== 'object' || Array.isArray(src)) continue;
+      const rec = {};
+      const bestTimeS = finite(src.bestTimeS, 0, 86400);
+      const fewestShots = whole(src.fewestShots, 0, 100000);
+      const bestMeasureP = finite(src.bestMeasureP, 0, 1);
+      if (bestTimeS != null) rec.bestTimeS = +bestTimeS.toFixed(2);
+      if (fewestShots != null) rec.fewestShots = fewestShots;
+      if (bestMeasureP != null) rec.bestMeasureP = +bestMeasureP.toFixed(4);
+      if (Object.keys(rec).length) out.missions[i] = rec;
+    }
+    const free = raw.free && typeof raw.free === 'object' ? raw.free : {};
+    out.free.wins = whole(free.wins, 0, 1000000) || 0;
+    out.free.losses = whole(free.losses, 0, 1000000) || 0;
+    out.free.streak = whole(free.streak, 0, 1000000) || 0;
+    out.free.bestStreak = Math.max(out.free.streak, whole(free.bestStreak, 0, 1000000) || 0);
+    const allowed = new Set(BADGES.map(b => b.id));
+    if (Array.isArray(raw.badges))
+      out.badges = [...new Set(raw.badges.filter(id => typeof id === 'string' && allowed.has(id)))];
+    return out;
+  }
+
+  function earnedBadgeIds(result) {
+    if (!result || result.won !== true) return [];
+    const ev = result.evidence || {};
+    const ids = [];
+    if (result.method === 'bell-measure' && ev.bellCollapse === true) ids.push('bell-collapse');
+    if (ev.tCampBroken === true) ids.push('phase-breaker');
+    if (finite(ev.hotspotDefenseTime, 0.5, 86400) != null) ids.push('hotspot-guard');
+    return ids;
+  }
+
+  function update(profile, result) {
+    const next = sanitize(profile);
+    const newRecords = [];
+    const mission = result && whole(result.mission, -1, DuelCore.DUEL_MISSIONS.length - 1);
+    if (result && result.won === true && mission != null && mission >= 0) {
+      const rec = Object.assign({}, next.missions[mission] || {});
+      const seconds = finite(result.seconds, 0, 86400);
+      const shots = whole(result.shots, 0, 100000);
+      const p = finite(result.p, 0, 1);
+      if (seconds != null && (rec.bestTimeS == null || seconds < rec.bestTimeS)) {
+        rec.bestTimeS = +seconds.toFixed(2); newRecords.push(`MISSION ${mission + 1} FASTEST TIME`);
+      }
+      if (shots != null && (rec.fewestShots == null || shots < rec.fewestShots)) {
+        rec.fewestShots = shots; newRecords.push(`MISSION ${mission + 1} FEWEST SHOTS`);
+      }
+      if (p != null && (rec.bestMeasureP == null || p > rec.bestMeasureP)) {
+        rec.bestMeasureP = +p.toFixed(4); newRecords.push(`MISSION ${mission + 1} BEST MEASURE`);
+      }
+      next.missions[mission] = rec;
+    }
+    if (result && mission === -1 && result.matchFinished === true) {
+      if (result.matchWon === true) {
+        next.free.wins++;
+        next.free.streak++;
+        if (next.free.streak > next.free.bestStreak) {
+          next.free.bestStreak = next.free.streak;
+          newRecords.push('FREE DUEL BEST STREAK');
+        }
+      } else {
+        next.free.losses++;
+        next.free.streak = 0;
+      }
+    }
+    const have = new Set(next.badges);
+    const earnedBadges = earnedBadgeIds(result).filter(id => !have.has(id));
+    next.badges.push(...earnedBadges);
+    return { profile:next, newRecords, earnedBadges };
+  }
+
+  const nextBadge = profile => {
+    const have = new Set(sanitize(profile).badges);
+    return BADGES.find(b => !have.has(b.id)) || null;
+  };
+
+  return { BADGES, blank, sanitize, update, earnedBadgeIds, nextBadge };
+})();
+
+function loadDuelProfile() {
+  try { return DuelProgress.sanitize(JSON.parse(localStorage.getItem(DUEL_PROFILE_KEY) || '{}')); }
+  catch (e) { return DuelProgress.blank(); }
+}
+function saveDuelProfile(profile) {
+  try { localStorage.setItem(DUEL_PROFILE_KEY, JSON.stringify(DuelProgress.sanitize(profile))); }
+  catch (e) { /* optional local persistence; the in-session profile remains live */ }
+}
+function recordDuelOutcome(result) {
+  const changed = DuelProgress.update(GAME.duelProfile, result);
+  GAME.duelProfile = changed.profile;
+  saveDuelProfile(GAME.duelProfile);
+  return changed;
+}
+function missionRecordText(missionId) {
+  const rec = (GAME.duelProfile.missions || {})[missionId];
+  if (!rec) return 'No winning record yet';
+  const fields = [];
+  if (rec.bestTimeS != null) fields.push(`${rec.bestTimeS.toFixed(2)}s`);
+  if (rec.fewestShots != null) fields.push(`${rec.fewestShots} shot${rec.fewestShots === 1 ? '' : 's'}`);
+  if (rec.bestMeasureP != null) fields.push(`${Math.round(rec.bestMeasureP * 100)}% MEASURE`);
+  return fields.join(' · ');
+}
+function masteryPanelHTML() {
+  const have = new Set(GAME.duelProfile.badges || []);
+  return `<div class="mastery-grid" aria-label="Optional quantum mastery challenges">${DuelProgress.BADGES.map(b => `
+    <div class="mastery-card${have.has(b.id) ? ' earned' : ''}" data-mastery="${b.id}">
+      <strong>${have.has(b.id) ? '✓ ' : '◇ '}${b.title}</strong>
+      <span>${b.requirement}</span>
+    </div>`).join('')}</div>`;
+}
+function duelControlsHTML() {
+  const k = DUEL_CONTROLS.keyboard, g = DUEL_CONTROLS.gamepad;
+  return `<div class="lb-wrap" data-controls-contract="v1">
+    <div class="lb-row"><span>Keyboard</span><span class="lb-val">${k.move} move · ${k.aim} aim · ${k.attack}/${k.selfPulse} pulses</span></div>
+    <div class="lb-row"><span>Keyboard actions</span><span class="lb-val">${k.beams} beams · ${k.measure} measure · ${k.entangle} entangle · ${k.pause} pause</span></div>
+    <div class="lb-row"><span>Standard gamepad</span><span class="lb-val">${g.move}/${g.aim} · ${g.attack}/${g.selfPulse}</span></div>
+    <div class="lb-row"><span>Gamepad actions</span><span class="lb-val">${g.beams} · ${g.measure} measure · ${g.entangle} entangle · ${g.pause} pause</span></div>
+  </div>`;
+}
+if (typeof window !== 'undefined') {
+  window.DuelProgress = DuelProgress;
+  window.recordDuelOutcome = recordDuelOutcome;
+}
+
+// C03-T4 — one declared control contract for behavior, HUD copy, and tests.
+const DUEL_CONTROLS = Object.freeze({
+  keyboard: Object.freeze({
+    move:'WASD', aim:'ARROW KEYS', attack:'SHIFT', selfPulse:'F',
+    beams:'1 / 2 / 3', measure:'SPACE', entangle:'E', pause:'ESC',
+    keys:Object.freeze({ up:'w', left:'a', down:'s', right:'d',
+      aimUp:'arrowup', aimLeft:'arrowleft', aimDown:'arrowdown', aimRight:'arrowright',
+      attack:'shift', selfPulse:'f', beamX:'1', beamY:'2', beamT:'3',
+      measure:' ', entangle:'e', pause:'escape', confirm:'enter', replay:'r' }),
+  }),
+  gamepad: Object.freeze({
+    move:'LEFT STICK', aim:'RIGHT STICK', attack:'RIGHT TRIGGER', selfPulse:'LEFT TRIGGER',
+    beams:'LB / RB or D-PAD', measure:'A / CROSS', entangle:'X / SQUARE', pause:'MENU',
+    buttons:Object.freeze({ measure:0, entangle:2, beamPrev:4, beamNext:5,
+      selfPulse:6, attack:7, pause:9, beamY:12, beamX:14, beamT:15 }),
+  }),
+  deadZone:0.22,
+});
+
+const DuelInput = (() => {
+  const clampAxis = v => Number.isFinite(v) ? Math.max(-1, Math.min(1, v)) : 0;
+  function stick(x, y, deadZone = DUEL_CONTROLS.deadZone) {
+    x = clampAxis(x); y = clampAxis(y);
+    const mag = Math.hypot(x, y);
+    if (mag <= deadZone) return { x:0, y:0, active:false };
+    const scaled = Math.min(1, (mag - deadZone) / (1 - deadZone));
+    return { x:x / mag * scaled, y:y / mag * scaled, active:true };
+  }
+  const buttonValue = b => typeof b === 'number' ? Math.max(0, clampAxis(b)) :
+    (b && Number.isFinite(b.value) ? Math.max(0, Math.min(1, b.value)) : (b && b.pressed ? 1 : 0));
+  function gamepadFrame(pad, previous) {
+    if (!pad || pad.connected === false || pad.mapping !== 'standard') return null;
+    const buttons = Array.from({ length:16 }, (_, i) => buttonValue((pad.buttons || [])[i]));
+    const prev = Array.isArray(previous) ? previous : buttons;
+    const rise = i => buttons[i] > 0.5 && (prev[i] || 0) <= 0.5;
+    const fall = i => buttons[i] <= 0.25 && (prev[i] || 0) > 0.25;
+    const B = DUEL_CONTROLS.gamepad.buttons;
+    const attackHeld = buttons[B.attack] > 0.25;
+    const selfHeld = buttons[B.selfPulse] > 0.25;
+    return {
+      index:Number.isInteger(pad.index) ? pad.index : 0,
+      id:typeof pad.id === 'string' ? pad.id.slice(0, 80) : 'Standard gamepad',
+      buttons,
+      move:stick((pad.axes || [])[0], (pad.axes || [])[1]),
+      aim:stick((pad.axes || [])[2], (pad.axes || [])[3]),
+      attackHeld, selfHeld,
+      attackPressed:attackHeld && (prev[B.attack] || 0) <= 0.25,
+      attackReleased:fall(B.attack),
+      selfPressed:selfHeld && (prev[B.selfPulse] || 0) <= 0.25,
+      selfReleased:fall(B.selfPulse),
+      measurePressed:rise(B.measure), entanglePressed:rise(B.entangle), pausePressed:rise(B.pause),
+      replayPressed:rise(B.entangle), confirmPressed:rise(B.measure),
+      beamPrevPressed:rise(B.beamPrev), beamNextPressed:rise(B.beamNext),
+      beamDirect:rise(B.beamX) ? 'X' : rise(B.beamY) ? 'Y' : rise(B.beamT) ? 'T' : null,
+      anyActive:buttons.some(v => v > 0.25),
+    };
+  }
+  return { stick, gamepadFrame };
+})();
+if (typeof window !== 'undefined') {
+  window.DUEL_CONTROLS = DUEL_CONTROLS;
+  window.DuelInput = DuelInput;
+}
+
 // ═══════════════════════════════════════════════════════
 // GAME STATE — duel-era
 // ═══════════════════════════════════════════════════════
@@ -1715,6 +1934,7 @@ const GAME = {
   // Instructor-export source data (see buildGateLogExport).
   gateCounts:{}, hitsLanded:0, critCount:0, entanglCount:0,
   duelDone:loadTrainingProgress(),          // durable locally; in-session fallback if storage fails
+  duelProfile:loadDuelProfile(),            // records + mastery; validated local-only profile
   // Physics Lab / diagnostic knob (the board's per-turn setting; the duel
   // runs in seconds and quotes DuelCore.K.T1_S / T2_S directly).
   decoRate:2,
@@ -2040,16 +2260,17 @@ function logEv(msg, type) {
 }
 
 // ═══════════════════════════════════════════════════════
-// INPUT — POINTER
+// INPUT — POINTER, KEYBOARD, AND STANDARD GAMEPAD
 // ═══════════════════════════════════════════════════════
-// The duel owns the pointer: aim, hold-to-charge, release-to-fire. Every
-// handler early-outs unless MODE === 'duel'. (These registrations were lost
-// with the board's INPUT—CLICK section and restored here; the duel is silent
-// without them, which is exactly what a live playthrough caught.)
+// Physical inputs terminate at DUEL's semantic actions. The controller is
+// polled in-frame (the Gamepad API's state model); connect/disconnect events
+// only provide immediate lifecycle cleanup and an accessible status cue.
 canvas.addEventListener('mousemove', e => DUEL.onMouseMove(e));
 canvas.addEventListener('mousedown', e => DUEL.onMouseDown(e));
 window.addEventListener('mouseup',   e => DUEL.onMouseUp(e));
 canvas.addEventListener('contextmenu', e => { if (MODE === 'duel') e.preventDefault(); });
+window.addEventListener('gamepadconnected', e => DUEL.onGamepadConnected(e.gamepad));
+window.addEventListener('gamepaddisconnected', e => DUEL.onGamepadDisconnected(e.gamepad));
 
 // ═══════════════════════════════════════════════════════
 // INPUT — KEYBOARD
@@ -2074,9 +2295,9 @@ document.addEventListener('keyup', e => {
 // Drop every held key when focus or visibility is lost. (The unrelated
 // visibilitychange listener further down owns the background rAF chain and
 // deliberately touches no input state; this one is the input half.)
-window.addEventListener('blur', () => { DUEL.clearKeys(); });
+window.addEventListener('blur', () => { DUEL.clearInput(); });
 document.addEventListener('visibilitychange', () => {
-  if (document.hidden) DUEL.clearKeys();
+  if (document.hidden) DUEL.clearInput();
 });
 
 // ═══════════════════════════════════════════════════════
@@ -2115,7 +2336,11 @@ const DUEL = (() => {
     pickupTimer: 0, beam: 'X',
     keys: Object.create(null),
     aim: { x: K.WORLD_W / 2, y: 0 },
-    charging: false, chargeT: 0, selfAim: false, selfPulses: 0,
+    charging: false, chargeT: 0, selfAim: false, chargeSource: null, selfPulses: 0,
+    inputDevice: 'KEYBOARD + POINTER',
+    gamepad: { index:null, id:'', buttons:null,
+               move:{x:0,y:0,active:false}, aim:{x:0,y:0,active:false} },
+    actions: { move:{x:0,y:0}, aim:{x:0,y:0,active:false} },
     round: { winner: null, method: null, p: 0, endedAt: 0 },
     tele: [], loadedAt: 0, firstShotSent: false, sphereReadSent: false,
     shotCount: 0, thetas: [], axisCounts: { X: 0, Y: 0, T: 0 }, measures: 0,
@@ -2253,13 +2478,14 @@ const DUEL = (() => {
                      z: S.rand() < 0.5 ? 0.35 : 0.8, r: S.rand() * 1.6 + 0.4 });
     S.active = true; S.paused = false; S.over = false;
     S.t = 0; S.acc = 0; S.last = null;
-    S.charging = false; S.chargeT = 0;
+    clearInput();
+    S.charging = false; S.chargeT = 0; S.chargeSource = null;
     S.round = { winner: null, method: null, p: 0, endedAt: 0 };
-    S.debrief = null;
+    S.debrief = null; S.progress = null;
     S.introT = 2.4; S.shake = 0; S.flash = 0;
     S.announcer = ''; S.announceT = 0;
     S.rstat = { shieldedAgainstYou: 0, duds: 0, selfPulses: 0, hotspotTime: 0,
-                lastTheta: null };
+                hotspotDefenseTime: 0, lastTheta: null };
     if (!keepMatch) S.match = { you: 0, them: 0, no: 1 };
     S.tele = keepMatch ? S.tele : []; S.loadedAt = keepMatch ? S.loadedAt : performance.now();
     S.firstShotSent = false; S.sphereReadSent = false;
@@ -2271,8 +2497,9 @@ const DUEL = (() => {
     catch (e) { S.lossStreak = 0; }
     // ── Mission setup (concept scenarios; -1 = free duel) ──────────────
     S.mission = (mission == null) ? -1 : mission;
-    S.ev = { entangled:false, usedT:false, superposedShot:false,
-             zenoLocked:false, fidelity:0, elapsed:0, measuredIdx:-1 };
+    S.ev = { entangled:false, bellCollapse:false, usedT:false, tCampBroken:false,
+             hotspotDefenseTime:0, superposedShot:false, zenoLocked:false,
+             fidelity:0, elapsed:0, measuredIdx:-1 };
     S.gateMsg = ''; S.gateMsgT = 0;
     const M = DuelCore.DUEL_MISSIONS[S.mission];
     if (M) {
@@ -2286,7 +2513,7 @@ const DUEL = (() => {
     tele('duel_load', { seed: S.seed, mission: S.mission,
                         concept: M ? M.concept : 'free-duel' });
   }
-  function stop() { S.active = false; }
+  function stop() { clearInput(); S.active = false; }
 
   // Best-of-3: keep the score, reset the arena. Match ends at 2.
   const matchOver = () => S.match.you >= 2 || S.match.them >= 2;
@@ -2371,6 +2598,7 @@ const DUEL = (() => {
   // damage number — the sphere swinging is the feedback (design pillar 2).
   function landBeam(p, target) {
     const before = target.bloch;
+    const wasCardinal = DuelCore.isCardinal(before);
     const shooter = S.ships[p.owner];
     const res = DuelCore.resolveBeam(before, p.beam, p.theta, {
       fidelity: shooter.fidelity, rand: S.rand,
@@ -2401,6 +2629,8 @@ const DUEL = (() => {
       return;
     }
     target.bloch = res.bloch;
+    if (p.owner === 0 && p.beam === 'T' && wasCardinal && !DuelCore.isCardinal(res.bloch) && S.ev)
+      S.ev.tCampBroken = true;
     target.arc = { from: before, to: res.bloch, t: 0 };
     target.hitFlash = 0.35;
     const spec = DuelCore.BEAMS[p.beam] || DuelCore.BEAMS.X;
@@ -2438,6 +2668,7 @@ const DUEL = (() => {
       floatTxt(target, 'CORRELATED', '#c97bff');
       res = { outcome: r.outcome, p: r.p };
       method = 'bell-measure';
+      if (p.owner === 0 && S.ev) S.ev.bellCollapse = true;
     } else {
       res = DuelCore.measureRoll(target.bloch, S.rand);
       target.bloch = res.bloch;
@@ -2509,24 +2740,41 @@ const DUEL = (() => {
     if (S.over) return;
     S.over = true;
     if (winner === 0) S.match.you++; else S.match.them++;
+    const won = winner === 0;
+    const progress = recordDuelOutcome({
+      mission:S.mission, won, method, seconds:S.t, shots:S.shotCount, p,
+      matchFinished:S.mission < 0 && matchOver(),
+      matchWon:S.match.you > S.match.them,
+      evidence:{
+        bellCollapse:!!(S.ev && S.ev.bellCollapse),
+        tCampBroken:!!(S.ev && S.ev.tCampBroken),
+        hotspotDefenseTime:S.ev ? S.ev.hotspotDefenseTime : 0,
+      },
+    });
+    S.progress = progress;
+    if (progress.newRecords.length) logEv(`New record: ${progress.newRecords.join(', ')}.`, 'quantum');
+    if (progress.earnedBadges.length) {
+      const titles = progress.earnedBadges.map(id => (DuelProgress.BADGES.find(b => b.id === id) || {}).title).filter(Boolean);
+      logEv(`Quantum mastery earned: ${titles.join(', ')}.`, 'quantum');
+    }
     S.debrief = DuelCore.debriefLines({
-      won: winner === 0, method, p,
+      won, method, p,
       theta: S.rstat ? S.rstat.lastTheta : null,
       shieldedAgainstYou: S.rstat ? S.rstat.shieldedAgainstYou : 0,
       duds: S.rstat ? S.rstat.duds : 0,
       selfPulses: S.rstat ? S.rstat.selfPulses : 0,
       hotspotTime: S.rstat ? S.rstat.hotspotTime : 0,
     });
-    tele('debrief_shown', { lines: S.debrief.length, won: winner === 0 });
-    checkLeaderboard({ won: winner === 0, seconds: S.t, shots: S.shotCount, p });
+    tele('debrief_shown', { lines: S.debrief.length, won,
+      newRecords:progress.newRecords.slice(), earnedBadges:progress.earnedBadges.slice() });
     // EV-1's optional research instrument, off by default: offer it once a
     // concept mission is actually cleared, which is the only moment its
     // questions are about something the student just did.
-    if (winner === 0 && S.mission >= 0 && GAME.evQuizEnabled)
+    if (won && S.mission >= 0 && GAME.evQuizEnabled)
       setTimeout(() => { if (S.over) openEvQuiz(); }, 1200);
     S.lossStreak = winner === 1 ? (S.lossStreak || 0) + 1 : 0;
     try { localStorage.setItem('qb_loss_streak', String(S.lossStreak)); } catch (e) {}
-    if (winner === 0 && S.mission >= 0) {
+    if (won && S.mission >= 0) {
       recordTrainingClear(S.mission);
       tele('mission_clear', { mission: S.mission,
         concept: (DuelCore.DUEL_MISSIONS[S.mission] || {}).concept });
@@ -2550,12 +2798,10 @@ const DUEL = (() => {
     S.t += dt;
     const me = S.ships[0], foe = S.ships[1];
 
-    // Player movement (WASD / arrows), slowed while charging.
-    let ax = 0, ay = 0;
-    if (S.keys['a'] || S.keys['arrowleft'])  ax -= 1;
-    if (S.keys['d'] || S.keys['arrowright']) ax += 1;
-    if (S.keys['w'] || S.keys['arrowup'])    ay -= 1;
-    if (S.keys['s'] || S.keys['arrowdown'])  ay += 1;
+    // The simulation consumes semantic vectors only. Physical keyboard and
+    // controller state is normalized by updateContinuousActions().
+    updateContinuousActions();
+    let ax = S.actions.move.x, ay = S.actions.move.y;
     if (ax || ay) {
       const m = Math.hypot(ax, ay);
       const accel = K.SHIP_ACCEL * (S.charging ? K.CHARGE_SLOW : 1);
@@ -2584,11 +2830,19 @@ const DUEL = (() => {
       // Decoherence — the same Lindblad step the campaign runs per turn,
       // but the LOCAL T1/T2 if this ship is standing in a hotspot.
       const zone = DuelCore.zoneAt(sh.x, sh.y, S.zones);
+      const oddsBeforeDecay = DuelCore.odds(sh.bloch);
       sh.inHot = !!zone;
       // An entangled qubit's own vector is meaningless until collapse (the
       // pair holds the state), so skip local decay while linked.
       if (sh.bellIdx < 0) sh.bloch = DuelCore.decayStep(sh.bloch, dt, zone);
-      if (sh.owner === 0 && zone && S.rstat) S.rstat.hotspotTime += dt;
+      if (sh.owner === 0 && zone && S.rstat) {
+        S.rstat.hotspotTime += dt;
+        if (sh.bellIdx < 0 && oddsBeforeDecay >= 0.35
+            && DuelCore.odds(sh.bloch) < oddsBeforeDecay - 1e-9) {
+          S.rstat.hotspotDefenseTime += dt;
+          if (S.ev) S.ev.hotspotDefenseTime += dt;
+        }
+      }
       sh.entCd = Math.max(0, (sh.entCd || 0) - dt);
       // Mission 5's cage re-charges itself unless Zeno-pinned.
       const MM = DuelCore.DUEL_MISSIONS[S.mission];
@@ -2605,6 +2859,10 @@ const DUEL = (() => {
       }
     }
     if (S.gateMsgT > 0) S.gateMsgT = Math.max(0, S.gateMsgT - dt);
+    if (S.actions.aim.active) {
+      S.aim.x = me.x + S.actions.aim.x * K.WORLD_W;
+      S.aim.y = me.y + S.actions.aim.y * K.WORLD_W;
+    }
     me.ang = Math.atan2(S.aim.y - me.y, S.aim.x - me.x);
     if (S.charging) S.chargeT += dt;
 
@@ -2782,6 +3040,7 @@ const DUEL = (() => {
     S.announceT = Math.max(0, S.announceT - dt);
     S.shake = Math.max(0, S.shake - dt * 2.4);
     S.flash = Math.max(0, S.flash - dt * 2.8);
+    pollGamepad();
     if (!S.paused && !S.over) {
       S.acc += dt;
       let guard = 0;
@@ -2860,7 +3119,7 @@ const DUEL = (() => {
     ctx.restore();
     drawHud();
     drawAnnouncer();
-    if (S.paused) banner('PAUSED', 'Esc to resume');
+    if (S.paused) banner('PAUSED', 'ESC / MENU to resume');
     if (S.over) drawDebrief();
   }
 
@@ -3085,7 +3344,7 @@ const DUEL = (() => {
     });
     ctx.textAlign = 'left';
     hudText(S.charging ? (S.selfAim ? 'RELEASE — PULSE YOURSELF (defence)' : 'RELEASE TO FIRE')
-                       : 'LEFT-HOLD attack  ·  RIGHT-HOLD pulse yourself',
+                       : `${DUEL_CONTROLS.keyboard.attack} / LEFT-HOLD attack  ·  ${DUEL_CONTROLS.keyboard.selfPulse} / RIGHT-HOLD self-pulse`,
             bx, byy - 6, S.charging ? (S.selfAim ? '#2fe0d0' : '#f5b73c') : '#6f79a8');
 
     // Resource row: fidelity + T-charges + selected beam.
@@ -3101,20 +3360,22 @@ const DUEL = (() => {
       ctx.beginPath(); ctx.arc(rx + 305 + i * 15, ry - 4, 5, 0, Math.PI * 2); ctx.fill();
     }
 
-    // Keycap strip — bottom-right, always visible (P3.6).
-    const kx = BOARD - 214;
+    // Control strip — one manifest feeds the live behavior and these labels.
+    const kx = BOARD - 292;
     const beamName = (DuelCore.BEAMS[S.beam] || {}).label || 'X-BEAM';
-    hudText('WASD move · MOUSE aim + hold', kx, by + 28, '#6f79a8');
+    hudText(`ACTIVE INPUT · ${S.inputDevice}`, kx, by + 22, S.inputDevice === 'GAMEPAD' ? '#2fe0d0' : '#6f79a8');
+    hudText(`${DUEL_CONTROLS.keyboard.move} move · ${DUEL_CONTROLS.keyboard.aim} aim`, kx, by + 42, '#6f79a8');
+    hudText(`${DUEL_CONTROLS.keyboard.attack} attack · ${DUEL_CONTROLS.keyboard.selfPulse} self-pulse`, kx, by + 62, '#6f79a8');
     ctx.fillStyle = (DuelCore.BEAMS[S.beam] || {}).color || '#ff5a72';
     ctx.font = `700 ${Math.round(BOARD * 0.0163)}px ${CANVAS_BODY}`;
-    ctx.fillText(`1/2/3  ${beamName}${S.beam === 'T' ? ' ×' + me.tCharges : ''}`, kx, by + 48);
+    ctx.fillText(`${DUEL_CONTROLS.keyboard.beams}  ${beamName}${S.beam === 'T' ? ' ×' + me.tCharges : ''}`, kx, by + 82);
     const measReady = me.measCd === 0 && me.winding === 0;
-    hudText(`SPACE  MEASURE ${measReady ? '(ready)' : '(' + me.measCd.toFixed(1) + 's)'}`,
-            kx, by + 68, measReady ? '#3fe08a' : '#6f79a8');
+    hudText(`${DUEL_CONTROLS.keyboard.measure} measure ${measReady ? '(ready)' : '(' + me.measCd.toFixed(1) + 's)'} · ${DUEL_CONTROLS.keyboard.entangle} entangle`,
+            kx, by + 102, measReady ? '#3fe08a' : '#6f79a8');
     const entReady = !S.bell && (me.entCd || 0) <= 0;
-    hudText(`E  ENTANGLE ${S.bell ? '(linked)' : entReady ? '(ready)' : '(' + (me.entCd||0).toFixed(0) + 's)'}`,
-            kx, by + 88, S.bell ? '#c97bff' : entReady ? '#c97bff' : '#6f79a8');
-    hudText('ESC  pause · menu', kx, by + 108, '#6f79a8');
+    hudText(`${S.gamepad.index == null ? 'PAD' : 'PAD CONNECTED'} · LS/RS move/aim · RT/LT pulses`,
+            kx, by + 122, S.gamepad.index == null ? '#6f79a8' : '#2fe0d0');
+    if (!entReady || S.bell) hudText(S.bell ? 'ENTANGLE · linked' : `ENTANGLE · ${(me.entCd||0).toFixed(0)}s`, kx - 160, by + 122, '#c97bff');
   }
 
   // Tiny word-wrapper for the mission brief (the one place duel HUD has prose).
@@ -3192,23 +3453,48 @@ const DUEL = (() => {
       ctx.fillText(`YOU ${S.match.you}  —  ${S.match.them} SAGE   ·   best of 3`, cx, cy + 72);
     }
 
-    // The three debrief lines.
-    const lines = MM && won ? [MM.win].concat((S.debrief || []).slice(2)) : (S.debrief || []);
+    // Preserve the three-line learning takeaway; records/mastery are a
+    // separate replay layer below it, never a replacement for the physics.
+    const lines = MM && won ? [MM.win].concat((S.debrief || []).slice(1)) : (S.debrief || []);
     ctx.font = `500 ${Math.round(BOARD * 0.0175)}px ${CANVAS_BODY}`;
     lines.forEach((ln, i) => {
       ctx.fillStyle = i === 1 ? '#2fe0d0' : '#cfd6ee';
-      wrapCentered(ln, cx, cy + 108 + i * 46, cw - 70);
+      wrapCentered(ln, cx, cy + 104 + i * 40, cw - 70);
     });
+
+    const progress = S.progress || { newRecords:[], earnedBadges:[] };
+    const earnedTitles = progress.earnedBadges.map(id =>
+      (DuelProgress.BADGES.find(b => b.id === id) || {}).title).filter(Boolean);
+    const nextBadge = DuelProgress.nextBadge(GAME.duelProfile);
+    const mastered = GAME.duelProfile.badges.length;
+    const conciseRecords = progress.newRecords.map(label => label.replace(/^MISSION \d+ /, ''));
+    const recordLine = conciseRecords.length
+      ? `NEW RECORD${conciseRecords.length > 1 ? 'S' : ''} · ${conciseRecords.join(' · ')}`
+      : MM ? `MISSION RECORD · ${missionRecordText(S.mission)}`
+           : `FREE DUEL · ${GAME.duelProfile.free.wins}W ${GAME.duelProfile.free.losses}L · STREAK ${GAME.duelProfile.free.streak}`;
+    ctx.font = `700 ${Math.round(BOARD * 0.0145)}px ${CANVAS_BODY}`;
+    ctx.fillStyle = progress.newRecords.length ? '#f5b73c' : '#8f9ac4';
+    wrapCentered(recordLine, cx, cy + 242, cw - 72);
+    ctx.fillStyle = earnedTitles.length ? '#c97bff' : '#8f9ac4';
+    wrapCentered(earnedTitles.length
+      ? `MASTERY EARNED · ${earnedTitles.join(' · ')}`
+      : `QUANTUM MASTERY · ${mastered}/${DuelProgress.BADGES.length} BADGES`,
+      cx, cy + 270, cw - 72);
+    if (nextBadge) {
+      ctx.font = `500 ${Math.round(BOARD * 0.014)}px ${CANVAS_BODY}`;
+      ctx.fillStyle = '#aeb8e6';
+      wrapCentered(`NEXT CHALLENGE · ${nextBadge.requirement}`, cx, cy + 298, cw - 90);
+    }
 
     ctx.font = `500 ${Math.round(BOARD * 0.016)}px ${CANVAS_BODY}`;
     ctx.fillStyle = '#6f79a8';
     const nextMission = MM && won ? nextTrainingMission(S.mission) : null;
     const action = MM
       ? (won && nextMission != null
-          ? `ENTER next mission (${nextMission + 1})  ·  R replay  ·  ESC training`
-          : `${won ? 'ALL TRAINING CLEARED' : 'ENTER retry'}  ·  R replay  ·  ESC training`)
-      : (over ? 'SPACE rematch  ·  ESC menu' : 'SPACE next round  ·  ESC menu');
-    ctx.fillText(action, cx, cy + VIEW_H - 122);
+          ? `ENTER / A next mission (${nextMission + 1})  ·  R / X replay  ·  ESC / MENU training`
+          : `${won ? 'ALL TRAINING CLEARED' : 'ENTER / A retry'}  ·  R / X replay  ·  ESC / MENU training`)
+      : (over ? 'SPACE / A rematch  ·  ESC / MENU menu' : 'SPACE / A next round  ·  ESC / MENU menu');
+    wrapCentered(action, cx, cy + VIEW_H - 122, cw - 38);
     ctx.textAlign = 'left';
   }
 
@@ -3243,60 +3529,205 @@ const DUEL = (() => {
   }
 
   // ── Input ────────────────────────────────────────────────────────────
+  const BEAM_ORDER = ['X','Y','T'];
+  let gamepadProvider = () => {
+    try { return (typeof navigator !== 'undefined' && navigator.getGamepads) ? navigator.getGamepads() : []; }
+    catch (e) { return []; }
+  };
+
+  function updateContinuousActions() {
+    const kb = DUEL_CONTROLS.keyboard.keys;
+    let mx = S.gamepad.move.x, my = S.gamepad.move.y;
+    if (S.keys[kb.left]) mx -= 1;
+    if (S.keys[kb.right]) mx += 1;
+    if (S.keys[kb.up]) my -= 1;
+    if (S.keys[kb.down]) my += 1;
+    S.actions.move = {x:mx,y:my};
+
+    let ax = 0, ay = 0;
+    if (S.keys[kb.aimLeft]) ax -= 1;
+    if (S.keys[kb.aimRight]) ax += 1;
+    if (S.keys[kb.aimUp]) ay -= 1;
+    if (S.keys[kb.aimDown]) ay += 1;
+    if (ax || ay) {
+      const m = Math.hypot(ax, ay);
+      S.actions.aim = {x:ax/m,y:ay/m,active:true};
+      S.inputDevice = 'KEYBOARD';
+    } else if (S.gamepad.aim.active) {
+      S.actions.aim = {x:S.gamepad.aim.x,y:S.gamepad.aim.y,active:true};
+      S.inputDevice = 'GAMEPAD';
+    } else S.actions.aim = {x:0,y:0,active:false};
+  }
+
+  function selectBeam(beam) {
+    if (!DuelCore.BEAMS[beam]) return false;
+    S.beam = beam;
+    beep(520, 'triangle', 0.05, 0.10);
+    return true;
+  }
+  function cycleBeam(delta) {
+    const at = Math.max(0, BEAM_ORDER.indexOf(S.beam));
+    selectBeam(BEAM_ORDER[(at + delta + BEAM_ORDER.length) % BEAM_ORDER.length]);
+  }
+  function beginCharge(kind, source) {
+    if (MODE !== 'duel' || S.paused || S.over || S.charging || !S.ships[0]) return false;
+    ac();
+    S.charging = true; S.chargeT = 0;
+    S.selfAim = kind === 'self'; S.chargeSource = source;
+    S.inputDevice = source.startsWith('gamepad') ? 'GAMEPAD' : source.startsWith('keyboard') ? 'KEYBOARD' : 'POINTER';
+    return true;
+  }
+  function releaseCharge(source) {
+    if (!S.charging || S.chargeSource !== source) return false;
+    const theta = DuelCore.chargeToTheta(S.chargeT);
+    const self = S.selfAim;
+    S.charging = false; S.chargeT = 0; S.selfAim = false; S.chargeSource = null;
+    const me = S.ships[0];
+    if (!S.paused && !S.over && me && me.beamCd === 0) {
+      if (self) selfPulse(me, theta, S.beam); else fireBeam(me, theta, S.beam);
+      return true;
+    }
+    return false;
+  }
+  function cancelCharge() {
+    S.charging = false; S.chargeT = 0; S.selfAim = false; S.chargeSource = null;
+  }
+  function beginMeasure() {
+    if (S.paused || S.over) return false;
+    const me = S.ships[0];
+    if (!me || me.measCd !== 0 || me.winding !== 0) return false;
+    me.winding = K.MEASURE_WIND_S; sfxWind();
+    return true;
+  }
+  function launchEntangle() {
+    if (S.paused || S.over) return false;
+    const me = S.ships[0];
+    if (!me || S.bell || (me.entCd || 0) > 0) return false;
+    const q = take(S.proj); if (!q) return false;
+    q.live = true; q.kind = 'entangle'; q.owner = 0; q.ttl = 4;
+    q.x = me.x + Math.cos(me.ang) * K.SHIP_R;
+    q.y = me.y + Math.sin(me.ang) * K.SHIP_R;
+    q.vx = Math.cos(me.ang) * 520; q.vy = Math.sin(me.ang) * 520;
+    me.entCd = 12;
+    sweep(300, 700, 0.2, 'sine', 0.14);
+    return true;
+  }
+  function pauseOrExit() {
+    if (S.over) { exitDuel(S.mission >= 0); return; }
+    S.paused = !S.paused;
+    clearInput();
+    announceA11y(S.paused ? 'Photon Duel paused.' : 'Photon Duel resumed.');
+  }
+  function replayRound() { if (S.over) start(S.seed, S.mission); }
+  function confirmDebrief() {
+    if (!S.over) return;
+    if (S.mission >= 0) {
+      const next = S.round.winner === 0 ? nextTrainingMission(S.mission) : null;
+      start(undefined, next == null ? S.mission : next);
+    } else nextRound();
+  }
+
   function onKey(e, down) {
     if (MODE !== 'duel') return;
     const k = e.key.toLowerCase();
-    if (down && k === 'escape') {
-      if (S.over) { exitDuel(S.mission >= 0); }
-      else S.paused = !S.paused;
-      e.preventDefault(); return;
-    }
-    if (down && k === 'r' && S.over) { start(S.seed, S.mission); e.preventDefault(); return; }
-    if (down && (k === ' ' || k === 'enter') && S.over) {
-      if (S.mission >= 0) {
-        const next = S.round.winner === 0 ? nextTrainingMission(S.mission) : null;
-        start(undefined, next == null ? S.mission : next);
-      } else nextRound();
-      e.preventDefault(); return;
-    }
-    // Beam select — 1 X (attack), 2 Y (attack), 3 T (phase, scarce).
-    if (down && (k === '1' || k === '2' || k === '3')) {
-      S.beam = { '1':'X', '2':'Y', '3':'T' }[k];
-      beep(520, 'triangle', 0.05, 0.10); e.preventDefault(); return;
-    }
-    // E — entangle beam: the comeback move (see DuelCore's Bell notes).
-    if (down && k === 'e' && !S.paused && !S.over) {
-      const me = S.ships[0];
-      if (!S.bell && (me.entCd || 0) <= 0) {
-        const q = take(S.proj);
-        if (q) {
-          q.live = true; q.kind = 'entangle'; q.owner = 0; q.ttl = 4;
-          q.x = me.x + Math.cos(me.ang) * K.SHIP_R;
-          q.y = me.y + Math.sin(me.ang) * K.SHIP_R;
-          q.vx = Math.cos(me.ang) * 520; q.vy = Math.sin(me.ang) * 520;
-          me.entCd = 12;
-          sweep(300, 700, 0.2, 'sine', 0.14);
-        }
-      }
-      e.preventDefault(); return;
-    }
-    if (k === ' ') {
-      if (down && !S.paused && !S.over) {
-        const me = S.ships[0];
-        if (me.measCd === 0 && me.winding === 0) { me.winding = K.MEASURE_WIND_S; sfxWind(); }
-      }
-      e.preventDefault(); return;
-    }
+    const kb = DUEL_CONTROLS.keyboard.keys;
+    const wasDown = !!S.keys[k];
     S.keys[k] = down;
-    if (['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright'].includes(k))
+    const pressed = down && !wasDown;
+    if (pressed) S.inputDevice = 'KEYBOARD';
+    if (pressed && k === kb.pause) { pauseOrExit(); e.preventDefault(); return; }
+    if (pressed && k === kb.replay && S.over) { replayRound(); e.preventDefault(); return; }
+    if (pressed && (k === kb.measure || k === kb.confirm) && S.over) { confirmDebrief(); e.preventDefault(); return; }
+    // Beam select — 1 X (attack), 2 Y (attack), 3 T (phase, scarce).
+    if (pressed && (k === kb.beamX || k === kb.beamY || k === kb.beamT)) {
+      selectBeam({ [kb.beamX]:'X', [kb.beamY]:'Y', [kb.beamT]:'T' }[k]); e.preventDefault(); return;
+    }
+    if (pressed && k === kb.entangle) { launchEntangle(); e.preventDefault(); return; }
+    if (k === kb.measure) {
+      if (pressed) beginMeasure();
+      e.preventDefault(); return;
+    }
+    if (k === kb.attack) {
+      if (pressed) beginCharge('attack', 'keyboard-attack');
+      else if (!down) releaseCharge('keyboard-attack');
+      e.preventDefault(); return;
+    }
+    if (k === kb.selfPulse) {
+      if (pressed) beginCharge('self', 'keyboard-self');
+      else if (!down) releaseCharge('keyboard-self');
+      e.preventDefault(); return;
+    }
+    if ([kb.up,kb.left,kb.down,kb.right,kb.aimUp,kb.aimLeft,kb.aimDown,kb.aimRight].includes(k))
       e.preventDefault();
   }
 
-  // Held-key state must not outlive the focus that produced it. A key let go
-  // while the window is blurred or the tab is hidden never sends its keyup
-  // here, so without this the sim would read it as held forever.
-  function clearKeys() {
+  // Held action state must not outlive its device or focus. Cancellation is
+  // deliberately not a synthetic release: blur/disconnect must never fire a
+  // charged beam the player did not intentionally release.
+  function clearInput() {
     for (const k in S.keys) S.keys[k] = false;
+    S.gamepad.move = {x:0,y:0,active:false};
+    S.gamepad.aim = {x:0,y:0,active:false};
+    S.actions.move = {x:0,y:0}; S.actions.aim = {x:0,y:0,active:false};
+    S.gamepad.buttons = null;
+    cancelCharge();
+  }
+
+  function onGamepadConnected(pad) {
+    if (!pad || pad.mapping !== 'standard') {
+      announceA11y('A controller connected, but it does not expose the standard browser mapping.');
+      return;
+    }
+    announceA11y('Standard controller connected. Left stick moves, right stick aims, triggers charge pulses.');
+  }
+  function onGamepadDisconnected(pad) {
+    const idx = pad && Number.isInteger(pad.index) ? pad.index : S.gamepad.index;
+    if (S.gamepad.index == null || idx === S.gamepad.index) {
+      clearInput();
+      S.gamepad.index = null; S.gamepad.id = '';
+      announceA11y('Controller disconnected. Held controller actions were cleared.');
+    }
+  }
+  function setGamepadProvider(provider) {
+    gamepadProvider = typeof provider === 'function' ? provider : () => [];
+    onGamepadDisconnected({ index:S.gamepad.index });
+  }
+  function pollGamepad() {
+    let pads = [];
+    try { pads = Array.from(gamepadProvider() || []); } catch (e) { pads = []; }
+    const pad = pads.find(p => p && p.connected !== false && p.mapping === 'standard');
+    if (!pad) {
+      if (S.gamepad.index != null) onGamepadDisconnected({ index:S.gamepad.index });
+      return;
+    }
+    const fresh = S.gamepad.index !== pad.index || !Array.isArray(S.gamepad.buttons);
+    const f = DuelInput.gamepadFrame(pad, fresh ? null : S.gamepad.buttons);
+    if (!f) return;
+    S.gamepad.index = f.index; S.gamepad.id = f.id;
+    S.gamepad.move = f.move; S.gamepad.aim = f.aim;
+    if (fresh) {
+      S.gamepad.buttons = f.buttons;
+      onGamepadConnected(pad);
+      return; // baseline held buttons: reconnect never replays an old action
+    }
+    if (f.anyActive || f.move.active || f.aim.active) S.inputDevice = 'GAMEPAD';
+    if (S.over) {
+      if (f.replayPressed) replayRound();
+      else if (f.confirmPressed) confirmDebrief();
+      else if (f.pausePressed) pauseOrExit();
+    } else {
+      if (f.pausePressed) pauseOrExit();
+      if (f.beamDirect) selectBeam(f.beamDirect);
+      else if (f.beamPrevPressed) cycleBeam(-1);
+      else if (f.beamNextPressed) cycleBeam(1);
+      if (f.measurePressed) beginMeasure();
+      if (f.entanglePressed) launchEntangle();
+      if (f.attackPressed) beginCharge('attack', 'gamepad-attack');
+      if (f.attackReleased) releaseCharge('gamepad-attack');
+      if (f.selfPressed) beginCharge('self', 'gamepad-self');
+      if (f.selfReleased) releaseCharge('gamepad-self');
+    }
+    S.gamepad.buttons = f.buttons;
   }
 
   function onMouseMove(e) {
@@ -3306,26 +3737,22 @@ const DUEL = (() => {
     const cy = (e.clientY - rect.top) * (BOARD / rect.height);
     S.aim.x = cx / SCALE;
     S.aim.y = (cy - BAND) / SCALE;
+    S.actions.aim = {x:0,y:0,active:false};
+    S.inputDevice = 'POINTER';
   }
   function onMouseDown(e) {
-    if (MODE !== 'duel' || S.paused || S.over) return;
-    ac();                                          // unlock audio on gesture
-    S.charging = true; S.chargeT = 0;
-    S.selfAim = (e.button === 2);                  // right button = self-pulse
+    if (MODE !== 'duel' || (e.button !== 0 && e.button !== 2)) return;
+    beginCharge(e.button === 2 ? 'self' : 'attack', `pointer-${e.button}`);
     e.preventDefault();
   }
   function onMouseUp(e) {
-    if (MODE !== 'duel' || !S.charging) return;
-    S.charging = false;
-    const me = S.ships[0];
-    if (!S.paused && !S.over && me.beamCd === 0) {
-      if (S.selfAim) selfPulse(me, DuelCore.chargeToTheta(S.chargeT), S.beam);
-      else fireBeam(me, DuelCore.chargeToTheta(S.chargeT), S.beam);
-    }
-    S.chargeT = 0; S.selfAim = false; e.preventDefault();
+    if (MODE !== 'duel') return;
+    if (releaseCharge(`pointer-${e.button}`)) e.preventDefault();
   }
 
-  return { start, stop, frame, onKey, clearKeys, onMouseMove, onMouseDown, onMouseUp,
+  return { start, stop, frame, onKey, clearKeys:clearInput, clearInput,
+           onMouseMove, onMouseDown, onMouseUp, onGamepadConnected, onGamepadDisconnected,
+           setGamepadProvider, pollGamepad,
            state: S, triggerFx, p95, telemetry: () => S.tele.slice(),
            togglePerf: () => (S.showPerf = !S.showPerf) };
 })();
@@ -3384,6 +3811,8 @@ function openMenu() {
     <span class="mode-status">${cleared}/${total} CLEARED${next == null ? ' · TRAINING COMPLETE' : ` · NEXT: MISSION ${next + 1}`} →</span>
   </button>
 </div>
+<h3>CONTROLS</h3>
+${duelControlsHTML()}
 <h3>LAB TOOLS</h3>
 <div class="support-actions">
   <button class="btn" onclick="openGlossaryIndex()">▸ GLOSSARY</button>
@@ -3428,6 +3857,7 @@ function openDuelMissions() {
       ${m.id === next ? '<div class="mission-next">NEXT RECOMMENDED MISSION</div>' : ''}
       <h4>${m.id + 1}. ${m.title}</h4>
       <p><b style="color:var(--teal)">${m.concept}</b> — ${m.brief}</p>
+      <div class="mission-record">BEST · ${missionRecordText(m.id)}</div>
       ${done.includes(m.id) ? '<div class="mission-done">✓ CLEARED</div>' : ''}
       <button class="btn" onclick="startDuel(undefined, ${m.id})">▶ ${done.includes(m.id) ? 'REPLAY' : 'FLY'} MISSION ${m.id + 1}</button>
     </div>`).join('');
@@ -3440,6 +3870,8 @@ function openDuelMissions() {
 <div class="training-progress" role="progressbar" aria-label="Duel Training progress" aria-valuemin="0" aria-valuemax="${total}" aria-valuenow="${done.length}">
   <span style="width:${Math.round(done.length / total * 100)}%"></span>
 </div>
+<h3>OPTIONAL QUANTUM MASTERY</h3>
+${masteryPanelHTML()}
 ${rows}
 <button class="btn" onclick="startDuel()">⚡ FREE DUEL (no mission)</button>
 <button class="btn close-btn" onclick="openMenu()">◀ BACK</button>`;
@@ -3473,38 +3905,18 @@ function loop(ts) {
 
 
 // ═══════════════════════════════════════════════════════
-// LEADERBOARD (localStorage)
+// DUEL RECORD SUMMARY (localStorage)
 // ═══════════════════════════════════════════════════════
-function loadLeaderboard() {
-  try { return JSON.parse(localStorage.getItem('qublitz_lb')||'{}'); } catch(e){ return {}; }
-}
-function saveLeaderboard(lb) {
-  try { localStorage.setItem('qublitz_lb', JSON.stringify(lb)); } catch(e){}
-}
-// Personal bests, duel-era. The board's "fastest win in N turns" is gone;
-// the duel's equivalents are how fast you closed a round and how few shots
-// it took — both genuinely skill-expressive, unlike raw play time.
-function checkLeaderboard(stats) {
-  const lb = loadLeaderboard();
-  let updated = false;
-  if (stats && stats.won) {
-    if (!lb.fastestWinS || stats.seconds < lb.fastestWinS) { lb.fastestWinS = +stats.seconds.toFixed(1); updated = true; }
-    if (!lb.fewestShots || stats.shots < lb.fewestShots)   { lb.fewestShots = stats.shots; updated = true; }
-    if (!lb.bestP || stats.p > lb.bestP)                   { lb.bestP = +stats.p.toFixed(3); updated = true; }
-  }
-  if (!lb.mostEntangl || GAME.entanglCount > lb.mostEntangl) { lb.mostEntangl = GAME.entanglCount; updated = true; }
-  if (updated) { saveLeaderboard(lb); logEv('New personal best recorded.', 'quantum'); }
-}
+function loadLeaderboard() { return loadDuelProfile(); } // compatibility for the export field
 function leaderboardHTML() {
-  const lb = loadLeaderboard();
+  const free = GAME.duelProfile.free;
   const rows = [
-    ['Fastest round',  lb.fastestWinS != null ? lb.fastestWinS + 's' : null],
-    ['Fewest shots',   lb.fewestShots],
-    ['Best MEASURE',   lb.bestP != null ? Math.round(lb.bestP * 100) + '%' : null],
-    ['Most entanglements', lb.mostEntangl],
-  ].filter(r => r[1] != null && r[1] !== 0);
-  if (!rows.length) return '';
-  return `<h3>◈ PERSONAL BESTS</h3>` + rows.map(([k, v]) =>
+    ['Free-duel record', `${free.wins}W · ${free.losses}L`],
+    ['Current streak', free.streak],
+    ['Best streak', free.bestStreak],
+    ['Quantum mastery', `${GAME.duelProfile.badges.length}/${DuelProgress.BADGES.length}`],
+  ];
+  return `<h3>◈ DUEL RECORDS</h3>` + rows.map(([k, v]) =>
     `<div class="lb-row"><span>${k}</span><span style="margin-left:auto;color:var(--gold)">${v}</span></div>`).join('');
 }
 
@@ -3518,7 +3930,7 @@ function leaderboardHTML() {
 // localStorage — no name, no email, no IP, nothing identifying. The
 // student hands the resulting JSON file to their instructor themselves;
 // this game never sees where it goes after the browser writes it to disk.
-const GATE_LOG_EXPORT_SCHEMA_VERSION = 3;   // v3 adds duel telemetry (PD-11); v2 added evQuiz
+const GATE_LOG_EXPORT_SCHEMA_VERSION = 4;   // v4 adds per-mission records + mastery; v3 duel telemetry
 
 function buildGateLogExport() {
   return {
@@ -3553,10 +3965,9 @@ function buildGateLogExport() {
     // path as everything else here: no third-party analytics, nothing sent
     // anywhere. Empty array if the duel was never opened this session.
     duelTelemetry: (typeof DUEL !== 'undefined') ? DUEL.telemetry() : [],
-    // Anonymous personal-bests already in localStorage (see loadLeaderboard) --
-    // included here too so a single export file has everything, rather than
-    // asking a student to find and attach a second one.
-    personalBests: loadLeaderboard(),
+    // Anonymous local records and mastery — no identity, account, or network
+    // leaderboard. Included so one student-initiated export remains complete.
+    duelProfile: loadDuelProfile(),
   };
 }
 

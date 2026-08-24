@@ -1,151 +1,78 @@
 # HANDOFF — QuBlitz duel/game repository
 
 **Updated:** 2026-08-24
-**Scope:** current execution state only; historical ledger archived at
-[`docs/HANDOFF_HISTORY_2026-08-20.md`](docs/HANDOFF_HISTORY_2026-08-20.md).
-**Cross-repository authority:** [`../HANDOFF.md`](../HANDOFF.md). Read the project `GOALS.md`,
-`.cycle/STATE.md`, and `AGENTS.md` before assigning work.
+**Scope:** current execution state only. Historical evidence remains in
+[`docs/HANDOFF_HISTORY_2026-08-20.md`](docs/HANDOFF_HISTORY_2026-08-20.md); cross-repository
+authority is [`../HANDOFF.md`](../HANDOFF.md).
 
 ## Stop state
 
-Cycle 02 is approved and in PRODUCE under the project `.cycle/` record. Its scope is the focused
-two-mode product: Photon Duel, Duel Training, durable local progression, presentation-only combat
-feedback, tests, and local re-vendoring. Do not push, open a PR, deploy, delete branches/worktrees,
-retune physics/balance, or contact anyone without separate explicit approval.
+Cycle 03 is approved and in PRODUCE under the project `.cycle/` record. It adds durable duel
+records, three optional quantum-mastery challenges, a replay-oriented debrief, complete keyboard
+bindings, standard browser-gamepad I/O, deterministic regressions, and a local platform re-vendor.
+
+Do not push, open a PR, deploy, delete branches/worktrees, retune physics/balance, add a third mode,
+or contact anyone without separate explicit approval. `quantum_chess.html` remains the single-editor
+merge hotspot.
 
 ## Verified checkout
 
 | Field | Value |
 |---|---|
 | Branch | `echo-siege-fix` tracking `QuBlitz/echo-siege-fix` |
-| HEAD | `71a12bfd7054408b387671990071b1933fed09e3` |
-| Pre-handoff-edit state | clean; 0 ahead / 0 behind tracking branch |
-| Game artifact | `quantum_chess.html` |
-| Cycle baseline | tag `canonical-2026-08-23` at `c5fcfd8`; Cycle 02 changes are local until committed |
-| Product represented | Photon Duel, seven persistent training missions, and supporting lab/export tools |
+| Cycle 03 base | `3156e0b` |
+| Product | Photon Duel + seven-mission Duel Training; lab/export utilities are secondary |
+| Hosted seam | `../platform/pages/_assets/quantum_chess.html` via `scripts/sync_vendor.sh` |
+| Working state | Cycle 03 implementation in progress; local only |
 
-This is the approved Cycle 02 standalone candidate. The sibling platform is re-vendored only after
-the local game gates pass; vendor equality remains mandatory.
+## Current controls
 
-## Verification ledger — last executed 2026-08-24
+All mappings come from `DUEL_CONTROLS` in the canonical HTML and render in the hub/HUD.
 
-- `npm test` — PASS: qphysics self-test 8/8 plus exponential/T1/Bell/guard/Rabi checks.
-- `npm run test:duel` — PASS after retired standalone-mode tests were removed; one explicit pending case,
-  `Phase-Rift composite rotation D2`.
-- `npm run test:focus` — PASS 8/8: exactly two modes, durable progress, next mission, FX/reduced motion.
-- `npm run test:input` — PASS 3/3: keyup, blur, and tab-hide clear held movement.
-- `npm run contrast` — PASS: 19/19 current DOM elements plus all curated canvas pairs.
-- `npm run offline` — PASS: zero external requests/failures; three embedded fonts.
-- `npm run live-check` — PASS: 30/60/120 FPS, DPR 1/2 pointer, reduced motion, hidden tab.
-- `npm run capture` — PASS at 390/640/768/1024/1440px; 640 and 1440 captures visually checked.
+| Action | Keyboard | Standard gamepad | Pointer |
+|---|---|---|---|
+| Move | WASD | left stick | — |
+| Aim | arrow keys, eight-way | right stick | pointer position |
+| Charge/fire | Shift hold/release | right trigger | left hold/release |
+| Self-pulse | F hold/release | left trigger | right hold/release |
+| Beam X/Y/T | 1/2/3 | D-pad left/up/right or shoulders | — |
+| Measure | Space | A/Cross | — |
+| Entangle | E | X/Square | — |
+| Pause | Escape | Menu | — |
 
-Green is not release evidence yet. Browser scripts still contain retired selectors/palette assumptions
-and do not exercise key release, touch, gamepad, or a complete current-mode path.
+The standard controller adapter has a 0.22 radial dead zone, rising/falling button edges, safe
+connect baselining, and disconnect cleanup. Blur, tab-hide, pause, mode exit, and controller
+disconnect cancel held input without synthesizing a shot. Device-specific profiles, remapping,
+haptics, and touch controls are deliberately outside Cycle 03.
 
-## Production blockers in order
+## Current progression
 
-### D0 — human direction and branch baseline
+- `qublitz_training_progress_v1` stores validated cleared-mission IDs.
+- `qublitz_duel_profile_v1` stores validated per-mission best time/fewest shots/highest winning
+  MEASURE probability, free-duel W/L/current/best streak, and earned badge IDs.
+- Badges require a real win plus their production evidence: Bell-pair collapse, landed T-phase
+  eigenstate break, or at least 0.5s of exposed hotspot discharge.
+- The debrief preserves its physics takeaway, then shows records, mastery, and the next incomplete
+  challenge. Nothing grants combat power, currency, or online rank.
 
-Record whether the 2026-08-07 demo occurred, what was shown, the PI response, and the go/no-go on
-the arcade pivot. Then name the release branch/commit and dispose of every other branch. Do not
-infer this from commit history.
+## Verification ledger — Cycle 03 Produce
 
-### D1 — held-key lifecycle is broken
+- `npm test` — PASS: QPhysics 8/8 plus all diagnostics.
+- `npm run test:duel` — PASS; one pre-existing Phase-Rift case remains explicitly PENDING.
+- `npm run test:focus` — PASS 8/8.
+- `npm run test:input` — PASS 3/3; keyup/blur/tab-hide drift each 0.000 px/s.
+- `npm run test:mastery-input` — PASS 14/14: record ordering, invalid storage, badge predicates and
+  live event paths, keyboard-only combat, focus/pause/mode-exit hold cleanup, virtual standard
+  controller actions/dead zones/releases/disconnect/reconnect, valid reload, and zero console errors.
+- Full contrast/responsive/live/offline/platform gates still need the final Cycle 03 audit run.
 
-The document registers `keydown` only (`quantum_chess.html:2194-2199`). `DUEL.onKey` stores held
-movement (`:3294-3338`) and the frame loop continuously reads it (`:2644-2649`). No `keyup`, blur,
-visibility, pause/modal, or mode-exit path clears held state.
+The gamepad test uses a deterministic virtual standard controller because no physical controller is
+available in this environment. Do not convert that into a claim about a specific hardware model.
 
-**Acceptance:** browser automation presses and releases movement, advances frames, and proves new
-acceleration stops; blur/visibility/pause/mode exit also clear every hold action.
-**Falsifier:** any released or focus-lost action remains latched.
+## Remaining product limitations
 
-### D2 — physical inputs are not an action system
-
-Aim, fire, and self-pulse are mouse-only; self-pulse is right-button-only. There is no
-touch/pointer adapter, gamepad API, remapping,
-dead-zone/reconnect behavior, device glyphs, binding persistence, or one-handed route.
-
-After D1 and the human keyboard-aim decision, create semantic hold/press/vector actions and adapters
-for keyboard/pointer and the approved controller/device matrix. Mechanics must not read physical
-keys. One binding manifest must drive behavior, HUD keycaps, help/wrapper copy, and tests.
-
-**Acceptance:** two adapters produce identical action frames; changing one binding updates behavior
-and displayed help with no second edit.
-**Falsifier:** reconnect/focus loss latches input, or a keyboard-only user still cannot aim, fire,
-and refocus.
-
-### D3 — accessibility surface is mostly declarative
-
-The canvas label describes Photon controls only. `#a11y-status` exists but is not updated through a
-round; assertive announcements are sparse export/quiz/leaderboard events. Modals lack dialog/focus
-semantics. No complete no-mouse route exists.
-
-Deliver focus-managed dialogs, mode-aware instructions, meaningful state/outcome announcements,
-reduced-motion/flash/audio/contrast settings, and a scripted keyboard-only training completion.
-Reuse only relevant announcement/live-region ideas from branch `arena-accessibility`; its retired
-board navigation is not portable.
-
-### D4 — the T1 bridge claim is false as written
-
-Imported simulator state updates `GAME.decoRate` near `:4424-4454`, used by the Physics Lab diagram.
-Live duel decay uses fixed `DuelCore.K.T1_S/T2_S` near `:1424-1429` and runtime calls near
-`:2675-2681`. Human decision: wire a documented match configuration into `DuelCore`, or remove the
-claim and label the comparison illustrative.
-
-**Acceptance if wired:** deterministic tests prove an imported preset changes live decay and export
-records preset/source/scale.
-**Acceptance if illustrative:** no user-facing copy claims the simulator controls gameplay.
-
-### D5 — browser gates now pin the focused product; broader a11y paths remain
-
-`tests/two_mode_focus_check.js` asserts the exact two-mode hub, removed-mode absence, durable
-training progress, next-mission routing, and reduced-motion-safe feedback. The existing input,
-contrast, responsive, live, and offline checks are green. Keyboard-only aiming, approved
-touch/gamepad paths, focus management, and full live-region playthroughs remain future work.
-
-**Falsifier:** deleting a current hub entry still leaves the relevant test green.
-
-### D6 — active product documentation describes a deleted board
-
-`app.py`, `README.md`, `docs/ARCHITECTURE.md`, `docs/INSTRUCTOR_GUIDE.md`, and
-`docs/DATA_AND_CONSENT.md` describe GUARD/army/Sage/schema-v2 behavior. Current local export is schema
-v3 and reports duel telemetry. Rewrite only after the pivot and controls are ratified; drive
-control prose from the binding manifest.
-
-## Ordered implementation packets after authorization
-
-1. **QB-A01 input lifecycle** — HTML input block + browser regression only.
-2. **QB-A02 honest current-mode tests** — selectors, state entry assertions, contrast/a11y/input paths.
-3. **QB-A05–A08 action/binding/controller/accessibility layer** — depends on keyboard-aim/device
-   decisions; never concurrent with another edit to `quantum_chess.html`.
-4. **QB-A03 cross-repo release/re-vendor** — depends on human-selected duel and platform baselines.
-5. **QB-A04 documentation/evidence rewrite** — depends on the release and control manifest.
-6. **Mechanics wave** — Phase Rift composite rotations first, then readable T-beam budget,
-   spin-echo framing, measurement wager, balance simulations, and replay/debrief instrumentation.
-
-One agent at a time may edit `quantum_chess.html`; it is the 4,500-line merge hotspot. Every packet
-must name base SHA, owned/forbidden paths, acceptance test, falsifier, and no-push rule.
-
-## Human-only queue
-
-- Ratify/edit project goals or issue a feature-scoped exception.
-- Record the PI demo outcome and arcade-pivot decision.
-- Name the release line and disposition the remaining branches.
-- Decide keyboard aim/assist, supported phone/tablet/controller/browser matrix, and local hot-seat
-  versus any future network posture.
-- Decide whether simulator T1/T2 is gameplay configuration or an illustrative bridge.
-- Approve content outcomes, mechanics/balance/art direction, playtests, asset licenses/provenance,
-  telemetry/retention, public identity, release window, push/PR/deployment.
-
-## Release artifacts still missing
-
-- Control action map + machine manifest; input ADR; controller/browser matrix.
-- Game/vendor/platform SHA release manifest and changelog.
-- Asset/license/source/SHA register and audio cue sheet.
-- Current architecture, schema-v3 data/consent, accessibility conformance boundary, test matrix,
-  threat/risk register, release/rollback/demo runbooks.
-- Current desktop/tablet/controller captures and short clips; player quick-start; instructor guide;
-  playtest protocol/rubric; PI/maintainer/playtester/release email drafts.
-
-The historical handoff is evidence, not a live queue. Do not append new work below the archive.
+- Screen-reader round-state narration, dialog focus management, remapping, one-handed presets,
+  touch support, and physical controller/browser certification remain separate work.
+- Imported simulator T₁ drives the Physics Lab chart, not duel combat balance.
+- `GOALS.md` is still human-owned and its old mission text has not been rewritten to match D-003.
+- Push/PR/deployment, branch cleanup, and the PI-demo record remain David's decisions.
