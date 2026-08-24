@@ -6,7 +6,8 @@
 const path = require('path');
 const { chromium } = require('playwright');
 
-const GAME_URL = 'file://' + path.join(__dirname, '..', 'quantum_chess.html');
+const GAME_PATH = process.env.QUBLITZ_GAME_PATH || path.join(__dirname, '..', 'quantum_chess.html');
+const GAME_URL = 'file://' + GAME_PATH;
 const results = [];
 function check(name, pass, detail = '') {
   results.push({ name, pass: !!pass, detail });
