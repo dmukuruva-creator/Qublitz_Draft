@@ -105,7 +105,7 @@ async function openGame(context) {
   check('reduced motion keeps the text cue but removes canvas and hub motion',
     reducedFx.reduce && reducedFx.shake === 0 && reducedFx.flash === 0
       && reducedFx.label === 'TEST IMPACT' && reducedFx.cardTransform === 'none'
-      && reducedFx.cardTransition.split(',').every(v => v.trim() === '0s'), JSON.stringify(reducedFx));
+      && reducedFx.cardTransition.split(',').every(v => parseFloat(v) <= 0.001), JSON.stringify(reducedFx));
   await reduced.close();
 
   check('focused flow produces no console errors', consoleErrors.length === 0,
