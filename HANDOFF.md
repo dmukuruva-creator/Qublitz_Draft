@@ -19,10 +19,10 @@ explicit live approval.
 | Field | Value |
 |---|---|
 | Branch | `echo-siege-fix` tracking `QuBlitz/echo-siege-fix` |
-| HEAD | `864e85bee242510e5246ac03153daec84bda957f` |
+| HEAD | `71a12bfd7054408b387671990071b1933fed09e3` |
 | Pre-handoff-edit state | clean; 0 ahead / 0 behind tracking branch |
-| Game artifact | `quantum_chess.html`, 4,470 lines |
-| SHA-256 | `8d0585a47eaf2a1088d8c9c15c54d8b765d4f79101089f0afb750ea0857009e2` |
+| Game artifact | `quantum_chess.html`, 4,500 lines |
+| SHA-256 | `7ca113a289bad85069e131ad8135bec5a046b8382f2f9822291745e211248f76` |
 | Product represented | Photon Duel, seven training missions, Bell Trial, Echo Siege, Physics Lab |
 
 This is the current standalone game candidate, not a human-ratified release baseline. The sibling
@@ -122,7 +122,7 @@ control prose from the binding manifest.
 6. **Mechanics wave** — Phase Rift composite rotations first, then readable T-beam budget,
    spin-echo framing, measurement wager, balance simulations, and replay/debrief instrumentation.
 
-One agent at a time may edit `quantum_chess.html`; it is the 4,470-line merge hotspot. Every packet
+One agent at a time may edit `quantum_chess.html`; it is the 4,500-line merge hotspot. Every packet
 must name base SHA, owned/forbidden paths, acceptance test, falsifier, and no-push rule.
 
 ## Human-only queue

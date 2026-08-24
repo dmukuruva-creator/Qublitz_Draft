@@ -18,16 +18,18 @@ superseded predecessor is preserved verbatim at `docs/HANDOFF_v1_ARCHIVE_2026-07
 | The game (Qublitz_Draft) | This folder (`QuBlitz Project/`) | https://github.com/dmukuruva-creator/Qublitz_Draft |
 | Main simulator (mvwf/qublitz) | Clone separately after forking | https://github.com/mvwf/qublitz |
 
-**Game repo branch situation (updated 2026-07-10 — this had gone stale, see below):**
-- Currently on `arena-c03-fe` — this is PR-A per `HANDOFF.md`'s packaging plan (the C03
-  incentives/input batch + the Phase A–D display-contract remediation + BE-3/BE-4 riders),
-  2 commits ahead of `main`, not yet merged/pushed.
-- `handoff/qublitz` (the branch this section used to name as current) was merged into `main`
-  long ago — `main` is now ahead of it, not the other way around. Local `main` and the remote
-  `QuBlitz/main` are in sync (0 commits either direction) — there is no "N commits behind"
-  gap to close on `main` itself; the gap is `main` vs. the still-unmerged `arena-c03-fe`.
-- Do not push directly from `arena-c03-fe`; merge to `main` first (fast-forward), and per this
-  file's hard constraints, no push without an explicit user go-ahead.
+**Game repo branch situation (re-measured 2026-08-23; this section had gone stale twice — do
+not trust it without re-running `git branch -vv`):**
+- Currently on `echo-siege-fix` @ `71a12bf`, clean, tracking `QuBlitz/echo-siege-fix`. This is
+  the Cycle 01 line (QB-A01 input lifecycle + QB-A02 test honesty), and it is the branch that
+  carries the canonical 4,500-line game.
+- `arena-c03-fe` still exists and is still unmerged; it is one of **13 local branches**, none of
+  which is a named release line. That unresolved question is QB-P0-7 in `HANDOFF.md` and it is
+  David's to settle — do not pick a canonical branch on your own.
+- Every local branch has an upstream and all read in sync against the last-fetched refs. No
+  fetch was run in this pass, so that is a statement about local refs, not the server today.
+- Do not push from any branch without an explicit user go-ahead, per this file's hard
+  constraints.
 
 ## Gate-1 assumptions already confirmed by the user
 

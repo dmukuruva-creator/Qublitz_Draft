@@ -158,7 +158,7 @@ async function killProc(proc) {
     // But note WHICH game this file drives: the copy vendored into the
     // platform at pages/_assets/quantum_chess.html, not the canonical file
     // beside this test. Those two are currently different products
-    // (QB-P0-2 — 4,325 lines vs 4,470, different SHA-256). So simply
+    // (QB-P0-2 — 4,325 lines vs 4,500, different SHA-256). So simply
     // retargeting this at Photon Duel would make the check fail for a reason
     // that has nothing to do with this check. Detect the build instead, and
     // let each outcome fail honestly on its own terms.
