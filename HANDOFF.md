@@ -7,9 +7,10 @@ authority is [`../HANDOFF.md`](../HANDOFF.md).
 
 ## Stop state
 
-Cycle 03 is approved and in PRODUCE under the project `.cycle/` record. It adds durable duel
-records, three optional quantum-mastery challenges, a replay-oriented debrief, complete keyboard
-bindings, standard browser-gamepad I/O, deterministic regressions, and a local platform re-vendor.
+Cycle 03 is complete locally and waiting at Gate 2 under the project `.cycle/` record. It added
+durable duel records, three optional quantum-mastery challenges, a replay-oriented debrief,
+complete keyboard bindings, standard browser-gamepad I/O, deterministic regressions, and an exact
+local platform re-vendor. The build lock is closed pending David's review.
 
 Do not push, open a PR, deploy, delete branches/worktrees, retune physics/balance, add a third mode,
 or contact anyone without separate explicit approval. `quantum_chess.html` remains the single-editor
@@ -23,7 +24,7 @@ merge hotspot.
 | Cycle 03 base | `3156e0b` |
 | Product | Photon Duel + seven-mission Duel Training; lab/export utilities are secondary |
 | Hosted seam | `../platform/pages/_assets/quantum_chess.html` via `scripts/sync_vendor.sh` |
-| Working state | Cycle 03 implementation in progress; local only |
+| Working state | Cycle 03 audited; local only; awaiting Gate 2 |
 
 ## Current controls
 
@@ -55,7 +56,7 @@ haptics, and touch controls are deliberately outside Cycle 03.
 - The debrief preserves its physics takeaway, then shows records, mastery, and the next incomplete
   challenge. Nothing grants combat power, currency, or online rank.
 
-## Verification ledger — Cycle 03 Produce
+## Verification ledger — Cycle 03 audit
 
 - `npm test` — PASS: QPhysics 8/8 plus all diagnostics.
 - `npm run test:duel` — PASS; one pre-existing Phase-Rift case remains explicitly PENDING.
@@ -64,7 +65,13 @@ haptics, and touch controls are deliberately outside Cycle 03.
 - `npm run test:mastery-input` — PASS 14/14: record ordering, invalid storage, badge predicates and
   live event paths, keyboard-only combat, focus/pause/mode-exit hold cleanup, virtual standard
   controller actions/dead zones/releases/disconnect/reconnect, valid reload, and zero console errors.
-- Full contrast/responsive/live/offline/platform gates still need the final Cycle 03 audit run.
+- `npm run contrast` — PASS: 37/37 DOM and all ten current canvas pairs.
+- `npm run capture` — PASS: 390 px interstitial plus 640/768/1024/1440 px hub/game/debrief;
+  640/1440 hub and worst-case debrief visually inspected without supported-layout clipping.
+- `npm run live-check` and `npm run offline` — PASS: timing/DPR/pointer/motion/visibility checks,
+  zero external requests, and real embedded fonts.
+- Platform `bash scripts/verify.sh` — PASS: ruff, 26 pytest, QPhysics, and vendor equality at
+  `23baf04e2f6a320f160c7a16dce60816ceaceeda7f3c3ace0912479930f5f48b`.
 
 The gamepad test uses a deterministic virtual standard controller because no physical controller is
 available in this environment. Do not convert that into a claim about a specific hardware model.
