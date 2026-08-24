@@ -93,15 +93,19 @@ async function openGame(context) {
     viewport: { width: 1280, height: 900 }, reducedMotion: 'reduce',
   });
   const reducedPage = await openGame(reduced);
+  await reducedPage.hover('[data-play-mode="photon-duel"]');
   const reducedFx = await reducedPage.evaluate(() => {
+    const cardStyle = getComputedStyle(document.querySelector('[data-play-mode="photon-duel"]'));
     startDuel(42, 0);
     DUEL.triggerFx('TEST IMPACT', '#ffffff', 0.6);
     return { reduce: REDUCE_MOTION, shake: DUEL.state.shake, flash: DUEL.state.flash,
-             label: DUEL.state.announcer };
+             label: DUEL.state.announcer, cardTransform: cardStyle.transform,
+             cardTransition: cardStyle.transitionDuration };
   });
-  check('reduced motion keeps the text cue but removes shake and flash',
+  check('reduced motion keeps the text cue but removes canvas and hub motion',
     reducedFx.reduce && reducedFx.shake === 0 && reducedFx.flash === 0
-      && reducedFx.label === 'TEST IMPACT', JSON.stringify(reducedFx));
+      && reducedFx.label === 'TEST IMPACT' && reducedFx.cardTransform === 'none'
+      && reducedFx.cardTransition.split(',').every(v => v.trim() === '0s'), JSON.stringify(reducedFx));
   await reduced.close();
 
   check('focused flow produces no console errors', consoleErrors.length === 0,
