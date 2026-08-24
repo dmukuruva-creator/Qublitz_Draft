@@ -1,6 +1,6 @@
 # HANDOFF — QuBlitz duel/game repository
 
-**Updated:** 2026-08-22
+**Updated:** 2026-08-24
 **Scope:** current execution state only; historical ledger archived at
 [`docs/HANDOFF_HISTORY_2026-08-20.md`](docs/HANDOFF_HISTORY_2026-08-20.md).
 **Cross-repository authority:** [`../HANDOFF.md`](../HANDOFF.md). Read the project `GOALS.md`,
@@ -8,11 +8,10 @@
 
 ## Stop state
 
-This repository is not authorized for feature implementation. The project remains at Gate 0;
-`GOALS.md` is unratified, and D-001 covers maintenance only. The 2026-08-07 PI demo result, arcade
-pivot, canonical release line, keyboard-aim model, and simulator-to-game T1/T2 behavior are still
-human inputs. Do not push, open a PR, deploy, delete branches/worktrees, or contact anyone without
-explicit live approval.
+Cycle 02 is approved and in PRODUCE under the project `.cycle/` record. Its scope is the focused
+two-mode product: Photon Duel, Duel Training, durable local progression, presentation-only combat
+feedback, tests, and local re-vendoring. Do not push, open a PR, deploy, delete branches/worktrees,
+retune physics/balance, or contact anyone without separate explicit approval.
 
 ## Verified checkout
 
@@ -21,21 +20,24 @@ explicit live approval.
 | Branch | `echo-siege-fix` tracking `QuBlitz/echo-siege-fix` |
 | HEAD | `71a12bfd7054408b387671990071b1933fed09e3` |
 | Pre-handoff-edit state | clean; 0 ahead / 0 behind tracking branch |
-| Game artifact | `quantum_chess.html`, 4,500 lines |
-| SHA-256 | `7ca113a289bad85069e131ad8135bec5a046b8382f2f9822291745e211248f76` |
-| Product represented | Photon Duel, seven training missions, Bell Trial, Echo Siege, Physics Lab |
+| Game artifact | `quantum_chess.html` |
+| Cycle baseline | tag `canonical-2026-08-23` at `c5fcfd8`; Cycle 02 changes are local until committed |
+| Product represented | Photon Duel, seven persistent training missions, and supporting lab/export tools |
 
-This is the current standalone game candidate, not a human-ratified release baseline. The sibling
-platform currently vendors a different retired board product; see its handoff.
+This is the approved Cycle 02 standalone candidate. The sibling platform is re-vendored only after
+the local game gates pass; vendor equality remains mandatory.
 
-## Verification ledger — last executed 2026-08-20
+## Verification ledger — last executed 2026-08-24
 
 - `npm test` — PASS: qphysics self-test 8/8 plus exponential/T1/Bell/guard/Rabi checks.
-- `npm run test:duel` — PASS: 74 checks; one explicit pending case,
+- `npm run test:duel` — PASS after retired standalone-mode tests were removed; one explicit pending case,
   `Phase-Rift composite rotation D2`.
-- `npm run contrast` — PASS: 14/14 current DOM/curated checks, with the coverage limitation below.
+- `npm run test:focus` — PASS 8/8: exactly two modes, durable progress, next mission, FX/reduced motion.
+- `npm run test:input` — PASS 3/3: keyup, blur, and tab-hide clear held movement.
+- `npm run contrast` — PASS: 19/19 current DOM elements plus all curated canvas pairs.
 - `npm run offline` — PASS: zero external requests/failures; three embedded fonts.
 - `npm run live-check` — PASS: 30/60/120 FPS, DPR 1/2 pointer, reduced motion, hidden tab.
+- `npm run capture` — PASS at 390/640/768/1024/1440px; 640 and 1440 captures visually checked.
 
 Green is not release evidence yet. Browser scripts still contain retired selectors/palette assumptions
 and do not exercise key release, touch, gamepad, or a complete current-mode path.
@@ -60,8 +62,8 @@ acceleration stops; blur/visibility/pause/mode exit also clear every hold action
 
 ### D2 — physical inputs are not an action system
 
-Aim, fire, and self-pulse are mouse-only; self-pulse is right-button-only. Bell and Echo implement
-separate hard-coded key dispatchers. There is no touch/pointer adapter, gamepad API, remapping,
+Aim, fire, and self-pulse are mouse-only; self-pulse is right-button-only. There is no
+touch/pointer adapter, gamepad API, remapping,
 dead-zone/reconnect behavior, device glyphs, binding persistence, or one-handed route.
 
 After D1 and the human keyboard-aim decision, create semantic hold/press/vector actions and adapters
@@ -95,12 +97,12 @@ claim and label the comparison illustrative.
 records preset/source/scale.
 **Acceptance if illustrative:** no user-facing copy claims the simulator controls gameplay.
 
-### D5 — browser gates are partly retired-product theater
+### D5 — browser gates now pin the focused product; broader a11y paths remain
 
-`tests/contrast_check.js` still searches `PLAY vs BOT`, swallows its absence, clicks an old board
-coordinate, and uses an old palette. Live regression tests mouse down/up only. Replace selectors and
-fixtures with asserted entry into Photon Duel, Bell Trial, Echo Siege, pause, failure, and debrief;
-then cover key release, keyboard-only actions, approved touch/gamepad paths, focus, and live regions.
+`tests/two_mode_focus_check.js` asserts the exact two-mode hub, removed-mode absence, durable
+training progress, next-mission routing, and reduced-motion-safe feedback. The existing input,
+contrast, responsive, live, and offline checks are green. Keyboard-only aiming, approved
+touch/gamepad paths, focus management, and full live-region playthroughs remain future work.
 
 **Falsifier:** deleting a current hub entry still leaves the relevant test green.
 
@@ -108,7 +110,7 @@ then cover key release, keyboard-only actions, approved touch/gamepad paths, foc
 
 `app.py`, `README.md`, `docs/ARCHITECTURE.md`, `docs/INSTRUCTOR_GUIDE.md`, and
 `docs/DATA_AND_CONSENT.md` describe GUARD/army/Sage/schema-v2 behavior. Current local export is schema
-v3 and reports duel/minigame telemetry. Rewrite only after the pivot and controls are ratified; drive
+v3 and reports duel telemetry. Rewrite only after the pivot and controls are ratified; drive
 control prose from the binding manifest.
 
 ## Ordered implementation packets after authorization

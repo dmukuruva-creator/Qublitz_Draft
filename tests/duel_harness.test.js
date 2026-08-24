@@ -368,56 +368,6 @@ const MINUS = { x: -1, y: 0, z: 0 };
     `shortest: "${reasons.reduce((a,b)=>a.length<b.length?a:b).slice(0,52)}…"`);
 }
 
-// ── BELL TRIAL (CHSH): the classical bound is real and beatable ───────
-// This minigame's entire premise is that 75% is a wall for any classical
-// strategy and quantum angles get past it. If either half of that is wrong
-// the game is a lie, so both are asserted here.
-{
-  const C = DuelCore.CHSH;
-  const opt = DuelCore.chshWinRate(C.OPTIMAL_A, C.OPTIMAL_B);
-  check('c1. textbook angles hit Tsirelson\'s bound cos²(π/8) ≈ 85.36%',
-    approx(opt, C.TSIRELSON, 1e-12), `${(opt*100).toFixed(3)}%`);
-  check('c2. …which beats the 75% classical bound', opt > C.CLASSICAL + 0.1,
-    `${(opt*100).toFixed(2)}% vs ${(C.CLASSICAL*100).toFixed(0)}%`);
-
-  // S = 2√2 at the optimum, 2 at the classical bound — the numbers a paper quotes.
-  check('c3. S-parameter reads 2√2 at the optimum, 2 at the classical bound',
-    approx(DuelCore.chshS(opt), 2*Math.SQRT2, 1e-12) &&
-    approx(DuelCore.chshS(C.CLASSICAL), 2, 1e-12),
-    `S_opt=${DuelCore.chshS(opt).toFixed(6)}, S_classical=${DuelCore.chshS(C.CLASSICAL).toFixed(6)}`);
-
-  // EXHAUSTIVE: every deterministic local strategy (a lookup table from the
-  // referee's bit to an answer — i.e. every local hidden-variable model) is
-  // enumerated. All 16 must fail to exceed 75%. This is the proof that the
-  // wall is real, not a tuning constant.
-  let bestClassical = 0;
-  for (let s = 0; s < 16; s++) {
-    const A = [(s>>0)&1, (s>>1)&1], B = [(s>>2)&1, (s>>3)&1];
-    let wins = 0;
-    for (let x = 0; x < 2; x++) for (let y = 0; y < 2; y++)
-      if (((A[x] ^ B[y]) === (x & y))) wins++;
-    bestClassical = Math.max(bestClassical, wins / 4);
-  }
-  check('c4. all 16 deterministic local strategies cap at exactly 75%',
-    approx(bestClassical, 0.75, 1e-12), `best local-realist strategy = ${(bestClassical*100).toFixed(0)}%`);
-
-  // Sampled play must reproduce the analytic rate (the game you play is the
-  // game the maths describes).
-  const rand = DuelCore.mulberry32(31337);
-  let wins = 0; const N = 20000;
-  for (let i = 0; i < N; i++) {
-    const x = rand() < 0.5 ? 1 : 0, y = rand() < 0.5 ? 1 : 0;
-    if (DuelCore.chshRound(C.OPTIMAL_A, C.OPTIMAL_B, x, y, rand).won) wins++;
-  }
-  check('c5. 20,000 sampled rounds match the analytic rate (±1.5%)',
-    Math.abs(wins/N - opt) < 0.015, `sampled ${(wins/N*100).toFixed(2)}% vs analytic ${(opt*100).toFixed(2)}%`);
-
-  // Bad angles must LOSE — otherwise the player isn't really choosing anything.
-  const aligned = DuelCore.chshWinRate([0,0],[0,0]);
-  check('c6. badly chosen angles fall to (or below) the classical bound',
-    aligned <= C.CLASSICAL + 1e-12, `all-zero angles = ${(aligned*100).toFixed(1)}%`);
-}
-
 // ── parkPulse: you cannot reach an X-eigenstate with an X-pulse ───────
 {
   // The invariant that makes parkPulse necessary, stated directly.
@@ -568,73 +518,6 @@ const MINUS = { x: -1, y: 0, z: 0 };
   const vsHalfCamp = DuelBot.decide(oneAxisCamp, 2, DuelCore.mulberry32(5), 0);
   check('6g. …but spends nothing when a free axis is open (Y instead of T)',
     vsHalfCamp.beam === 'Y', `beam=${vsHalfCamp.beam}`);
-}
-
-// ── ECHO SIEGE: does a pi-pulse actually refocus the noise? ───────────
-// The whole minigame rests on one claim — a well-timed echo undoes slow
-// dephasing, and more echoes undo more of it. If that is not true in the
-// model, the game is teaching a lie.
-{
-  const T = DuelCore.ECHO.T_READ;
-  const trains = DuelCore.echoTrains(T);
-  const vis = name => DuelCore.echoVisibility(trains[name], DuelCore.mulberry32(4242), 4000);
-
-  const none = vis('none'), hahn = vis('hahn'), cpmg2 = vis('cpmg2'), cpmg4 = vis('cpmg4');
-  check('E1. a single centred Hahn echo beats doing nothing',
-    hahn > none + 0.05, `no pulse ${none.toFixed(3)} → Hahn ${hahn.toFixed(3)}`);
-  check('E2. …and more pulses refocus more (CPMG ordering holds)',
-    cpmg2 >= hahn - 0.02 && cpmg4 >= cpmg2 - 0.02 && cpmg4 > none + 0.1,
-    `none ${none.toFixed(3)} < hahn ${hahn.toFixed(3)} ≤ cpmg2 ${cpmg2.toFixed(3)} ≤ cpmg4 ${cpmg4.toFixed(3)}`);
-  check('E3. CPMG-4 recovers most of the lost coherence (> 0.9)',
-    cpmg4 > 0.9, `visibility ${cpmg4.toFixed(4)}`);
-
-  // ── E8/E9 — the two properties the 2026-08-08 rebuild exists to create. ──
-  // Before it, the noise was `constant + linear drift`, which CPMG-2 cancels
-  // EXACTLY: visibility was 1.0000 for n=2 at every sigma from 1.1 to 4.57, so
-  // rising difficulty changed nothing and the pulse budget was decorative.
-  // These two cases fail loudly if anyone reverts to a model that simple.
-  const newRand = () => DuelCore.mulberry32(20260808);
-  const scoreN = (n, sigma) => DuelCore.echoScore(
-    DuelCore.echoEvenTrain(n, T), newRand(), 1200, { NOISE_SIGMA: sigma });
-
-  // E8 — difficulty must actually bite: no train may be free at high noise.
-  const easyBest = DuelCore.echoBestTrain(newRand, 800, { NOISE_SIGMA: 0.9 }, 8);
-  const hardBest = DuelCore.echoBestTrain(newRand, 800, { NOISE_SIGMA: 3.9 }, 8);
-  check('E8. the achievable ceiling FALLS as the Saboteur strengthens',
-    easyBest.score > hardBest.score + 0.1 && easyBest.score < 0.999,
-    `sigma 0.9 → best ${easyBest.score.toFixed(3)} (n=${easyBest.n}) ; ` +
-    `sigma 3.9 → best ${hardBest.score.toFixed(3)} (n=${hardBest.n})`);
-
-  // E9 — there must be a real decision: the optimum pulse count has to MOVE,
-  // and spending every pulse must be punished. If either fails, the round has
-  // one fixed answer again and the minigame is hollow.
-  const spamPenalised = scoreN(8, 0.9) < easyBest.score - 0.05;
-  check('E9. the optimum pulse count rises with noise, and spam is punished',
-    hardBest.n > easyBest.n && spamPenalised,
-    `optimum n: ${easyBest.n} → ${hardBest.n} ; ` +
-    `n=8 at low noise scores ${scoreN(8, 0.9).toFixed(3)} vs best ${easyBest.score.toFixed(3)}`);
-
-  // The mechanism, not just the outcome: for CONSTANT detuning a centred
-  // pulse must cancel the phase EXACTLY. This is the Hahn echo in one line.
-  const seg = DuelCore.ECHO.SEGMENTS;
-  const flat = new Array(seg).fill(0.9);
-  check('E4. constant detuning + centred pi-pulse → phase exactly zero',
-    Math.abs(DuelCore.echoPhase(flat, [T/2], T, seg)) < 1e-12,
-    `phi = ${DuelCore.echoPhase(flat, [T/2], T, seg).toExponential(2)}`);
-  check('E5. …and with NO pulse the same noise runs the phase right up',
-    Math.abs(DuelCore.echoPhase(flat, [], T, seg)) > 3,
-    `phi = ${DuelCore.echoPhase(flat, [], T, seg).toFixed(3)} rad`);
-
-  // Timing has to MATTER — otherwise the player is not really playing.
-  const early = DuelCore.echoVisibility([T*0.1], DuelCore.mulberry32(4242), 4000);
-  check('E6. a badly-timed echo is much worse than a centred one',
-    hahn > early + 0.05, `centred ${hahn.toFixed(3)} vs early ${early.toFixed(3)}`);
-
-  // And fidelity must be a real probability.
-  const shot = DuelCore.echoShot(trains.hahn, DuelCore.mulberry32(7));
-  check('E7. fidelity is a probability in [0,1]',
-    shot.fidelity >= 0 && shot.fidelity <= 1 && isFinite(shot.phi),
-    `f=${shot.fidelity.toFixed(4)}, phi=${shot.phi.toFixed(3)}`);
 }
 
 // ── Debrief card: three lines, and the tip must match what happened ───

@@ -437,6 +437,34 @@ canvas { display: block; cursor: pointer; }
 }
 .btn:active { background: rgba(90,80,204,0.50); }
 
+/* C02-T2 — two-mode product hub. Play choices get the visual weight;
+   learning/export utilities remain available without reading as games. */
+.mode-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; margin:14px 0; }
+.mode-card {
+  min-height:132px; padding:16px; border-radius:10px; cursor:pointer;
+  border:1px solid rgba(139,125,255,.55); color:var(--ink-2); text-align:left;
+  background:linear-gradient(145deg,rgba(19,27,62,.98),rgba(10,15,36,.98));
+  box-shadow:0 8px 24px rgba(0,0,0,.32); transition:transform .15s,border-color .15s,box-shadow .15s;
+}
+.mode-card:hover { transform:translateY(-2px); border-color:var(--teal); box-shadow:0 12px 30px rgba(47,224,208,.14); }
+.mode-card.training:hover { border-color:var(--gold); box-shadow:0 12px 30px rgba(245,183,60,.13); }
+.mode-card .mode-kicker { display:block; color:var(--dim); font:700 var(--fs-0) var(--font-body); letter-spacing:1.5px; }
+.mode-card strong { display:block; margin:8px 0 7px; color:var(--teal); font:700 var(--fs-2) var(--font-display); letter-spacing:1px; }
+.mode-card.training strong { color:var(--gold); }
+.mode-card .mode-copy { display:block; color:var(--ink-2); font:500 var(--fs-0) var(--font-body); line-height:1.5; }
+.mode-card .mode-status { display:block; margin-top:10px; color:var(--green); font:700 var(--fs-0) var(--font-body); }
+.support-actions { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:7px; margin:10px 0 14px; }
+.support-actions .btn { padding:8px 5px; font-size:var(--fs-0); letter-spacing:.4px; }
+.training-progress { height:8px; overflow:hidden; background:rgba(255,255,255,.08); border-radius:99px; margin:8px 0 16px; }
+.training-progress > span { display:block; height:100%; background:linear-gradient(90deg,var(--indigo),var(--gold)); }
+.mission-card.is-next { border-color:var(--gold); box-shadow:0 0 18px rgba(245,183,60,.12); }
+.mission-next { color:var(--gold); font:700 var(--fs-0) var(--font-body); letter-spacing:1px; }
+@media (max-width:700px) {
+  .mode-grid { grid-template-columns:1fr; }
+  .mode-card { min-height:112px; }
+  .support-actions { grid-template-columns:1fr; }
+}
+
 /* FE-13 — progressive disclosure: this ~60-word explainer (Charge = strike
    chance, why |1⟩ is fragile, etc. — UX-7's own honest copy, good copy in
    the wrong place by default) used to always render, pushing the panel's
@@ -798,7 +826,7 @@ function beep(freq, type='square', dur=0.09, vol=0.18) {
 }
 
 // Frequency sweep + noise burst, on the same WebAudio path as beep(). Shared
-// by every minigame; DUEL keeps private copies inside its closure.
+// Shared procedural effects; DUEL keeps richer private copies in its closure.
 function _sweep(f0, f1, dur, type, vol) {
   const c = ac(); if (!c) return;
   const o = c.createOscillator(), g = c.createGain();
@@ -810,8 +838,7 @@ function _sweep(f0, f1, dur, type, vol) {
   o.start(); o.stop(c.currentTime + dur);
 }
 
-// Shared "collapse" sting — used by any minigame outside the DUEL closure
-// (Bell Trial), built on the same WebAudio path as beep(). No audio files.
+// Shared "collapse" sting, built on the same WebAudio path as beep().
 function sfxCollapse() {
   const c = ac(); if (!c) return;
   const buf = c.createBuffer(1, Math.max(1, (c.sampleRate * 0.3) | 0), c.sampleRate);
@@ -1595,63 +1622,6 @@ const DuelCore = (() => {
     return m.gate(evidence || {});
   }
 
-  // ── BELL TRIAL — the CHSH game (minigame #2) ─────────────────────────
-  // The most adversarial game in physics, and the win condition IS the
-  // physics. A referee sends you and your partner one random bit each (x, y).
-  // You each answer a bit (a, b) with NO communication. You win the round iff
-  //     a XOR b  ==  x AND y
-  // Any classical strategy — including any pre-agreed lookup table, which is
-  // what a "local hidden variable" IS — tops out at 75%. Sharing a Bell pair
-  // and measuring at well-chosen angles reaches cos²(π/8) ≈ 85.36%.
-  // So the opponent here is not a bot: it is the classical bound itself, and
-  // beating 75% is a real refutation of local realism, played with a mouse.
-  //
-  // Angles are the two measurement directions each side commits to, one per
-  // referee bit. The textbook optimum is A = {0, π/2}, B = {π/4, -π/4}.
-  const CHSH = {
-    CLASSICAL: 0.75,                       // best possible local-realist strategy
-    TSIRELSON: Math.cos(Math.PI/8)**2,     // ≈0.8536 — quantum maximum
-    // With P(agree)=cos²(α−β) these are the optimal settings: every one of
-    // the four referee cases then sits at cos²(π/8). (The textbook's
-    // {0,π/2}/{π/4,−π/4} belongs to the half-angle convention where
-    // E=cos(2(α−β)) is written in terms of physical polarizer angles — using
-    // those here silently drops you to 50%, which is what harness case c1
-    // caught.)
-    OPTIMAL_A: [0, Math.PI/4],
-    OPTIMAL_B: [Math.PI/8, -Math.PI/8],
-  };
-
-  // Quantum prediction for one round on |Φ+⟩: measuring at angles α and β
-  // gives correlation E = cos(2(α−β)), so P(a==b) = cos²(α−β).
-  const chshAgreeProb = (alpha, beta) => Math.cos(alpha - beta) ** 2;
-
-  // Play one round honestly: sample the shared Bell pair's joint statistics.
-  function chshRound(angA, angB, x, y, rand) {
-    const alpha = angA[x], beta = angB[y];
-    const pAgree = chshAgreeProb(alpha, beta);
-    const agree = rand() < pAgree;
-    const a = rand() < 0.5 ? 1 : 0;        // marginal is fair on |Φ+⟩
-    const b = agree ? a : 1 - a;
-    const won = ((a ^ b) === (x & y));
-    return { a, b, won, pAgree };
-  }
-
-  // Expected win rate for a chosen pair of angle-settings, exactly (no
-  // sampling): the referee picks (x,y) uniformly, so average the four cases.
-  function chshWinRate(angA, angB) {
-    let s = 0;
-    for (let x = 0; x < 2; x++) for (let y = 0; y < 2; y++) {
-      const pAgree = chshAgreeProb(angA[x], angB[y]);
-      // need a XOR b == x AND y: agreement wins unless both bits are 1
-      s += (x & y) ? (1 - pAgree) : pAgree;
-    }
-    return s / 4;
-  }
-
-  // The CHSH S-parameter, the number physicists actually quote.
-  // S = 4·(2·winRate − 1); |S| ≤ 2 classically, ≤ 2√2 quantum mechanically.
-  const chshS = winRate => 4 * (2 * winRate - 1);
-
   // ── Debrief card (design doc §2) ────────────────────────────────────
   // Three lines, max, generated from what actually happened: the line that
   // won or lost it, the concept that line demonstrates, and one tip keyed to
@@ -1687,150 +1657,7 @@ const DuelCore = (() => {
     return L.slice(0, 3);
   }
 
-  // ── ECHO SIEGE — minigame #3 (dynamical decoupling) ─────────────────
-  // The adversarial framing of the single most useful trick in experimental
-  // quantum computing. A Saboteur injects slow, low-frequency noise: a random
-  // detuning that makes your qubit precess at a rate you do not know and
-  // cannot see. Left alone, those random phases spread and your coherence
-  // dies (that is pure dephasing, T2*).
-  //
-  // Your one move is a pi-pulse — an ECHO. It flips the accumulated phase, so
-  // the SAME noise that was pulling you apart now pulls you back. Time it
-  // right and the phase error refocuses to zero at the read-out; that is the
-  // Hahn echo, and a train of them (CPMG) beats slow noise almost completely.
-  //
-  // Model: piecewise-constant detuning d(t) (rad/s). Accumulated phase is
-  // phi = integral of s(t)*d(t) dt where s(t) flips sign at every pi-pulse.
-  // Fidelity at read-out is cos^2(phi/2) — 1 when refocused, 0 when the phase
-  // has run to pi. Sampling many noise draws gives the visibility you would
-  // actually measure on hardware.
-  const ECHO = {
-    T_READ: 4,          // seconds until read-out
-    NOISE_SIGMA: 0.9,   // rad/s spread of the unknown detuning
-    SEGMENTS: 256,      // how many pieces the noise is drawn in
-    // 1/f noise: MODES tones, log-spaced in [F_MIN, F_MAX] cycles per window,
-    // amplitude ~ 1/sqrt(f) so the POWER spectrum goes as 1/f. This is what a
-    // superconducting qubit actually dephases against.
-    MODES: 24, F_MIN: 0.10, F_MAX: 8.0,
-    // Every real pi-pulse is imperfect. Without a cost, "spam the maximum" is
-    // strictly optimal and there is no decision to make.
-    PULSE_INFIDELITY: 0.05,
-  };
-
-  // Log-spaced mode table + normalisation, computed once.
-  const _echoFreqs = Array.from({ length: ECHO.MODES }, (_, k) =>
-    ECHO.F_MIN * Math.pow(ECHO.F_MAX / ECHO.F_MIN, k / (ECHO.MODES - 1)));
-  const _echoAmps = _echoFreqs.map(f => 1 / Math.sqrt(f));
-  const _echoNorm = Math.sqrt(_echoAmps.reduce((s, a) => s + a * a, 0) / 2);
-
-  // Phase accumulated over [0, T] with sign flips at `pulses` (sorted times).
-  function echoPhase(detunings, pulses, T, segments) {
-    const segT = T / segments;
-    let phi = 0;
-    for (let i = 0; i < segments; i++) {
-      const t0 = i * segT, t1 = t0 + segT;
-      // Split this segment at any pulse inside it; sign flips at each.
-      let cursor = t0;
-      let sign = 1;
-      for (const p of pulses) if (p <= t0) sign = -sign;
-      for (const p of pulses) {
-        if (p <= t0 || p >= t1) continue;
-        phi += sign * detunings[i] * (p - cursor);
-        cursor = p; sign = -sign;
-      }
-      phi += sign * detunings[i] * (t1 - cursor);
-    }
-    return phi;
-  }
-
-  const echoFidelity = phi => Math.cos(phi / 2) ** 2;
-
-  // One shot: draw a noise realisation, apply the pulse train, read out.
-  //
-  // The noise is 1/f — a sum of tones, log-spaced and NOT commensurate with the
-  // read-out window, each with a random phase. Two properties matter and both
-  // are load-bearing:
-  //
-  //  · It is CORRELATED across the window, which is what makes it refocusable.
-  //    White noise could not be echoed away, and neither can it here.
-  //  · It has power at MANY frequencies. A pulse train is a band-stop filter
-  //    whose stop-band climbs with the number of pulses, so faster noise
-  //    genuinely REQUIRES more pulses. That is the CPMG filter-function result,
-  //    and it is the whole lesson of the minigame.
-  //
-  // Superseded 2026-08-08: the old model was `constant + linear drift`, which a
-  // 2-pulse CPMG train cancels EXACTLY. Measured consequence — visibility was
-  // 1.0000 for n=2 at every difficulty from sigma 1.1 to 4.57, so the rising
-  // "Saboteur strength" changed nothing, the 6-pulse budget was decorative, and
-  // the mode had one correct answer forever. Non-commensurate frequencies also
-  // matter: with exact integer harmonics every tone integrates to zero over the
-  // window and DOING NOTHING scores a perfect 1.0.
-  function echoShot(pulses, rand, opts) {
-    const o = Object.assign({}, ECHO, opts || {});
-    const phases = _echoFreqs.map(() => rand() * Math.PI * 2);
-    const det = [];
-    for (let i = 0; i < o.SEGMENTS; i++) {
-      const t = (i / (o.SEGMENTS - 1)) * o.T_READ;
-      let d = 0;
-      for (let k = 0; k < _echoFreqs.length; k++)
-        d += _echoAmps[k] * Math.sin(2 * Math.PI * _echoFreqs[k] * t / o.T_READ + phases[k]);
-      det.push(o.NOISE_SIGMA * d / _echoNorm);
-    }
-    const phi = echoPhase(det, pulses, o.T_READ, o.SEGMENTS);
-    return { phi, fidelity: echoFidelity(phi), detunings: det };
-  }
-
-  // Average visibility over N noise draws — the number a real experiment quotes.
-  // This is the RAW refocusing quality; it ignores what the pulses themselves cost.
-  function echoVisibility(pulses, rand, n, opts) {
-    let s = 0;
-    for (let i = 0; i < n; i++) s += echoShot(pulses, rand, opts).fidelity;
-    return s / n;
-  }
-
-  // What the player is actually scored on: refocusing quality DISCOUNTED by the
-  // infidelity of every pulse used. Without this term more pulses are never
-  // worse, "use all six" is strictly dominant, and there is no decision left.
-  // With it the optimum is finite and climbs as the noise gets worse.
-  function echoScore(pulses, rand, n, opts) {
-    const o = Object.assign({}, ECHO, opts || {});
-    const raw = echoVisibility(pulses, rand, n, opts);
-    return raw * Math.pow(1 - o.PULSE_INFIDELITY, pulses.length);
-  }
-
-  // Best score reachable this round, over perfectly-spaced trains of 0..maxN
-  // pulses — used for the debrief ("n=4 was the play") and to set thresholds
-  // from what is actually achievable rather than from a guess.
-  //
-  // Takes a FACTORY, not an rng: every candidate n must see the same noise
-  // draws, or the comparison is between pulse counts *and* luck. `newRand()`
-  // must return a freshly-seeded generator each call.
-  function echoBestTrain(newRand, draws, opts, maxN = 8) {
-    const o = Object.assign({}, ECHO, opts || {});
-    let best = { n: 0, score: -1 };
-    for (let n = 0; n <= maxN; n++) {
-      const train = Array.from({ length: n }, (_, i) => o.T_READ * (2 * i + 1) / (2 * n));
-      const s = echoScore(train, newRand(), draws, opts);
-      if (s > best.score) best = { n, score: s };
-    }
-    return best;
-  }
-
-  // The perfectly-spaced train of n pulses — the shape the player is aiming at.
-  const echoEvenTrain = (n, T = ECHO.T_READ) =>
-    Array.from({ length: n }, (_, i) => T * (2 * i + 1) / (2 * n));
-
-  // The textbook trains, for scoring and for the "show me" button.
-  const echoTrains = (T = ECHO.T_READ) => ({
-    none: [],
-    hahn: [T / 2],                                     // one pi-pulse, centred
-    cpmg2: [T / 4, 3 * T / 4],
-    cpmg4: [T / 8, 3 * T / 8, 5 * T / 8, 7 * T / 8],
-  });
-
-  return { debriefLines, ECHO, echoPhase, echoFidelity, echoShot, echoVisibility, echoTrains,
-           echoScore, echoBestTrain, echoEvenTrain,
-           parkPulse, CHSH, chshAgreeProb, chshRound, chshWinRate, chshS,
+  return { debriefLines, parkPulse,
            K, AXES, BEAMS, ZONE, ZENO, DUEL_MISSIONS, missionGate,
            mulberry32, chargeToTheta, rotateBloch,
            eigenstateAngleDeg, isEigenstate, isCardinal, applyBeamHit,
@@ -1838,6 +1665,40 @@ const DuelCore = (() => {
            sigmaFor, applyFidelity, bellPair, bellOdds, bellMeasure };
 })();
 if (typeof window !== 'undefined') window.DuelCore = DuelCore;
+
+const TRAINING_PROGRESS_KEY = 'qublitz_training_progress_v1';
+function loadTrainingProgress() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(TRAINING_PROGRESS_KEY) || '[]');
+    if (!Array.isArray(saved)) return [];
+    return [...new Set(saved.filter(i => Number.isInteger(i)
+      && i >= 0 && i < DuelCore.DUEL_MISSIONS.length))].sort((a,b) => a-b);
+  } catch (e) { return []; }
+}
+function saveTrainingProgress(done) {
+  try { localStorage.setItem(TRAINING_PROGRESS_KEY, JSON.stringify(done || [])); }
+  catch (e) { /* storage is optional; in-session progress still works */ }
+}
+function recordTrainingClear(missionId) {
+  if (!Number.isInteger(missionId) || !DuelCore.DUEL_MISSIONS[missionId]) return false;
+  GAME.duelDone = GAME.duelDone || [];
+  if (!GAME.duelDone.includes(missionId)) {
+    GAME.duelDone.push(missionId);
+    GAME.duelDone.sort((a,b) => a-b);
+    saveTrainingProgress(GAME.duelDone);
+  }
+  return true;
+}
+function nextTrainingMission(afterId = -1) {
+  const done = new Set(GAME.duelDone || []);
+  for (let i = afterId + 1; i < DuelCore.DUEL_MISSIONS.length; i++) if (!done.has(i)) return i;
+  for (let i = 0; i <= afterId && i < DuelCore.DUEL_MISSIONS.length; i++) if (!done.has(i)) return i;
+  return null;
+}
+if (typeof window !== 'undefined') {
+  window.recordTrainingClear = recordTrainingClear;
+  window.nextTrainingMission = nextTrainingMission;
+}
 
 // ═══════════════════════════════════════════════════════
 // GAME STATE — duel-era
@@ -1849,7 +1710,7 @@ if (typeof window !== 'undefined') window.DuelCore = DuelCore;
 const GAME = {
   // Instructor-export source data (see buildGateLogExport).
   gateCounts:{}, hitsLanded:0, critCount:0, entanglCount:0,
-  duelDone:[],                             // duel missions cleared this session
+  duelDone:loadTrainingProgress(),          // durable locally; in-session fallback if storage fails
   // Physics Lab / diagnostic knob (the board's per-turn setting; the duel
   // runs in seconds and quotes DuelCore.K.T1_S / T2_S directly).
   decoRate:2,
@@ -2193,8 +2054,6 @@ canvas.addEventListener('contextmenu', e => { if (MODE === 'duel') e.preventDefa
 // modal is up or MODE isn't 'duel'.
 document.addEventListener('keydown', e => {
   if (MODE === 'duel') { DUEL.onKey(e, true); return; }
-  if (MODE === 'bell') { BELL.onKey(e, true); return; }
-  if (MODE === 'echo') { ECHOG.onKey(e, true); return; }
   if (e.key === 'Escape') { closeModal(); }
 });
 
@@ -2202,13 +2061,8 @@ document.addEventListener('keydown', e => {
 // `S.keys[k] = down`, but keydown was its ONLY caller — so `down` was
 // structurally always true and nothing could ever write false. Hold W, let
 // go, and the sim kept reading W as held: the ship accelerated forever.
-// BELL and ECHOG carry no per-frame key state (both early-out on !down);
-// they are routed anyway so the two halves stay symmetric and a future
-// held key in either mode is already wired.
 document.addEventListener('keyup', e => {
   if (MODE === 'duel') { DUEL.onKey(e, false); return; }
-  if (MODE === 'bell') { BELL.onKey(e, false); return; }
-  if (MODE === 'echo') { ECHOG.onKey(e, false); return; }
 });
 
 // A key released while the window is unfocused, or while the tab is hidden,
@@ -2264,6 +2118,8 @@ const DUEL = (() => {
     floats: [], bell: null, mission: -1, ev: null, gateMsg: '', gateMsgT: 0,
     match: { you: 0, them: 0, no: 1 }, debrief: null,
     rstat: null,
+    introT: 0, shake: 0, flash: 0, flashColor: '#ffffff',
+    announcer: '', announceT: 0,
     frameMs: [], showPerf: false,
   };
 
@@ -2287,12 +2143,14 @@ const DUEL = (() => {
   }
 
   function spawnParts(n, x, y, col, spd, life) {
+    if (REDUCE_MOTION) return;
     for (let i = 0; i < n; i++) {
       const p = take(S.parts); if (!p) return;
-      const a = S.rand() * Math.PI * 2, v = spd * (0.35 + S.rand());
+      // Visual randomness must never consume the seeded gameplay RNG.
+      const a = Math.random() * Math.PI * 2, v = spd * (0.35 + Math.random());
       p.live = true; p.x = x; p.y = y;
       p.vx = Math.cos(a) * v; p.vy = Math.sin(a) * v;
-      p.life = p.max = life; p.col = col; p.r = 1.5 + S.rand() * 2;
+      p.life = p.max = life; p.col = col; p.r = 1.5 + Math.random() * 2;
     }
   }
 
@@ -2328,6 +2186,24 @@ const DUEL = (() => {
   const sfxWind    = () => sweep(220, 1400, DuelCore.K.MEASURE_WIND_S, 'sine', 0.10);
   const sfxCollapse= () => { noise(0.3, 0.3); sweep(400, 60, 0.5, 'sawtooth', 0.2); };
   const sfxDud     = () => sweep(240, 90, 0.3, 'triangle', 0.15);
+  const sfxRoundWin= () => { sweep(280, 840, 0.24, 'triangle', 0.14); sweep(520, 1180, 0.34, 'sine', 0.10); };
+  const sfxRoundLoss=() => sweep(360, 90, 0.45, 'sawtooth', 0.12);
+
+  // Presentation-only impact channel. It never touches DuelCore state,
+  // clocks, probabilities, cooldowns, or movement. Reduced-motion keeps the
+  // readable announcer but removes particles, shake, and flash.
+  function triggerFx(label, color = '#ffffff', intensity = 0.35) {
+    S.announcer = label || '';
+    S.announceT = label ? 1.15 : 0;
+    if (!REDUCE_MOTION) {
+      S.shake = Math.max(S.shake, intensity);
+      S.flash = Math.max(S.flash, intensity * 0.55);
+      S.flashColor = color;
+    } else {
+      S.shake = 0; S.flash = 0;
+    }
+    if (label) announceA11y(label);
+  }
 
   // ── Telemetry (PD-11, design doc §8 items 1–4). Local only; rides the
   //    existing instructor gate-log export, no third-party anything.
@@ -2376,6 +2252,8 @@ const DUEL = (() => {
     S.charging = false; S.chargeT = 0;
     S.round = { winner: null, method: null, p: 0, endedAt: 0 };
     S.debrief = null;
+    S.introT = 2.4; S.shake = 0; S.flash = 0;
+    S.announcer = ''; S.announceT = 0;
     S.rstat = { shieldedAgainstYou: 0, duds: 0, selfPulses: 0, hotspotTime: 0,
                 lastTheta: null };
     if (!keepMatch) S.match = { you: 0, them: 0, no: 1 };
@@ -2524,6 +2402,7 @@ const DUEL = (() => {
     const spec = DuelCore.BEAMS[p.beam] || DuelCore.BEAMS.X;
     spawnParts(14, p.x, p.y, spec.color, 130, 0.6);
     if (spec.kind === 'phase') floatTxt(target, 'PHASE ' + (p.beam === 'T' ? 'π/4' : ''), spec.color);
+    if (p.theta >= Math.PI * 0.75) triggerFx('FULL PULSE HIT', spec.color, 0.28);
     sfxHit();
     // §8 item 3 — the learning beat: the player's beam visibly moved the
     // opponent's state vector. Fired once, on a ≥15° swing.
@@ -2595,6 +2474,7 @@ const DUEL = (() => {
       sfxDud();
       spawnParts(18, target.x, target.y, '#9aa3cf', 110, 0.6);
       floatTxt(target, 'DUD — reset to |0⟩', '#9aa3cf');
+      triggerFx('MEASURE: |0⟩ · NO COLLAPSE WIN', '#9aa3cf', 0.12);
       if (p.owner === 0 && S.rstat) S.rstat.duds++;
     }
   }
@@ -2643,12 +2523,14 @@ const DUEL = (() => {
     S.lossStreak = winner === 1 ? (S.lossStreak || 0) + 1 : 0;
     try { localStorage.setItem('qb_loss_streak', String(S.lossStreak)); } catch (e) {}
     if (winner === 0 && S.mission >= 0) {
-      GAME.duelDone = GAME.duelDone || [];
-      if (!GAME.duelDone.includes(S.mission)) GAME.duelDone.push(S.mission);
+      recordTrainingClear(S.mission);
       tele('mission_clear', { mission: S.mission,
         concept: (DuelCore.DUEL_MISSIONS[S.mission] || {}).concept });
     }
     S.round = { winner, method, p, endedAt: S.t };
+    triggerFx(winner === 0 ? 'ROUND WON · QUBIT COLLAPSED' : 'ROUND LOST · YOUR QUBIT COLLAPSED',
+              winner === 0 ? '#3fe08a' : '#ff5a72', 0.75);
+    if (winner === 0) sfxRoundWin(); else sfxRoundLoss();
     tele('round_end', {
       winner: winner === 0 ? 'player' : 'sage',
       method, P_at_measure: +p.toFixed(4),
@@ -2892,6 +2774,10 @@ const DUEL = (() => {
     if (!(dt > 0)) dt = 1 / 60;
     dt = Math.min(dt, 0.25);                       // tab-return clamp
     const t0 = performance.now();
+    S.introT = Math.max(0, S.introT - dt);
+    S.announceT = Math.max(0, S.announceT - dt);
+    S.shake = Math.max(0, S.shake - dt * 2.4);
+    S.flash = Math.max(0, S.flash - dt * 2.8);
     if (!S.paused && !S.over) {
       S.acc += dt;
       let guard = 0;
@@ -2917,6 +2803,10 @@ const DUEL = (() => {
     ctx.fillRect(0, BOARD - BAND, BOARD, BAND);
     ctx.save();
     ctx.beginPath(); ctx.rect(0, BAND, BOARD, VIEW_H); ctx.clip();
+    if (!REDUCE_MOTION && S.shake > 0) {
+      const amp = 8 * Math.min(1, S.shake);
+      ctx.translate((Math.random() * 2 - 1) * amp, (Math.random() * 2 - 1) * amp);
+    }
 
     drawStarfield();
     drawZones();
@@ -2957,8 +2847,15 @@ const DUEL = (() => {
     S.ships.forEach(drawShip);
     drawEntangleLink();
     drawFloatsDuel();
+    if (!REDUCE_MOTION && S.flash > 0) {
+      ctx.globalAlpha = Math.min(0.2, S.flash);
+      ctx.fillStyle = S.flashColor;
+      ctx.fillRect(0, BAND, BOARD, VIEW_H);
+      ctx.globalAlpha = 1;
+    }
     ctx.restore();
     drawHud();
+    drawAnnouncer();
     if (S.paused) banner('PAUSED', 'Esc to resume');
     if (S.over) drawDebrief();
   }
@@ -3237,6 +3134,28 @@ const DUEL = (() => {
     ctx.fillText(txt, x, y);
   }
 
+  function drawAnnouncer() {
+    let label = '';
+    if (S.introT > 0) {
+      const beat = S.introT > 1.7 ? 'SYNC 3' : S.introT > 1.0 ? 'SYNC 2' : S.introT > 0.35 ? 'SYNC 1' : 'DUEL!';
+      const mission = DuelCore.DUEL_MISSIONS[S.mission];
+      label = mission ? `${beat} · MISSION ${mission.id + 1}` : `${beat} · PHOTON DUEL`;
+    } else if (S.announceT > 0) label = S.announcer;
+    if (!label) return;
+    const alpha = S.introT > 0 ? 0.92 : Math.min(1, S.announceT * 1.5);
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = 'rgba(5,7,15,.82)';
+    roundRect(190, BAND + 18, BOARD - 380, 42, 8); ctx.fill();
+    ctx.strokeStyle = '#8b7dff'; ctx.lineWidth = 1;
+    roundRect(190, BAND + 18, BOARD - 380, 42, 8); ctx.stroke();
+    ctx.textAlign = 'center';
+    ctx.font = `bold ${canvasFontPx(15, 15)}px 'Press Start 2P',monospace`;
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(label, BOARD / 2, BAND + 45);
+    ctx.restore();
+  }
+
   // The debrief card: what won, the concept it demonstrates, one tip. Three
   // lines is the cap — this is a takeaway, not a report.
   function drawDebrief() {
@@ -3279,8 +3198,13 @@ const DUEL = (() => {
 
     ctx.font = `500 ${Math.round(BOARD * 0.016)}px ${CANVAS_BODY}`;
     ctx.fillStyle = '#6f79a8';
-    ctx.fillText(over || MM ? 'SPACE rematch  ·  ESC menu'
-                            : 'SPACE next round  ·  ESC menu', cx, cy + VIEW_H - 122);
+    const nextMission = MM && won ? nextTrainingMission(S.mission) : null;
+    const action = MM
+      ? (won && nextMission != null
+          ? `ENTER next mission (${nextMission + 1})  ·  R replay  ·  ESC training`
+          : `${won ? 'ALL TRAINING CLEARED' : 'ENTER retry'}  ·  R replay  ·  ESC training`)
+      : (over ? 'SPACE rematch  ·  ESC menu' : 'SPACE next round  ·  ESC menu');
+    ctx.fillText(action, cx, cy + VIEW_H - 122);
     ctx.textAlign = 'left';
   }
 
@@ -3325,7 +3249,10 @@ const DUEL = (() => {
     }
     if (down && k === 'r' && S.over) { start(S.seed, S.mission); e.preventDefault(); return; }
     if (down && (k === ' ' || k === 'enter') && S.over) {
-      if (S.mission >= 0) start(S.seed, S.mission); else nextRound();
+      if (S.mission >= 0) {
+        const next = S.round.winner === 0 ? nextTrainingMission(S.mission) : null;
+        start(undefined, next == null ? S.mission : next);
+      } else nextRound();
       e.preventDefault(); return;
     }
     // Beam select — 1 X (attack), 2 Y (attack), 3 T (phase, scarce).
@@ -3395,7 +3322,7 @@ const DUEL = (() => {
   }
 
   return { start, stop, frame, onKey, clearKeys, onMouseMove, onMouseDown, onMouseUp,
-           state: S, p95, telemetry: () => S.tele.slice(),
+           state: S, triggerFx, p95, telemetry: () => S.tele.slice(),
            togglePerf: () => (S.showPerf = !S.showPerf) };
 })();
 
@@ -3420,411 +3347,11 @@ function exitDuel(toMissions) {
 // the duel. Each row names the concept its gate enforces, so a student can
 // see the syllabus rather than infer it.
 // ═══════════════════════════════════════════════════════
-// BELL TRIAL — minigame #2 (CHSH), rules in DuelCore.CHSH
-// ═══════════════════════════════════════════════════════
-// You and a partner share Bell pairs. A Skeptic insists your correlations
-// are just a classical lookup table agreed in advance. Every classical table
-// caps at 75% (proved exhaustively in duel_harness case c4), so exceeding it
-// is a refutation, not a high score. Drag the four analyzer angles, run
-// trials, and push S past 2.
-// Telemetry sink shared by every minigame (the DUEL closure has its own
-// `tele` for hot-path events; this one is for modes outside it).
-const MINIGAME_TELEMETRY = [];
-function tele(type, data) {
-  MINIGAME_TELEMETRY.push(Object.assign({ type, at: new Date().toISOString() }, data || {}));
-}
-
-const BELL = (() => {
-  const S = { active:false, angA:[0,0], angB:[0,0], sel:0, rand:null,
-              trials:0, wins:0, running:false, batch:0, done:false, best:0 };
-  const LABEL = ['A·x=0','A·x=1','B·y=0','B·y=1'];
-
-  function start() {
-    S.active = true;
-    S.angA = [0.2, 0.9]; S.angB = [0.5, -0.3];   // deliberately mediocre start
-    S.sel = 0; S.rand = DuelCore.mulberry32((Date.now() & 0xffff) || 7);
-    S.trials = S.wins = 0; S.running = false; S.batch = 0; S.done = false;
-    S.best = 0;
-    tele('bell_trial_start', {});
-  }
-  const stop = () => { S.active = false; };
-  const angles = () => [S.angA[0], S.angA[1], S.angB[0], S.angB[1]];
-  function setAngle(i, v) {
-    if (i < 2) S.angA[i] = v; else S.angB[i-2] = v;
-  }
-  const rate = () => S.trials ? S.wins / S.trials : 0;
-  const predicted = () => DuelCore.chshWinRate(S.angA, S.angB);
-
-  function runBatch(n) {
-    S.running = true; S.batch = n;
-    for (let i = 0; i < n; i++) {
-      const x = S.rand() < 0.5 ? 1 : 0, y = S.rand() < 0.5 ? 1 : 0;
-      if (DuelCore.chshRound(S.angA, S.angB, x, y, S.rand).won) S.wins++;
-      S.trials++;
-    }
-    S.running = false;
-    S.best = Math.max(S.best, rate());
-    // A refutation needs statistics, not one lucky streak: 200+ trials AND
-    // a rate clear of the bound by more than the 2σ noise floor.
-    const sigma = Math.sqrt(0.25 / Math.max(1, S.trials));
-    if (!S.done && S.trials >= 200 && rate() > DuelCore.CHSH.CLASSICAL + 2*sigma) {
-      S.done = true;
-      sfxCollapse();
-      tele('bell_trial_beat_bound', {
-        trials: S.trials, winRate: +rate().toFixed(4),
-        S: +DuelCore.chshS(rate()).toFixed(4),
-      });
-      GAME.duelDone = GAME.duelDone || [];
-    } else beep(700, 'triangle', 0.05, 0.10);
-  }
-
-  function draw() {
-    ctx.clearRect(0, 0, BOARD, BOARD);
-    ctx.fillStyle = '#05070f'; ctx.fillRect(0, 0, BOARD, BOARD);
-
-    ctx.textAlign = 'center';
-    ctx.font = `bold ${canvasFontPx(17, 17)}px 'Press Start 2P',monospace`;
-    ctx.fillStyle = '#ff4d9d';
-    ctx.fillText('BELL TRIAL', BOARD/2, 52);
-    ctx.font = `500 ${Math.round(BOARD*0.017)}px ${CANVAS_BODY}`;
-    ctx.fillStyle = '#8f9ac4';
-    ctx.fillText('The Skeptic says your results are a classical lookup table.', BOARD/2, 78);
-    ctx.fillText('Every such table caps at 75%. Beat it.', BOARD/2, 100);
-
-    // ── The bound meter: the whole game in one bar ──
-    const mx = 90, mw = BOARD - 180, my = 138, mh = 30;
-    const lo = 0.4, hi = 0.95;
-    const toX = v => mx + mw * Math.max(0, Math.min(1, (v - lo) / (hi - lo)));
-    ctx.fillStyle = 'rgba(255,255,255,0.06)';
-    roundRect(mx, my, mw, mh, 4); ctx.fill();
-    const r = rate();
-    if (S.trials) {
-      ctx.fillStyle = r > DuelCore.CHSH.CLASSICAL ? '#3fe08a' : '#ff5a72';
-      roundRect(mx, my, toX(r) - mx, mh, 4); ctx.fill();
-    }
-    // classical wall + Tsirelson ceiling
-    // 75% and 85.4% sit close together on this scale, so the two labels are
-    // staggered (one above, one below) instead of colliding.
-    [[DuelCore.CHSH.CLASSICAL, '#ff5a72', 'CLASSICAL LIMIT 75%', -14, 'right'],
-     [DuelCore.CHSH.TSIRELSON, '#2fe0d0', 'QUANTUM MAX 85.4%', mh + 26, 'left']]
-      .forEach(([v, col, lab, dy, align]) => {
-        const x = toX(v);
-        ctx.strokeStyle = col; ctx.lineWidth = 2;
-        ctx.beginPath(); ctx.moveTo(x, my - 8); ctx.lineTo(x, my + mh + 8); ctx.stroke();
-        ctx.fillStyle = col;
-        ctx.font = `700 ${Math.round(BOARD*0.0145)}px ${CANVAS_BODY}`;
-        ctx.textAlign = align;
-        ctx.fillText(lab, x + (align === 'right' ? -6 : 6), my + dy);
-        ctx.textAlign = 'center';
-      });
-    // live readout
-    ctx.font = `600 ${Math.round(BOARD*0.030)}px 'Rajdhani','Space Grotesk',sans-serif`;
-    ctx.fillStyle = S.trials ? (r > DuelCore.CHSH.CLASSICAL ? '#3fe08a' : '#cfd6ee') : '#6f79a8';
-    ctx.fillText(S.trials ? `${(r*100).toFixed(1)}%   S = ${DuelCore.chshS(r).toFixed(3)}`
-                          : 'no trials yet', BOARD/2, my + mh + 34);
-    ctx.font = `500 ${Math.round(BOARD*0.016)}px ${CANVAS_BODY}`;
-    ctx.fillStyle = '#6f79a8';
-    ctx.fillText(`${S.trials} trials  ·  theory for these angles: ${(predicted()*100).toFixed(1)}%`,
-                 BOARD/2, my + mh + 56);
-
-    // ── Four analyzer dials ──
-    const cy = 400, r0 = 62;
-    angles().forEach((a, i) => {
-      const cx = 140 + i * ((BOARD - 280) / 3);
-      const isSel = S.sel === i;
-      ctx.strokeStyle = isSel ? '#f5b73c' : 'rgba(140,150,200,0.35)';
-      ctx.lineWidth = isSel ? 2.5 : 1.5;
-      ctx.beginPath(); ctx.arc(cx, cy, r0, 0, Math.PI*2); ctx.stroke();
-      // the analyzer axis (a polarizer is a line, not an arrow — ±a are the same setting)
-      ctx.strokeStyle = i < 2 ? '#2fe0d0' : '#ff4d9d';
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.moveTo(cx - Math.cos(a)*r0, cy - Math.sin(a)*r0);
-      ctx.lineTo(cx + Math.cos(a)*r0, cy + Math.sin(a)*r0);
-      ctx.stroke();
-      ctx.fillStyle = isSel ? '#f5b73c' : '#8f9ac4';
-      ctx.font = `700 ${Math.round(BOARD*0.0163)}px ${CANVAS_BODY}`;
-      ctx.fillText(LABEL[i], cx, cy + r0 + 26);
-      ctx.font = `600 ${Math.round(BOARD*0.019)}px 'Rajdhani','Space Grotesk',sans-serif`;
-      ctx.fillStyle = '#cfd6ee';
-      ctx.fillText(`${(a*180/Math.PI).toFixed(1)}°`, cx, cy + r0 + 48);
-    });
-
-    ctx.font = `500 ${Math.round(BOARD*0.016)}px ${CANVAS_BODY}`;
-    ctx.fillStyle = '#6f79a8';
-    ctx.fillText('1–4 select a dial  ·  ←/→ rotate it  ·  SPACE run 100 trials  ·  O optimal  ·  R reset  ·  ESC menu',
-                 BOARD/2, BOARD - 96);
-
-    if (S.done) {
-      const by = BOARD * 0.715;   // clears the dials' angle readouts at cy+r0+48
-      ctx.fillStyle = 'rgba(5,7,15,0.92)';
-      ctx.fillRect(60, by - 34, BOARD - 120, 116);
-      ctx.strokeStyle = 'rgba(63,224,138,0.45)'; ctx.lineWidth = 1;
-      ctx.strokeRect(60, by - 34, BOARD - 120, 116);
-      ctx.font = `bold ${canvasFontPx(17, 17)}px 'Press Start 2P',monospace`;
-      ctx.fillStyle = '#3fe08a';
-      ctx.fillText('BOUND BROKEN', BOARD/2, by);
-      ctx.font = `600 ${Math.round(BOARD*0.018)}px ${CANVAS_BODY}`;
-      ctx.fillStyle = '#cfd6ee';
-      ctx.fillText(`S = ${DuelCore.chshS(rate()).toFixed(3)} > 2 over ${S.trials} trials —`, BOARD/2, by + 30);
-      ctx.fillText('no local hidden-variable theory can produce this.', BOARD/2, by + 54);
-    }
-    ctx.textAlign = 'left';
-  }
-
-  function onKey(e, down) {
-    if (!down || MODE !== 'bell') return;
-    const k = e.key.toLowerCase();
-    if (k === 'escape') { MODE='story'; stop(); document.body.classList.remove('duel-mode'); openMenu(); e.preventDefault(); return; }
-    if (k >= '1' && k <= '4') { S.sel = +k - 1; beep(520,'triangle',0.04,0.09); e.preventDefault(); return; }
-    if (k === 'arrowleft' || k === 'arrowright') {
-      const step = (e.shiftKey ? 0.5 : 3) * Math.PI/180 * (k === 'arrowleft' ? -1 : 1);
-      setAngle(S.sel, angles()[S.sel] + step);
-      e.preventDefault(); return;
-    }
-    if (k === ' ') { runBatch(100); e.preventDefault(); return; }
-    if (k === 'o') {                                   // show the known optimum
-      S.angA = DuelCore.CHSH.OPTIMAL_A.slice();
-      S.angB = DuelCore.CHSH.OPTIMAL_B.slice();
-      beep(660,'triangle',0.06,0.12); e.preventDefault(); return;
-    }
-    if (k === 'r') { S.trials = S.wins = 0; S.done = false; e.preventDefault(); return; }
-  }
-
-  return { start, stop, draw, onKey, state: S, runBatch, rate, predicted };
-})();
-
-function startBellTrial() {
-  closeModal();
-  MODE = 'bell';
-  document.body.classList.add('duel-mode');
-  sizeCanvasBackingStore();
-  BELL.start();
-}
-if (typeof window !== 'undefined') { window.startBellTrial = startBellTrial; window.BELL = BELL; }
-
-// ═══════════════════════════════════════════════════════
-// ECHO SIEGE — minigame #3 (dynamical decoupling)
-// ═══════════════════════════════════════════════════════
-// A Saboteur floods your qubit with 1/f noise you cannot see. Your only move
-// is a pi-pulse, and it has two costs and one power. The power: flipping the
-// accumulated phase makes the same noise that was destroying you refocus you
-// instead. The costs: every pulse carries real infidelity, and the pulses must
-// be evenly spaced or they refocus nothing.
-//
-// So each round asks a genuine question — HOW MANY echoes is this noise worth?
-// More pulses reject faster noise (the stop-band of a CPMG train climbs with
-// pulse count) but each one bleeds 5% fidelity. The optimum is finite and it
-// climbs with the Saboteur's strength: n=3 at round 1, n=6 by round 6, and by
-// round 7 no train clears the bar at all. Rules and proof: DuelCore.echo*,
-// harness cases E1-E9.
-const ECHOG = (() => {
-  const S = { active:false, t:0, pulses:[], round:1, sigma:0, lives:3,
-              phase:'sweep', vis:0, lastPhi:0, best:0, rand:null, msg:'',
-              hist:[], done:false, bestN:0, bestScore:0 };
-  const T = () => DuelCore.ECHO.T_READ;
-  // Fixed bar. It used to FALL (0.92 - round*0.03) while the only correct
-  // answer stayed exactly 1.0000 at every noise level — the difficulty curve
-  // ran backwards. Now the bar holds still and the achievable ceiling drops.
-  const need = () => 0.62;
-  const sigmaFor = r => DuelCore.ECHO.NOISE_SIGMA * Math.pow(1.28, r - 1);
-
-  function start() {
-    S.active = true; S.rand = DuelCore.mulberry32((Date.now() & 0xffff) || 3);
-    S.round = 1; S.lives = 3; S.best = 0; S.hist = []; S.done = false;
-    beginRound();
-    tele('echo_siege_start', {});
-  }
-  const stop = () => { S.active = false; };
-
-  function beginRound() {
-    S.t = 0; S.pulses = []; S.phase = 'sweep';
-    S.sigma = sigmaFor(S.round); S.vis = 0; S.msg = '';
-  }
-
-  function readout() {
-    S.phase = 'result';
-    const opts = { NOISE_SIGMA: S.sigma };
-    // 300 noise draws at this round's severity — the number a real experiment
-    // would quote, not a single lucky shot. Scored, so the pulses the player
-    // spent are charged for.
-    S.vis = DuelCore.echoScore(S.pulses.slice().sort((a,b)=>a-b), S.rand, 300, opts);
-    // What the best evenly-spaced train would have scored on the same noise —
-    // this is the round's answer, shown in the debrief so a loss teaches.
-    const bt = DuelCore.echoBestTrain(
-      () => DuelCore.mulberry32(0x5eed ^ (S.round * 2654435761)), 200, opts, 8);
-    S.bestN = bt.n; S.bestScore = bt.score;
-    S.best = Math.max(S.best, S.vis);
-    const ok = S.vis >= need();
-    S.hist.push({ round:S.round, vis:S.vis, pulses:S.pulses.length, ok, bestN:bt.n });
-    const n = S.pulses.length;
-    // The teaching line: name the play that would have won. Distinguish the two
-    // ways to be wrong, because they are opposite mistakes.
-    const verdict =
-      n === bt.n     ? `${n} echoes was the right count — spacing is what cost you.`
-      : n < bt.n     ? `Too few: ${n} echo${n===1?'':'es'} left the fast noise unfiltered. ${bt.n} was the play.`
-      :                `Too many: ${n} echoes each bled 5% fidelity. ${bt.n} was the play.`;
-    if (ok) {
-      S.msg = `REFOCUSED — ${(S.vis*100).toFixed(1)}% ≥ ${(need()*100).toFixed(0)}%`;
-      sfxCollapse();
-      tele('echo_round_cleared', { round:S.round, visibility:+S.vis.toFixed(4),
-                                   pulses:n, bestN:bt.n, bestScore:+bt.score.toFixed(4),
-                                   sigma:+S.sigma.toFixed(3) });
-    } else {
-      S.lives--;
-      S.msg = `DEPHASED — ${(S.vis*100).toFixed(1)}% < ${(need()*100).toFixed(0)}% needed`;
-      _sweep(300, 90, 0.35, 'sawtooth', 0.16);
-      tele('echo_round_failed', { round:S.round, visibility:+S.vis.toFixed(4),
-                                  pulses:n, bestN:bt.n, bestScore:+bt.score.toFixed(4),
-                                  sigma:+S.sigma.toFixed(3) });
-      if (S.lives <= 0) {
-        S.done = true;
-        tele('echo_siege_end', { rounds:S.round - 1, best:+S.best.toFixed(4) });
-      }
-    }
-    S.verdict = verdict;
-    // Ceiling below the bar means the Saboteur has simply won — say so, rather
-    // than letting the player think they misplayed a winnable round.
-    if (bt.score < need()) S.verdict = `Unwinnable: even a perfect ${bt.n}-echo train only reaches ${(bt.score*100).toFixed(0)}%. The Saboteur has outrun dynamical decoupling.`;
-  }
-
-  function next() {
-    if (S.done) { start(); return; }
-    if (S.hist.length && S.hist[S.hist.length-1].ok) S.round++;
-    beginRound();
-  }
-
-  function step(dt) {
-    if (!S.active || S.phase !== 'sweep') return;
-    S.t += dt;
-    if (S.t >= T()) { S.t = T(); readout(); }
-  }
-
-  function dropEcho() {
-    // Budget 8: the optimum reaches n=6 by round 6, so a 6-cap would silently
-    // make the late rounds unplayable rather than hard.
-    if (S.phase !== 'sweep' || S.pulses.length >= 8) return;
-    S.pulses.push(S.t);
-    beep(880, 'square', 0.05, 0.16);
-  }
-
-  function draw() {
-    ctx.clearRect(0, 0, BOARD, BOARD);
-    ctx.fillStyle = '#05070f'; ctx.fillRect(0, 0, BOARD, BOARD);
-    ctx.textAlign = 'center';
-    ctx.font = `bold ${canvasFontPx(17, 17)}px 'Press Start 2P',monospace`;
-    ctx.fillStyle = '#ffa83c';
-    ctx.fillText('ECHO SIEGE', BOARD/2, 52);
-    ctx.font = `500 ${Math.round(BOARD*0.017)}px ${CANVAS_BODY}`;
-    ctx.fillStyle = '#8f9ac4';
-    ctx.fillText('The Saboteur floods your qubit with 1/f noise you cannot see.', BOARD/2, 78);
-    ctx.fillText('More echoes reject faster noise — but every π-pulse bleeds 5%. How many?', BOARD/2, 100);
-
-    // Round / lives / target
-    ctx.font = `600 ${Math.round(BOARD*0.019)}px 'Rajdhani','Space Grotesk',sans-serif`;
-    ctx.fillStyle = '#cfd6ee';
-    ctx.fillText(`ROUND ${S.round}   ·   NOISE σ ${S.sigma.toFixed(2)} rad/s   ·   TARGET ${(need()*100).toFixed(0)}%   ·   ` +
-                 `${'♥'.repeat(Math.max(0,S.lives))}`, BOARD/2, 132);
-
-    // ── The read-out window ──
-    const bx = 90, bw = BOARD - 180, by = 250, bh = 84;
-    ctx.fillStyle = 'rgba(255,255,255,0.05)';
-    roundRect(bx, by, bw, bh, 5); ctx.fill();
-    ctx.strokeStyle = 'rgba(140,150,200,0.35)'; ctx.lineWidth = 1;
-    roundRect(bx, by, bw, bh, 5); ctx.stroke();
-    // centre line = the ideal single-echo moment
-    ctx.strokeStyle = 'rgba(63,224,138,0.35)'; ctx.setLineDash([5,5]);
-    ctx.beginPath(); ctx.moveTo(bx+bw/2, by-6); ctx.lineTo(bx+bw/2, by+bh+6); ctx.stroke();
-    ctx.setLineDash([]);
-    ctx.font = `500 ${Math.round(BOARD*0.014)}px ${CANVAS_BODY}`;
-    ctx.fillStyle = '#3fe08a';
-    ctx.fillText('T/2', bx+bw/2, by-12);
-
-    // placed echoes
-    for (const p of S.pulses) {
-      const x = bx + bw * (p / T());
-      ctx.strokeStyle = '#ffa83c'; ctx.lineWidth = 3;
-      ctx.beginPath(); ctx.moveTo(x, by+4); ctx.lineTo(x, by+bh-4); ctx.stroke();
-      ctx.fillStyle = '#ffa83c';
-      ctx.font = `700 ${Math.round(BOARD*0.0145)}px ${CANVAS_BODY}`;
-      ctx.fillText('π', x, by+bh+18);
-    }
-    // live sweep
-    if (S.phase === 'sweep') {
-      const x = bx + bw * (S.t / T());
-      ctx.strokeStyle = '#2fe0d0'; ctx.lineWidth = 2;
-      ctx.shadowColor = '#2fe0d0'; ctx.shadowBlur = 12;
-      ctx.beginPath(); ctx.moveTo(x, by-8); ctx.lineTo(x, by+bh+8); ctx.stroke();
-      ctx.shadowBlur = 0;
-    }
-    ctx.font = `500 ${Math.round(BOARD*0.015)}px ${CANVAS_BODY}`;
-    ctx.fillStyle = '#6f79a8';
-    ctx.textAlign = 'left';  ctx.fillText('0', bx, by+bh+34);
-    ctx.textAlign = 'right'; ctx.fillText(`${T()}s  read-out`, bx+bw, by+bh+34);
-    ctx.textAlign = 'center';
-
-    // ── Result ──
-    if (S.phase === 'result') {
-      const ok = S.vis >= need();
-      const my = 400;
-      ctx.font = `600 ${Math.round(BOARD*0.034)}px 'Rajdhani','Space Grotesk',sans-serif`;
-      ctx.fillStyle = ok ? '#3fe08a' : '#ff5a72';
-      ctx.fillText(`${(S.vis*100).toFixed(1)}%`, BOARD/2, my + 60);
-      ctx.font = `600 ${Math.round(BOARD*0.019)}px ${CANVAS_BODY}`;
-      ctx.fillStyle = '#cfd6ee';
-      ctx.fillText(S.msg, BOARD/2, my + 92);
-      ctx.font = `500 ${Math.round(BOARD*0.016)}px ${CANVAS_BODY}`;
-      ctx.fillStyle = '#8f9ac4';
-      ctx.fillText(S.verdict || '', BOARD/2, my + 118);
-      ctx.fillStyle = '#6f79a8';
-      ctx.fillText(S.done ? 'Siege over — R to start again · ESC menu'
-                          : 'SPACE / ENTER for the next round · ESC menu', BOARD/2, my + 150);
-    } else {
-      ctx.font = `500 ${Math.round(BOARD*0.017)}px ${CANVAS_BODY}`;
-      ctx.fillStyle = '#6f79a8';
-      ctx.fillText(`SPACE drops a π-pulse as the sweep passes  ·  up to 8  ·  each costs 5%  ·  ESC menu`,
-                   BOARD/2, 430);
-    }
-
-    if (S.done) {
-      ctx.font = `bold ${canvasFontPx(16, 17)}px 'Press Start 2P',monospace`;
-      ctx.fillStyle = '#ff5a72';
-      ctx.fillText('COHERENCE LOST', BOARD/2, 190);
-    }
-    ctx.textAlign = 'left';
-  }
-
-  function onKey(e, down) {
-    if (!down || MODE !== 'echo') return;
-    const k = e.key.toLowerCase();
-    if (k === 'escape') { MODE='story'; stop(); document.body.classList.remove('duel-mode');
-                          sizeCanvasBackingStore(); openMenu(); e.preventDefault(); return; }
-    if (k === 'r' && S.done) { start(); e.preventDefault(); return; }
-    if (k === ' ' || k === 'enter') {
-      if (S.phase === 'sweep') dropEcho(); else next();
-      e.preventDefault(); return;
-    }
-  }
-
-  return { start, stop, step, draw, onKey, state: S, need, readout, dropEcho };
-})();
-
-function startEchoSiege() {
-  closeModal();
-  MODE = 'echo';
-  document.body.classList.add('duel-mode');
-  sizeCanvasBackingStore();
-  ECHOG.start();
-}
-if (typeof window !== 'undefined') { window.startEchoSiege = startEchoSiege; window.ECHOG = ECHOG; }
-
-// ═══════════════════════════════════════════════════════
 // HUB — the home screen
 // ═══════════════════════════════════════════════════════
-// QuBlitz is a collection of adversarial quantum minigames now, not one
-// board. Every mode here must be a DUEL — you against an opponent (or
-// against the classical bound itself). Anything that isn't adversarial
-// belongs in the Physics Lab, not on this screen.
+// QuBlitz is one focused duel game with two ways in: competitive free play
+// and a seven-mission training path. Learning/export utilities support those
+// experiences; they are deliberately not presented as additional games.
 function closeModal() {
   const o = document.getElementById('modal-overlay');
   if (o) o.classList.remove('show');
@@ -3832,23 +3359,33 @@ function closeModal() {
 
 function openMenu() {
   const cleared = (GAME.duelDone || []).length;
+  const total = DuelCore.DUEL_MISSIONS.length;
+  const next = nextTrainingMission();
   document.getElementById('modal-content').innerHTML = `
 <h2>◈ QUBLITZ ◈</h2>
 <p style="text-align:center;color:var(--dim);font-size:var(--fs-0);margin:-10px 0 16px">
-  Adversarial quantum arcade — every opponent's health bar is a real qubit.</p>
+  One arena. Real qubit physics. Choose your fight.</p>
 
-<button class="btn" style="background:linear-gradient(135deg,rgba(47,224,208,0.18),rgba(139,125,255,0.14));border-color:var(--teal)"
-  onclick="startDuel()">⚡ PHOTON DUEL — free duel</button>
-<button class="btn" style="border-color:var(--gold);color:var(--gold)"
-  onclick="openDuelMissions()">◈ DUEL TRAINING — 7 concept missions${cleared ? ` (${cleared}/7 cleared)` : ''}</button>
-<button class="btn" style="border-color:var(--rose);color:var(--rose)"
-  onclick="startBellTrial()">⚛ BELL TRIAL — beat the classical bound</button>
-<button class="btn" style="border-color:var(--amber);color:var(--amber)"
-  onclick="startEchoSiege()">〰 ECHO SIEGE — refocus the Saboteur's noise</button>
-<hr style="border-color:var(--border);margin:12px 0">
-<button class="btn" onclick="openGlossaryIndex()">▸ GLOSSARY — every gate, one tap away</button>
-<button class="btn" onclick="openPhysicsLab()">✦ PHYSICS LAB — inspect the real engine</button>
-<button class="btn" onclick="exportGateLog()">⬇ EXPORT MY LOG (for your instructor)</button>
+<div class="mode-grid" aria-label="Choose how to play">
+  <button class="mode-card" data-play-mode="photon-duel" onclick="startDuel()">
+    <span class="mode-kicker">COMPETITIVE · BEST OF 3</span>
+    <strong>⚡ PHOTON DUEL</strong>
+    <span class="mode-copy">Outfly Sage, rotate their live Bloch vector, and risk the MEASURE when the odds are yours.</span>
+    <span class="mode-status">PLAY FREE DUEL →</span>
+  </button>
+  <button class="mode-card training" data-play-mode="duel-training" onclick="openDuelMissions()">
+    <span class="mode-kicker">GUIDED · ${total} CONCEPT MISSIONS</span>
+    <strong>◈ DUEL TRAINING</strong>
+    <span class="mode-copy">Master the same arena through missions that refuse the win until you use the quantum concept.</span>
+    <span class="mode-status">${cleared}/${total} CLEARED${next == null ? ' · TRAINING COMPLETE' : ` · NEXT: MISSION ${next + 1}`} →</span>
+  </button>
+</div>
+<h3>LAB TOOLS</h3>
+<div class="support-actions">
+  <button class="btn" onclick="openGlossaryIndex()">▸ GLOSSARY</button>
+  <button class="btn" onclick="openPhysicsLab()">✦ PHYSICS LAB</button>
+  <button class="btn" onclick="exportGateLog()">⬇ EXPORT LOG</button>
+</div>
 <hr style="border-color:var(--border);margin:12px 0">
 
 <h3>SETTINGS</h3>
@@ -3880,18 +3417,25 @@ if (typeof window !== 'undefined') { window.openMenu = openMenu; window.closeMod
 
 function openDuelMissions() {
   const done = GAME.duelDone || [];
+  const next = nextTrainingMission();
+  const total = DuelCore.DUEL_MISSIONS.length;
   const rows = DuelCore.DUEL_MISSIONS.map(m => `
-    <div class="mission-card">
+    <div class="mission-card${m.id === next ? ' is-next' : ''}" data-training-mission="${m.id}">
+      ${m.id === next ? '<div class="mission-next">NEXT RECOMMENDED MISSION</div>' : ''}
       <h4>${m.id + 1}. ${m.title}</h4>
       <p><b style="color:var(--teal)">${m.concept}</b> — ${m.brief}</p>
       ${done.includes(m.id) ? '<div class="mission-done">✓ CLEARED</div>' : ''}
-      <button class="btn" onclick="startDuel(undefined, ${m.id})">▶ FLY MISSION ${m.id + 1}</button>
+      <button class="btn" onclick="startDuel(undefined, ${m.id})">▶ ${done.includes(m.id) ? 'REPLAY' : 'FLY'} MISSION ${m.id + 1}</button>
     </div>`).join('');
   document.getElementById('modal-content').innerHTML = `
 <h2>◈ DUEL TRAINING ◈</h2>
 <p style="text-align:center;color:var(--dim);font-size:var(--fs-0);margin:-8px 0 14px">
   Seven concepts, seven duels. Each one is built so it CANNOT be cleared without
   actually using its concept — the win is refused, with a reason, if you try.</p>
+<p style="text-align:center;color:var(--gold);font-weight:700">${done.length}/${total} MISSIONS CLEARED${next == null ? ' · TRAINING COMPLETE' : ` · NEXT: MISSION ${next + 1}`}</p>
+<div class="training-progress" role="progressbar" aria-label="Duel Training progress" aria-valuemin="0" aria-valuemax="${total}" aria-valuenow="${done.length}">
+  <span style="width:${Math.round(done.length / total * 100)}%"></span>
+</div>
 ${rows}
 <button class="btn" onclick="startDuel()">⚡ FREE DUEL (no mission)</button>
 <button class="btn close-btn" onclick="openMenu()">◀ BACK</button>`;
@@ -3911,14 +3455,10 @@ function loop(ts) {
   _frameTicks = _frameDt / MS_PER_TICK;
   _t += _frameTicks;
 
-  // A throw inside a mode used to take the rAF chain with it — the whole game
-  // froze on one bad frame, and the symptom (an echo recorded at t=0) looked
-  // nothing like the cause (an undefined sound helper). Never again: log it
-  // once and keep the loop alive.
+  // A throw inside the duel used to take the rAF chain with it and freeze the
+  // whole game. Log the first failure and keep the loop alive.
   try {
     if (MODE === 'duel') DUEL.frame(ts);
-    else if (MODE === 'bell') BELL.draw();
-    else if (MODE === 'echo') { ECHOG.step(Math.min(0.05, _frameDt/1000)); ECHOG.draw(); }
     else ctx.clearRect(0, 0, BOARD, BOARD);   // menus render over an empty board
   } catch (err) {
     if (!loop._warned) { loop._warned = true; console.error('[qublitz] frame error', err); }
@@ -3990,8 +3530,7 @@ function buildGateLogExport() {
       guardAttacksFaced: GAME.guardStats ? GAME.guardStats.attacksOnGuarding : 0,
       guardCritsTaken: GAME.guardStats ? GAME.guardStats.critsOnGuarding : 0,
     },
-    // Which duel concept-missions have been cleared THIS session (in-memory
-    // only, same as gateLog above). Each carries the concept its gate
+    // Which duel concept-missions have been cleared on this device. Each carries the concept its gate
     // enforced, so the export says what was demonstrated, not just what was
     // finished — that is the North-Star evidence, per OVERHAUL_PLAN P6.5.
     missions: {
@@ -4010,7 +3549,6 @@ function buildGateLogExport() {
     // path as everything else here: no third-party analytics, nothing sent
     // anywhere. Empty array if the duel was never opened this session.
     duelTelemetry: (typeof DUEL !== 'undefined') ? DUEL.telemetry() : [],
-    minigameTelemetry: (typeof MINIGAME_TELEMETRY !== 'undefined') ? MINIGAME_TELEMETRY.slice() : [],
     // Anonymous personal-bests already in localStorage (see loadLeaderboard) --
     // included here too so a single export file has everything, rather than
     // asking a student to find and attach a second one.

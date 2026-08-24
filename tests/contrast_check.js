@@ -26,15 +26,14 @@ const path = require('path');
 
 const GAME_URL = 'file://' + path.join(__dirname, '..', 'quantum_chess.html');
 
-// QB-A02 — the canonical hub's three play modes, as openMenu() renders them.
-// These are the product's actual entry points (HANDOFF: Photon Duel, Bell
-// Trial, Echo Siege), and they are what this check asserts it reached before
+// C02-T2 — the canonical hub's two play modes, as openMenu() renders them.
+// These are the product's only play entry points, and this check asserts it reached them before
 // it claims to have measured anything. Substring matching, so the leading
 // glyph and the trailing tagline can change without breaking the check —
 // but a mode disappearing cannot. Deliberately NOT listing GLOSSARY, PHYSICS
 // LAB or EXPORT MY LOG: those are tools around the game rather than the game,
 // and pinning them here would make routine hub edits fail a contrast check.
-const HUB_CONTROLS = ['PHOTON DUEL', 'BELL TRIAL', 'ECHO SIEGE'];
+const HUB_CONTROLS = ['PHOTON DUEL', 'DUEL TRAINING'];
 
 // A floor on the DOM walk, so "0 failures" can never mean "0 elements".
 // Measured on the hub at 1440x1000: see the run recorded in

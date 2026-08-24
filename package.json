@@ -2,11 +2,12 @@
   "name": "qublitz",
   "version": "1.1.0",
   "private": true,
-  "description": "QuBlitz — adversarial quantum minigames (canonical app: quantum_chess.html).",
+  "description": "QuBlitz — Photon Duel and its guided Duel Training campaign.",
   "scripts": {
     "test": "node tests/qphysics.test.js",
     "test:duel": "node tests/duel_harness.test.js",
     "test:input": "node tests/input_lifecycle_check.js",
+    "test:focus": "node tests/two_mode_focus_check.js",
     "capture": "node tests/capture_responsive.js",
     "live-check": "node tests/live_regression_check.js",
     "contrast": "node tests/contrast_check.js",
