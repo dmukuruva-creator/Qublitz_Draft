@@ -464,6 +464,10 @@ canvas { display: block; cursor: pointer; }
   .mode-card { min-height:112px; }
   .support-actions { grid-template-columns:1fr; }
 }
+@media (prefers-reduced-motion: reduce) {
+  .mode-card { transition:none; }
+  .mode-card:hover { transform:none; }
+}
 
 /* FE-13 — progressive disclosure: this ~60-word explainer (Charge = strike
    chance, why |1⟩ is fragile, etc. — UX-7's own honest copy, good copy in
@@ -2402,7 +2406,7 @@ const DUEL = (() => {
     const spec = DuelCore.BEAMS[p.beam] || DuelCore.BEAMS.X;
     spawnParts(14, p.x, p.y, spec.color, 130, 0.6);
     if (spec.kind === 'phase') floatTxt(target, 'PHASE ' + (p.beam === 'T' ? 'π/4' : ''), spec.color);
-    if (p.theta >= Math.PI * 0.75) triggerFx('FULL PULSE HIT', spec.color, 0.28);
+    if (p.theta >= Math.PI * 0.75) triggerFx('MAX-CHARGE HIT', spec.color, 0.28);
     sfxHit();
     // §8 item 3 — the learning beat: the player's beam visibly moved the
     // opponent's state vector. Fired once, on a ≥15° swing.
@@ -2474,7 +2478,7 @@ const DUEL = (() => {
       sfxDud();
       spawnParts(18, target.x, target.y, '#9aa3cf', 110, 0.6);
       floatTxt(target, 'DUD — reset to |0⟩', '#9aa3cf');
-      triggerFx('MEASURE: |0⟩ · NO COLLAPSE WIN', '#9aa3cf', 0.12);
+      triggerFx('MEASURE → |0⟩ · NO WIN', '#9aa3cf', 0.12);
       if (p.owner === 0 && S.rstat) S.rstat.duds++;
     }
   }
