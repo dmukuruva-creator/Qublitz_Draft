@@ -8,6 +8,7 @@
     "test:duel": "node tests/duel_harness.test.js",
     "test:input": "node tests/input_lifecycle_check.js",
     "test:focus": "node tests/two_mode_focus_check.js",
+    "test:mastery-input": "node tests/mastery_input_check.js",
     "capture": "node tests/capture_responsive.js",
     "live-check": "node tests/live_regression_check.js",
     "contrast": "node tests/contrast_check.js",

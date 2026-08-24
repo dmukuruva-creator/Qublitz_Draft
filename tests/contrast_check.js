@@ -10,12 +10,9 @@
 //      than guessing at a single "the panel background" constant — this
 //      catches real failures instead of approximating them away.
 //   2. Canvas: a curated list of the specific fg/bg color pairs this
-//      codebase draws text on top of via ctx.fillStyle (GATE_COLORS
-//      headers, canvas labels) — colors chosen dynamically by JS aren't
-//      visible to a DOM walk, so these are named explicitly, mirroring
-//      exactly what the FE-7 audit measured (white-on-indigo 3.24:1,
-//      white-on-red 3.02:1, the #6b76a8 label at 4.49:1) rather than
-//      claiming full automatic canvas coverage.
+//      current Photon Duel HUD/debrief draws via ctx.fillStyle. Colors chosen
+//      dynamically by JS aren't visible to a DOM walk, so the live dark-band,
+//      debrief, record, mastery, and result pairs are named explicitly.
 //
 // WCAG 2.1 AA thresholds: 4.5:1 normal text, 3:1 for large text (>=24px,
 // or >=18.66px/14pt when bold).
@@ -60,22 +57,16 @@ function hexToRgb(hex) {
 
 // ── Pass 2: curated canvas fg/bg pairs (see header comment) ──
 const CANVAS_PAIRS = [
-  // Gate detail-card colored header: text color fixed 2026-07-08 (FE-7),
-  // was white (#fff) on each GATE_COLORS value.
-  { name: 'gate-card header: ATTACK (red) + black text',    fg: '#000000', bg: '#ff5a72', bold: true, px: 7 },
-  { name: 'gate-card header: Z (indigo) + black text',      fg: '#000000', bg: '#8b7dff', bold: true, px: 7 },
-  { name: 'gate-card header: H/Rx (teal) + black text',     fg: '#000000', bg: '#2fe0d0', bold: true, px: 7 },
-  { name: 'gate-card header: X (rose) + black text',        fg: '#000000', bg: '#ff4d9d', bold: true, px: 7 },
-  { name: 'gate-card header: Y (amber) + black text',       fg: '#000000', bg: '#ffa83c', bold: true, px: 7 },
-  { name: 'gate-card header: S/Ry (green) + black text',    fg: '#000000', bg: '#3fe08a', bold: true, px: 7 },
-  { name: 'gate-card header: T/MEASURE (gold) + black text', fg: '#000000', bg: '#f5b73c', bold: true, px: 7 },
-  { name: 'gate-card header: CNOT (purple) + black text',   fg: '#000000', bg: '#c97bff', bold: true, px: 7 },
-  { name: 'gate-card header: SKIP (slate) + black text',    fg: '#000000', bg: '#9aa3cf', bold: true, px: 7 },
-  // Canvas label / floating-text color, on the dark board background —
-  // was #6b76a8 (4.49:1), replaced with --dim's #9aa3cf (2026-07-08, FE-7).
-  { name: 'canvas label/float text on board bg',            fg: '#9aa3cf', bg: '#070a16', bold: false, px: 6 },
-  // Main gate-menu title bar (unchanged — verified already passing).
-  { name: 'gate-menu title bar (white on #5a4cd6)',          fg: '#ffffff', bg: '#5a4cd6', bold: true, px: 7 },
+  { name: 'HUD dim labels on letterbox band',             fg: '#6f79a8', bg: '#05070f', bold: false, px: 11 },
+  { name: 'HUD mission copy on arena',                    fg: '#8f9ac4', bg: '#070a16', bold: false, px: 11 },
+  { name: 'HUD primary labels on letterbox band',         fg: '#aeb8e6', bg: '#05070f', bold: true, px: 11 },
+  { name: 'debrief body copy on card',                    fg: '#cfd6ee', bg: '#0c1226', bold: false, px: 12 },
+  { name: 'debrief concept teal on card',                 fg: '#2fe0d0', bg: '#0c1226', bold: false, px: 12 },
+  { name: 'new-record gold on card',                      fg: '#f5b73c', bg: '#0c1226', bold: true, px: 11 },
+  { name: 'mastery purple on card',                       fg: '#c97bff', bg: '#0c1226', bold: true, px: 11 },
+  { name: 'round-win green on card',                      fg: '#3fe08a', bg: '#0c1226', bold: true, px: 17 },
+  { name: 'round-loss red on card',                       fg: '#ff5a72', bg: '#0c1226', bold: true, px: 17 },
+  { name: 'announcer white on overlay',                   fg: '#ffffff', bg: '#111525', bold: true, px: 15 },
 ];
 
 function requiredRatio(px, bold) {

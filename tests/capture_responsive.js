@@ -122,6 +122,9 @@ async function captureWidth(chromium, width) {
     await page.locator('#boot').click({ timeout: 3000 }).catch(() => {});
     await page.waitForTimeout(300);
   }
+  fs.mkdirSync(OUT_DIR, { recursive: true });
+  const hubFile = path.join(OUT_DIR, `${width}px-hub.png`);
+  await page.screenshot({ path: hubFile, fullPage: true });
   await page.evaluate(() => startDuel(11))
     .catch(e => errors.push('could not start duel: ' + e.message));
   await page.waitForTimeout(600);
@@ -135,21 +138,15 @@ async function captureWidth(chromium, width) {
   if (!inDuel) errors.push('startDuel(11) resolved but the game is not in duel mode —'
     + ' this capture would show the hub, not gameplay');
 
-  // Select + move a white unit so the side panels and gate menu have real
-  // content in the screenshot, not placeholder dashes.
+  // Exercise the live pointer route so the capture contains a real charged
+  // pulse and active HUD state, not an untouched first frame.
   const canvas = await page.$('#game-canvas');
   if (canvas) {
     const box = await canvas.boundingBox();
-    await page.mouse.click(box.x + box.width * 0.18, box.y + box.height * 0.94);
-    await page.waitForTimeout(200);
-    await page.mouse.click(box.x + box.width * 0.18, box.y + box.height * 0.72);
-    // FE-11: the move triggers a proactive sage tip via the typewriter
-    // effect (20ms/char) — a fixed 400ms wait only ever caught it a few
-    // characters in, which looked exactly like the mid-sentence clipping
-    // bug in every past capture even after that bug was fixed. Wait for
-    // the typewriter to actually finish so the capture shows a complete,
-    // representative message instead of a permanently-misleading snapshot.
-    await page.waitForFunction(() => window._sageTyping === null, { timeout: 4000 }).catch(() => {});
+    await page.mouse.move(box.x + box.width * 0.72, box.y + box.height * 0.48);
+    await page.mouse.down();
+    await page.waitForTimeout(220);
+    await page.mouse.up();
     await page.waitForTimeout(150);
   }
 
@@ -164,11 +161,33 @@ async function captureWidth(chromium, width) {
   const rootHeight = await page.locator('#root').evaluate(el => el.getBoundingClientRect().height).catch(() => null);
   const voidPx = rootHeight != null ? Math.max(0, SUPPORTED_HEIGHT - rootHeight) : null;
 
-  fs.mkdirSync(OUT_DIR, { recursive: true });
   const file = path.join(OUT_DIR, `${width}px.png`);
   await page.screenshot({ path: file, fullPage: true });
+  // C03-T3 — capture the densest supported debrief too: three learning
+  // lines, three simultaneous records, a mastery award, next challenge,
+  // and keyboard/controller actions. This is deliberately a worst-case
+  // presentation fixture rather than a lucky short live round.
+  await page.evaluate(() => {
+    const s = DUEL.state;
+    s.mission = 6;
+    s.over = true;
+    s.round = { winner:0, method:'bell-measure', p:0.93, endedAt:s.t };
+    s.debrief = DuelCore.debriefLines({ won:true, method:'bell-measure', p:0.93,
+      theta:'1.00', shieldedAgainstYou:0, duds:0, selfPulses:1, hotspotTime:1 });
+    s.progress = {
+      newRecords:['MISSION 7 FASTEST TIME','MISSION 7 FEWEST SHOTS','MISSION 7 BEST MEASURE'],
+      earnedBadges:['phase-breaker'],
+    };
+    GAME.duelProfile = DuelProgress.sanitize({
+      missions:{ 6:{ bestTimeS:9.25, fewestShots:1, bestMeasureP:0.93 } },
+      free:{ wins:3, losses:2, streak:2, bestStreak:2 }, badges:['phase-breaker'],
+    });
+  });
+  await page.waitForTimeout(100);
+  const debriefFile = path.join(OUT_DIR, `${width}px-debrief.png`);
+  await page.screenshot({ path: debriefFile, fullPage: true });
   await browser.close();
-  return { width, file, errors, voidPx };
+  return { width, hubFile, file, debriefFile, errors, voidPx };
 }
 
 (async () => {
@@ -197,7 +216,8 @@ async function captureWidth(chromium, width) {
     const ok = result.errors.length === 0;
     if (!ok) anyErrors = true;
     const voidNote = result.voidPx != null ? ` (board-void: ${result.voidPx.toFixed(0)}px)` : '';
-    console.log(`${ok ? '✓' : '✗'} ${w}px${voidNote} -> ${result.file}` + (ok ? '' : `\n  ${result.errors.join('\n  ')}`));
+    console.log(`${ok ? '✓' : '✗'} ${w}px${voidNote} -> ${result.hubFile} · ${result.file} · ${result.debriefFile}`
+      + (ok ? '' : `\n  ${result.errors.join('\n  ')}`));
   }
   console.log(`\nScreenshots written to ${OUT_DIR}/ — eyeball each one for overlap/clipping`
     + ' (this script checks console errors and the phone-gate contract, not layout correctness by pixel).');
