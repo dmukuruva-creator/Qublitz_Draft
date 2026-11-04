@@ -1,102 +1,67 @@
-# QuBlitz — Qubit Battle Arena
+# QuBlitz — Photon Duel
 
-QuBlitz is a quantum tactics game where every unit on the board is a **qubit**, every action is
-a **quantum gate**, and combat resolves via the **Born rule**. It was built to make quantum
-mechanics intuitive by making it *consequential*: you understand decoherence the moment your
-charged unit relaxes and you miss the kill. The whole game is a single self-contained
-`quantum_chess.html` (vanilla JS + HTML canvas) with an optional Streamlit wrapper for
-deployment on the Fitzpatrick Lab platform.
+QuBlitz is a real-time quantum laser game with two supported modes: **Photon Duel**, a match against the bot, and **Duel Training**, guided missions using the same mechanics. Each ship carries a qubit: laser pulses rotate its Bloch vector, continuous decoherence changes its state, and measurement samples an outcome using the Born rule.
 
-![QuBlitz gameplay — the battlefield, a selected qubit's live Bloch sphere, gate log, and the Sage advisor](docs/screenshot.png)
-
----
+The self-contained `quantum_chess.html` runs directly in a browser. The filename is retained for compatibility with existing links and platform embeds.
 
 ## Quick start
 
-**Option A — open it directly (no install):**
+Open `quantum_chess.html` in a desktop browser; no installation or network connection is required for the game. Start with **Duel Training**, then try **Photon Duel**.
+
+For the optional Streamlit wrapper:
 
 ```bash
-open quantum_chess.html        # macOS; or just double-click the file in any browser
-```
-
-The game is one file with everything embedded (sprites are base64), so Chrome or Firefox runs
-it offline with zero dependencies.
-
-**Option B — run the Streamlit wrapper:**
-
-```bash
-pip install -r requirements.txt   # streamlit>=1.35.0
+pip install -r requirements.txt
 streamlit run app.py
 ```
 
-**Run the physics tests (Node 20+):**
+Click inside the embedded game before using keyboard controls. The wrapper optionally loads web fonts; the standalone game embeds its assets.
+
+## Controls
+
+The authoritative bindings are `DUEL_CONTROLS` in `quantum_chess.html` and the in-game help.
+
+| Action | Keyboard | Standard gamepad |
+|---|---|---|
+| Move | WASD | Left stick |
+| Aim | Arrow keys or pointer | Right stick |
+| Charge attack; release to fire | Shift | Right trigger |
+| Charge self-pulse; release to apply | F | Left trigger |
+| Select beam | 1 / 2 / 3 | LB / RB or D-pad |
+| Measure | Space | A / Cross |
+| Entangle | E | X / Square |
+| Pause | Esc | Menu |
+
+Rotate the opponent's state toward |1⟩ and watch the live measurement odds before launching a measurement. Training missions introduce the mechanics and their objectives. Progress, winning records and mastery badges are stored locally in the browser when storage is available; they do not sync across devices. Standard gamepad behavior has automated virtual-pad coverage; physical hardware compatibility is not certified.
+
+## Verification
+
+With Node 20+ installed:
 
 ```bash
-node tests/qphysics.test.js       # or:  npm test
+npm ci
+npm test
+npm run test:duel
+npx playwright install chromium
+npm run test:input
+npm run test:focus
+npm run test:mastery-input
+npm run contrast
+npm run offline
+npm run live-check
+npm run capture
 ```
 
-CI runs this same regression suite on every push (`.github/workflows/ci.yml`).
+The physics suite checks the underlying quantum engine. The duel suite checks real-time mechanics; browser checks cover input lifecycle, the two-mode hub, training and records, contrast, offline operation and responsive rendering. The duel suite declares a pending Phase Rift composite-rotation case; a green run does not certify that unimplemented feature.
 
----
+The lab platform is a separate repository. Its Arena page vendors this game's HTML and records its source commit and SHA-256. Use `scripts/sync_vendor.sh` and the platform's vendor-equality check when preparing an integration release; do not independently edit the embedded copy.
 
-## Quantum mechanics primer
+## Deprecated board version
 
-Each unit is a single qubit; the UI shows its live state on a Bloch sphere. The mechanics are
-not flavor — they are a real (unit-tested) open-quantum-system model:
+The previous turn-based board game is deprecated and no longer a supported mode. Its army controls, board selection and advisor instructions do not apply to this release. Historical source remains in Git history; older design documents and screenshots describe that earlier product unless explicitly updated for Photon Duel. The current HTML contains Photon Duel and Duel Training only.
 
-- **Born rule combat** — a unit's *charge* is `P(|1⟩)`. Attacking fires with probability equal
-  to the charge. A target caught in `|1⟩` takes a **critical** hit (2 dmg); in `|0⟩`, 1 dmg.
-  The attacker discharges back toward `|0⟩`.
-- **Gates** — `H` builds superposition `|+⟩` (~50% charge); `X` flips to `|1⟩` (100% charge);
-  `Z / S / T` are relative-phase rotations; `Rx / Ry` are tunable rotations; `MEASURE` collapses
-  and stabilizes; `CNOT` entangles two units.
-- **Decoherence (T₁ / T₂)** — each turn the state relaxes toward `|0⟩` by the *exact* Lindblad
-  solution: charge decays as `e^(−t/T₁)`, transverse coherence as `e^(−t/T₂)` (with T₂ ≤ 2T₁).
-  Leave a charged unit idle and it bleeds charge — timing is everything.
-- **Relative phase is real (X-basis GUARD)** — a guarding unit is measured in the X-basis, so
-  its phase decides its crit risk: `P(crit) = (1 − x)/2`. Reaching `|+⟩` (x = +1) is crit-immune;
-  `|−⟩` (x = −1) is fully exposed. This makes the `Z / S / T` phase gates mechanically meaningful.
-- **Entanglement (Bell pairs)** — `CNOT` creates a true 4-component `|Φ+⟩` state. Measuring one
-  half collapses the partner to the correlated outcome, and the no-communication theorem is
-  enforced: a local gate on one qubit never changes the other's marginal.
+## Contributing and attribution
 
-For the full model (the Lindblad master equation, falsifiability/T₁-recovery diagnostics), see the
-in-game **Physics Lab** panel. Original project scoping and the latency audit that shaped the
-early cycles are preserved for historical reference in
-[`docs/Project_Description_ARCHIVE_2026-06.md`](docs/Project_Description_ARCHIVE_2026-06.md);
-current work is tracked in [`HANDOFF.md`](HANDOFF.md).
+Keep mechanics grounded in quantum gates, measurement, decoherence or control imperfections. Include relevant test results and screenshots for UI changes in pull requests. See `HANDOFF.md` for development history and known limitations.
 
----
-
-## The Sage advisor
-
-The Sage is an in-game quantum oracle that gives short tactical advice. It runs entirely as a
-local heuristic (`analyzePosition` in `quantum_chess.html`) — there is no LLM, no proxy server,
-and no third-party API call anywhere in this project. No API key is ever needed or requested.
-
----
-
-## Contributing
-
-- **New here?** [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) is a module map of
-  `quantum_chess.html` (physics engine, bot AI, rendering, input, Sage, missions — with line
-  anchors) — locate any subsystem in under 5 minutes instead of reading 5,000+ lines cold.
-- **Branch naming:** feature branches off `main` (e.g. `feature/<thing>`); the canonical game is
-  always `quantum_chess.html` — never edit a copy.
-- **Commit messages** must follow `scope: imperative description (ticket-id)`, e.g.
-  `feat: add QuBlitz_Arena stub page (QB-arena-1)` or `perf: cache mesolve (SIM-P0-1)`.
-- **CI gate:** `node tests/qphysics.test.js` must pass on every commit — it extracts the real
-  physics engine from the HTML and asserts the success criteria (exponential decoherence with
-  R² > 0.99, T₁ recovery within 1%, Bell-pair correlation, no-communication, guard crit risk).
-- **PRs** include: what changed and why, how to test locally, and a screenshot of any UI change.
-
----
-
-## Research attribution
-
-QuBlitz is developed by **David Mukuruva** (dmukuruva@gmail.com) within the **Fitzpatrick Lab,
-Dartmouth College** (PI: Prof. Mattias Fitzpatrick). It is the game companion to the lab's
-[qublitz](https://github.com/mvwf/qublitz) Streamlit qubit simulator
-([qublitz-qubit-lab.streamlit.app](https://qublitz-qubit-lab.streamlit.app)); the QuBlitz Arena
-page integrates the game onto that platform so the simulator's measured T₁/T₂ values can drive
-the game's decoherence model.
+Developed by **David Mukuruva** within the **Fitzpatrick Lab, Dartmouth College**. QuBlitz is the game companion to the lab's [qubit simulator](https://github.com/mvwf/qublitz). The platform can import a fitted simulator T₁ into the duel's relaxation model; this is a scaled teaching connection, not a hardware calibration claim.

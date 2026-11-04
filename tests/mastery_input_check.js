@@ -18,6 +18,26 @@ async function boot(page) {
   await page.locator('#modal-overlay.show').waitFor({ state:'visible', timeout:5000 });
 }
 
+// Keep the already fixture-positioned target on the shot line while advancing
+// the production fixed-step simulation. Wall-clock sleeps previously raced the
+// one-second wind-up: by the time the target was moved, the projectile could
+// already have passed it. This controls geometry/time only; firing, collision,
+// quantum resolution, win gating and badge persistence remain production code.
+async function finishMeasureFixture(page) {
+  await page.evaluate(() => {
+    const s = DUEL.state;
+    let ts = s.last == null ? performance.now() : s.last;
+    for (let i = 0; i < 120 && !s.over; i++) {
+      const me = s.ships[0], foe = s.ships[1];
+      foe.x = me.x + 45; foe.y = me.y; foe.vx = foe.vy = 0;
+      s.aim = {x:me.x + 1000, y:me.y};
+      DUEL.frame(ts += 1000 / 60);
+    }
+    // Return ownership of the time origin to the normal animation loop.
+    s.last = performance.now();
+  });
+}
+
 (async () => {
   console.log('=== C03 mastery + input checks ===\n');
   const browser = await chromium.launch();
@@ -99,7 +119,9 @@ async function boot(page) {
   // Keyboard-only: no mouse movement or click after startDuel.
   await page.evaluate(() => startDuel(0xC03));
   await page.keyboard.down('ArrowUp');
-  await page.waitForTimeout(140);
+  await page.waitForFunction(() => DUEL.state.ships[0].ang < -1.2
+    && DUEL.state.ships[0].ang > -1.95, null, { timeout:5000 });
+  const keyboardAim = await page.evaluate(() => DUEL.state.ships[0].ang);
   await page.keyboard.up('ArrowUp');
   await page.keyboard.down('d');
   await page.waitForTimeout(180);
@@ -126,10 +148,10 @@ async function boot(page) {
   await page.keyboard.press('Escape');
   const resumed = await page.evaluate(() => !DUEL.state.paused);
   check('keyboard-only bindings move, aim, attack, self-pulse, select, measure, entangle, and pause',
-    keyboard.angle < -1.2 && keyboard.angle > -1.95 && keyboard.vx > 0
+    keyboardAim < -1.2 && keyboardAim > -1.95 && keyboard.vx > 0
       && keyboard.shots >= 1 && keyboard.selfPulses >= 1 && keyboard.beam === 'Y'
       && keyboard.winding > 0 && keyboard.entangleShot && paused && resumed,
-    JSON.stringify({ ...keyboard, paused, resumed }));
+    JSON.stringify({ ...keyboard, keyboardAim, paused, resumed }));
 
   const holdLifecycle = await page.evaluate(() => {
     const evt = key => ({ key, preventDefault(){} });
@@ -237,6 +259,10 @@ async function boot(page) {
     saveDuelProfile(GAME.duelProfile);
     GAME.difficulty = 0;
     startDuel(0xB311);
+    // Keep the opponent on cooldown: this fixture tests earned player wins,
+    // not whether the bot can win during a deliberately exposed setup.
+    DUEL.state.ships[1].beamCd = DUEL.state.ships[1].measCd = 100;
+    DUEL.state.ships[1].entCd = 100;
     const s = DUEL.state;
     s.rand = () => 0.1;
     s.ships[0].x = 300; s.ships[0].y = 400;
@@ -247,12 +273,7 @@ async function boot(page) {
   await page.waitForTimeout(260);
   const linked = await page.evaluate(() => !!DUEL.state.bell && DUEL.state.ev.entangled);
   await page.keyboard.press('Space');
-  await page.waitForTimeout(1040);
-  await page.evaluate(() => {
-    const s = DUEL.state, me = s.ships[0], foe = s.ships[1];
-    foe.x = me.x + 45; foe.y = me.y; foe.vx = foe.vy = 0;
-  });
-  await page.waitForTimeout(260);
+  await finishMeasureFixture(page);
   const bellBadge = await page.evaluate(() => ({
     over:DUEL.state.over, evidence:DUEL.state.ev.bellCollapse,
     earned:GAME.duelProfile.badges.includes('bell-collapse'), method:DUEL.state.round.method,
@@ -260,6 +281,10 @@ async function boot(page) {
 
   await page.evaluate(() => {
     startDuel(0x7A5E, 4);
+    // Keep the opponent on cooldown: this fixture tests earned player wins,
+    // not whether the bot can win during a deliberately exposed setup.
+    DUEL.state.ships[1].beamCd = DUEL.state.ships[1].measCd = 100;
+    DUEL.state.ships[1].entCd = 100;
     const s = DUEL.state;
     s.rand = () => 0.1;
     s.ships[0].x = 300; s.ships[0].y = 400;
@@ -273,12 +298,7 @@ async function boot(page) {
   await page.waitForTimeout(260);
   const phaseEvidence = await page.evaluate(() => DUEL.state.ev.tCampBroken && DUEL.state.ev.usedT);
   await page.keyboard.press('Space');
-  await page.waitForTimeout(1040);
-  await page.evaluate(() => {
-    const s = DUEL.state, me = s.ships[0], foe = s.ships[1];
-    foe.x = me.x + 45; foe.y = me.y; foe.vx = foe.vy = 0;
-  });
-  await page.waitForTimeout(260);
+  await finishMeasureFixture(page);
   const phaseBadge = await page.evaluate(() => ({
     evidence:DUEL.state.ev.tCampBroken, over:DUEL.state.over,
     earned:GAME.duelProfile.badges.includes('phase-breaker'),
@@ -287,6 +307,10 @@ async function boot(page) {
 
   await page.evaluate(() => {
     startDuel(0x4075);
+    // Keep the opponent on cooldown: this fixture tests earned player wins,
+    // not whether the bot can win during a deliberately exposed setup.
+    DUEL.state.ships[1].beamCd = DUEL.state.ships[1].measCd = 100;
+    DUEL.state.ships[1].entCd = 100;
     const s = DUEL.state, zone = s.zones[0];
     s.rand = () => 0.1;
     s.ships[0].x = zone.x; s.ships[0].y = zone.y;
@@ -300,12 +324,7 @@ async function boot(page) {
     foe.bloch = {x:0,y:0,z:-1}; s.aim = {x:me.x + 1000,y:me.y};
   });
   await page.keyboard.press('Space');
-  await page.waitForTimeout(1040);
-  await page.evaluate(() => {
-    const s = DUEL.state, me = s.ships[0], foe = s.ships[1];
-    foe.x = me.x + 45; foe.y = me.y; foe.vx = foe.vy = 0;
-  });
-  await page.waitForTimeout(260);
+  await finishMeasureFixture(page);
   const hotspotBadge = await page.evaluate(() => ({
     evidence:DUEL.state.ev.hotspotDefenseTime, over:DUEL.state.over,
     earned:GAME.duelProfile.badges.includes('hotspot-guard'),
