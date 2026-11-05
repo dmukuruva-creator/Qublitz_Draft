@@ -29,7 +29,13 @@ async function openGame(context) {
   const normal = await browser.newContext({ viewport: { width: 1280, height: 900 } });
   const page = await openGame(normal);
   const consoleErrors = [];
-  page.on('console', msg => { if (msg.type() === 'error') { const at = msg.location(); consoleErrors.push(`${msg.text()} @ ${at.url.split('/').pop()}:${at.lineNumber}:${at.columnNumber}`); } });
+  page.on('console', msg => { if (msg.type() === 'error') {
+    const at = msg.location();
+    // Firefox logs this around a reload with no script location. Source not
+    // identified. Anything else, or this text from a real location, still fails.
+    if (!at.url && msg.text().includes('Navigated away from page')) return;
+    consoleErrors.push(`${msg.text()} @ ${at.url.split('/').pop()}:${at.lineNumber}:${at.columnNumber}`);
+  } });
 
   const hub = await page.evaluate(() => ({
     modes: [...document.querySelectorAll('[data-play-mode]')].map(el => ({
