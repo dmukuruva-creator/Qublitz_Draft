@@ -63,6 +63,12 @@ async function enterDuel(page) {
     () => typeof MODE !== 'undefined' && MODE === 'duel' && DUEL.state.active === true,
     { timeout: 5000 },
   );
+  // Entering from the menu shows the brief card first (the sim is held);
+  // a player starts the round with ENTER, so this does the same.
+  if (await page.evaluate(() => DUEL.state.briefing === true)) {
+    await page.keyboard.press('Enter');
+    await page.waitForFunction(() => DUEL.state.briefing === false, { timeout: 3000 });
+  }
 }
 
 // Hold `key`, confirm it really is driving the ship, run `release` (a keyup,

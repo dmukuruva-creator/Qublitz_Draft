@@ -725,6 +725,8 @@ body::before {
 .mission-card p { font-size:var(--fs-0); color:var(--ink-2); margin-bottom:8px; }
 .mission-done { font-family:var(--font-body); font-weight:600; font-size:var(--fs-0); color:var(--green); margin-top:4px; }
 .mission-record { color:var(--gold); font:600 var(--fs-0) var(--font-body); margin:5px 0; }
+.mission-par { color:var(--dim); font:600 var(--fs-0) var(--font-body); margin:5px 0; }
+.mission-steps { margin:4px 0 6px 18px; padding:0; color:var(--text); font-size:var(--fs-0); line-height:1.5; }
 .mastery-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:7px; margin:9px 0 15px; }
 .mastery-card { padding:9px; border:1px solid rgba(201,123,255,.32); border-radius:7px; background:rgba(15,12,35,.7); }
 .mastery-card strong { display:block; color:#c97bff; font:700 var(--fs-0) var(--font-body); letter-spacing:.7px; }
@@ -981,7 +983,7 @@ const GATE_INFO = {
   T: {label:'T Gate',short:'+π/4 relative phase',effect:'45° phase shift',ctrl:'45° Z-axis rotation (φ→φ+π/4). Non-Clifford — essential for universal computation. Like S/Z, it only changes outcomes through X-basis interference (GUARD).'},
   Rx:{label:'Rx(π/4)',short:'π/4 X-axis tilt',effect:'Tilt charge & phase',ctrl:'π/4 X-axis rotation, modelling Larmor spin precession. Tilts the qubit toward the equator, adjusting both charge and the X-basis phase.'},
   Ry:{label:'Ry(π/4)',short:'π/4 Y-axis tilt',effect:'Small charge boost',ctrl:'π/4 Y-axis rotation, modelling Rabi oscillation — the cleanest coherent qubit drive. Nudges charge without adding a complex phase.'},
-  CNOT:   {label:'CNOT',short:'entangle two qubits',effect:'Entangle a neighbor',ctrl:'Conditional X: flips target if control |1⟩. Forms a correlated Bell pair — a strike on one bleeds onto the other (no faster-than-light control; only the correlation is shared).'},
+  CNOT:   {label:'CNOT',short:'entangle two qubits',effect:'Entangle a neighbor',ctrl:'Conditional X: flips the target if the control is |1⟩, does nothing if it is |0⟩. With the control in superposition it makes an entangled pair: |+⟩|0⟩ → |Φ+⟩. Pulsing one half cannot change the other half\'s odds (no faster-than-light signalling), but it can change whether the two outcomes match.'},
   MEASURE:{label:'Measure',short:'collapse to eigenstate',effect:'Discharge & reset',ctrl:'Projective Z-basis measurement. Collapses |ψ⟩ to |0⟩ or |1⟩ and stabilizes the unit (coherence +12). "Discharging" to |0⟩ is a game-mechanic reward, not a physical one — |0⟩ is simply the low-energy ground state a real qubit relaxes to anyway; |1⟩ is high-energy and short-lived by nature.'},
 };
 
@@ -1419,6 +1421,9 @@ const DuelCore = (() => {
   // charge bar is labelled in π-fractions so the player reads pulse AREA.
   const chargeToTheta = tHoldSec =>
     Math.PI * Math.min(Math.max(tHoldSec, 0) / K.CHARGE_FULL_S, 1);
+  // DRIVE ×2: θ = Ω·t, so doubling the drive amplitude (Ω) doubles the angle
+  // a given hold delivers. Still capped at π: a full hold is a π-pulse.
+  const driveTheta = (tHoldSec, rabiMult) => chargeToTheta(tHoldSec * (rabiMult || 1));
 
   const norm = n => { const m = Math.hypot(n.x, n.y, n.z) || 1;
                       return { x:n.x/m, y:n.y/m, z:n.z/m }; };
@@ -1452,6 +1457,56 @@ const DuelCore = (() => {
   const isEigenstate = (r, axisName, tolDeg = K.EIGEN_TOL_DEG) =>
     eigenstateAngleDeg(r, axisName) <= tolDeg;
 
+  // Best shot: the attack-beam angle θ ∈ [0, π] (what a charge can deliver)
+  // that leaves the target most likely to read |1⟩. For an X or Y axis n,
+  // z(θ) = z·cosθ + w·sinθ with w = (n × r)_z, so the unconstrained best is
+  // θ* = atan2(−w, −z); if that needs more than π, the best reachable angle
+  // is an endpoint. This is why a full π-pulse is right from |0⟩ but does
+  // nothing useful from the equator (there you want π/2).
+  function bestPulse(r, beamKey) {
+    const b = BEAMS[beamKey];
+    if (!b || b.kind !== 'attack') return null;
+    const n = AXES[b.axis], w = n.x * r.y - n.y * r.x;
+    const zAt = th => r.z * Math.cos(th) + w * Math.sin(th);
+    let th = Math.atan2(-w, -r.z);
+    if (th < 0) th += 2 * Math.PI;
+    if (th > Math.PI) th = zAt(Math.PI) < zAt(0) ? Math.PI : 0;
+    return { beam: beamKey, theta: th, p1: (1 - zAt(th)) / 2 };
+  }
+  function bestAttack(r, prefer) {
+    const a = bestPulse(r, 'X'), b = bestPulse(r, 'Y');
+    const first = prefer === 'Y' ? b : a, second = prefer === 'Y' ? a : b;
+    return second.p1 > first.p1 + 0.03 ? second : first;   // stick with the selected beam unless clearly worse
+  }
+
+  // Off-resonant drive (FLUX DETUNE power-up). A qubit detuned by Δ from a
+  // drive of Rabi rate Ω turns about the tilted axis (Ω·n̂ + Δ·ẑ)/Ω′ at the
+  // generalised Rabi rate Ω′ = √(Ω² + Δ²). A pulse that would have been θ on
+  // resonance lasts θ/Ω, so it turns the vector by θ·Ω′/Ω about that axis.
+  // From |0⟩ the most it can reach is P(|1⟩) = Ω²/Ω′² = 1/(1 + (Δ/Ω)²), the
+  // Rabi formula's ceiling. dOverO = Δ/Ω; 0 is the resonant rotation.
+  function detunedRotate(r, axis, theta, dOverO) {
+    const d = dOverO || 0;
+    const n = norm({ x: axis.x, y: axis.y, z: axis.z + d });
+    return rotateBloch(r, n, theta * Math.sqrt(1 + d * d));
+  }
+
+  // Bloch vector of one qubit of a two-qubit pure state (partial trace).
+  // amps index = 2·b0 + b1. Same convention as the 1-qubit engine: z = +1 is
+  // |0⟩, so z = ρ00 − ρ11 and ρ01 = (x − i·y)/2.
+  function reducedBloch(amps, which) {
+    const idx = (b, k) => which === 0 ? b * 2 + k : k * 2 + b;
+    let r00 = 0, r11 = 0, re01 = 0, im01 = 0;
+    for (let k = 0; k < 2; k++) {
+      const a0 = amps[idx(0, k)], a1 = amps[idx(1, k)];
+      r00 += a0.r * a0.r + a0.i * a0.i;
+      r11 += a1.r * a1.r + a1.i * a1.i;
+      re01 += a0.r * a1.r + a0.i * a1.i;          // Re(a0·conj a1)
+      im01 += a0.i * a1.r - a0.r * a1.i;          // Im(a0·conj a1)
+    }
+    return { x: 2 * re01, y: -2 * im01, z: r00 - r11 };
+  }
+
   // A beam landing: rotate about its axis by θ, unless the target is parked
   // at an eigenstate of that axis (rotation would be a no-op anyway — the
   // shield mechanic makes that physical fact visible as a refraction).
@@ -1473,11 +1528,14 @@ const DuelCore = (() => {
   // MEASURE: project onto the Z basis with the Born rule. Outcome 1 wins the
   // round; outcome 0 is a dud that leaves the target in |0⟩ — it must be
   // re-rotated from scratch, which is the real cost of a mistimed shot.
+  // `draw` is the uniform number the Born rule was decided by (outcome 1 iff
+  // draw < p); the measurement reveal shows it on the P(0)/P(1) bar.
   function measureRoll(r, rand = Math.random) {
     const p = odds(r);
-    const outcome = rand() < p ? 1 : 0;
+    const draw = rand();
+    const outcome = draw < p ? 1 : 0;
     return {
-      outcome, p,
+      outcome, p, draw,
       bloch: outcome === 1 ? { x:0, y:0, z:-1 } : { x:0, y:0, z:1 },
     };
   }
@@ -1552,6 +1610,16 @@ const DuelCore = (() => {
     if (o.zenoUntil && o.now != null && o.now < o.zenoUntil)
       return { bloch: before, shielded: false, zenoBlocked: true,
                theta: 0, deltaOdds: 0 };
+    // Detuned target: X/Y drive is off-resonant, so it turns the vector about
+    // a tilted axis. No eigenstate shield here: |±⟩ is not an eigenstate of
+    // the tilted axis. The T-phase is a frame change and stays exact.
+    if (o.detune && beam.kind === 'attack') {
+      const theta = applyFidelity(thetaNominal, o.fidelity == null ? 1 : o.fidelity,
+                                  o.rand || Math.random);
+      const after = detunedRotate(before, AXES[beam.axis], theta, o.detune);
+      return { bloch: after, shielded: false, zenoBlocked: false, detuned: true,
+               theta, deltaOdds: odds(after) - odds(before) };
+    }
     const theta = beam.fixedTheta != null
       ? beam.fixedTheta
       : applyFidelity(thetaNominal, o.fidelity == null ? 1 : o.fidelity,
@@ -1563,6 +1631,212 @@ const DuelCore = (() => {
     return { bloch: after, shielded: false, zenoBlocked: false, theta,
              deltaOdds: odds(after) - odds(before) };
   }
+
+  // ── Entangled pair: an exact two-qubit density matrix ────────────────
+  // While linked, the two duellists are ONE 4×4 density matrix ρ, not two
+  // Bloch vectors. Basis index i = 2·bA + bB (A = qubit 0). Every operation is
+  // the textbook one: a local pulse is (R ⊗ I) ρ (R ⊗ I)†, decay is each
+  // qubit's own amplitude-damping + dephasing Kraus channel (identical to
+  // QPhysics.lindbladStep on a product state), the coupler is a CNOT, and a
+  // MEASURE is a Z projection on one half. Each ship's displayed Bloch vector
+  // is its reduced state Tr_other(ρ), so odds, spheres and the bot read the
+  // real marginals. Entanglement is quantified by the negativity of the
+  // partial transpose (0 for separable, ½ for a Bell state).
+  const Pair = (() => {
+    const N = 4;
+    const mk = () => ({ re: new Float64Array(16), im: new Float64Array(16) });
+    const bit = (i, q) => q === 0 ? (i >> 1) & 1 : i & 1;
+
+    function fromBloch(rA, rB) {
+      const one = r => ({ re: [(1+r.z)/2, r.x/2, r.x/2, (1-r.z)/2],
+                          im: [0, -r.y/2, r.y/2, 0] });           // [[00,01],[10,11]]
+      const A = one(rA), B = one(rB), P = mk();
+      for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) {
+        const ai = (i>>1)*2 + (j>>1), bi = (i&1)*2 + (j&1);
+        P.re[i*4+j] = A.re[ai]*B.re[bi] - A.im[ai]*B.im[bi];
+        P.im[i*4+j] = A.re[ai]*B.im[bi] + A.im[ai]*B.re[bi];
+      }
+      return P;
+    }
+
+    // U ρ U† for a 4×4 complex U given as {re,im}.
+    function conj(P, U) {
+      const T = mk(), O = mk();
+      for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) {
+        let r = 0, m = 0;
+        for (let k = 0; k < N; k++) {
+          const ur = U.re[i*4+k], ui = U.im[i*4+k], pr = P.re[k*4+j], pi = P.im[k*4+j];
+          r += ur*pr - ui*pi; m += ur*pi + ui*pr;
+        }
+        T.re[i*4+j] = r; T.im[i*4+j] = m;
+      }
+      for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) {
+        let r = 0, m = 0;
+        for (let k = 0; k < N; k++) {       // T · U†, U†[k][j] = conj(U[j][k])
+          const tr = T.re[i*4+k], ti = T.im[i*4+k], ur = U.re[j*4+k], ui = -U.im[j*4+k];
+          r += tr*ur - ti*ui; m += tr*ui + ti*ur;
+        }
+        O.re[i*4+j] = r; O.im[i*4+j] = m;
+      }
+      return O;
+    }
+
+    // Embed a 2×2 operator {re:[a,b,c,d], im:[...]} on qubit q.
+    function embed(K, q) {
+      const U = mk();
+      for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) {
+        const o = 1 - q;                                   // the other qubit
+        if (bit(i, o) !== bit(j, o)) continue;
+        const k = bit(i, q) * 2 + bit(j, q);
+        U.re[i*4+j] = K.re[k]; U.im[i*4+j] = K.im[k];
+      }
+      return U;
+    }
+
+    // Right-handed rotation by θ about unit axis n: R = cos(θ/2) I − i sin(θ/2) n·σ.
+    // Same convention as rotateBloch (asserted in the harness).
+    function rot(n, theta) {
+      const c = Math.cos(theta/2), s = Math.sin(theta/2);
+      return { re: [c, -s*n.y, s*n.y, c], im: [-s*n.z, -s*n.x, -s*n.x, s*n.z] };
+    }
+    const rotate = (P, q, axis, theta) => conj(P, embed(rot(norm(axis), theta), q));
+
+    function cnot(P, control) {
+      const t = 1 - control, perm = i => bit(i, control) ? i ^ (t === 0 ? 2 : 1) : i;
+      const O = mk();
+      for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) {
+        O.re[perm(i)*4+perm(j)] = P.re[i*4+j];
+        O.im[perm(i)*4+perm(j)] = P.im[i*4+j];
+      }
+      return O;
+    }
+
+    // One qubit's T₁ amplitude damping, then pure dephasing so coherences
+    // decay as e^{−dt/T₂} overall (needs T₂ ≤ 2T₁, enforced as in lindbladStep).
+    function decay(P, q, { T1, T2, dt }) {
+      T1 = Math.max(1e-6, T1); T2 = Math.max(1e-6, Math.min(T2, 2 * T1));
+      const g = 1 - Math.exp(-dt / T1);
+      const f = Math.exp(-dt * (1 / T2 - 1 / (2 * T1)));
+      const Ks = [
+        { re: [1, 0, 0, Math.sqrt(1 - g)], im: [0, 0, 0, 0] },
+        { re: [0, Math.sqrt(g), 0, 0],     im: [0, 0, 0, 0] },
+      ];
+      const add = (A, B) => { for (let k = 0; k < 16; k++) { A.re[k] += B.re[k]; A.im[k] += B.im[k]; } return A; };
+      let O = mk();
+      for (const K of Ks) O = add(O, conj(P, embed(K, q)));
+      const D = mk();
+      const d0 = Math.sqrt((1 + f) / 2), d1 = Math.sqrt((1 - f) / 2);
+      for (const K of [{ re: [d0, 0, 0, d0], im: [0,0,0,0] }, { re: [d1, 0, 0, -d1], im: [0,0,0,0] }])
+        add(D, conj(O, embed(K, q)));
+      return D;
+    }
+
+    function reduced(P, q) {
+      let r00 = 0, r11 = 0, re01 = 0, im01 = 0;
+      for (let k = 0; k < 2; k++) {
+        const i0 = q === 0 ? k : k * 2, i1 = q === 0 ? 2 + k : k * 2 + 1;
+        r00 += P.re[i0*4+i0]; r11 += P.re[i1*4+i1];
+        re01 += P.re[i0*4+i1]; im01 += P.im[i0*4+i1];
+      }
+      return { x: 2 * re01, y: -2 * im01, z: r00 - r11 };
+    }
+    const p1 = (P, q) => { let s = 0; for (let i = 0; i < N; i++) if (bit(i, q)) s += P.re[i*4+i]; return s; };
+    // ⟨Z⊗Z⟩: +1 when the two Z outcomes always match, −1 when always opposite.
+    const zz = P => { let s = 0; for (let i = 0; i < N; i++) s += P.re[i*4+i] * ((bit(i,0) ^ bit(i,1)) ? -1 : 1); return s; };
+
+    // Z measurement on qubit q with the Born rule; returns both outcomes and
+    // the two post-measurement Bloch vectors (the pair is a product state
+    // afterwards, so the link ends).
+    function measure(P, q, rand = Math.random) {
+      const p = p1(P, q), draw = rand(), outcome = draw < p ? 1 : 0;
+      const pm = outcome ? p : 1 - p;
+      const O = mk();
+      if (pm > 1e-12) for (let i = 0; i < N; i++) for (let j = 0; j < N; j++)
+        if (bit(i, q) === outcome && bit(j, q) === outcome) {
+          O.re[i*4+j] = P.re[i*4+j] / pm; O.im[i*4+j] = P.im[i*4+j] / pm;
+        }
+      const self = reduced(O, q), partner = reduced(O, 1 - q);
+      return { outcome, p, draw, self, partner,
+               partnerP1: (1 - partner.z) / 2 };
+    }
+
+    // Smallest eigenvalue of a Hermitian 4×4, via its real 8×8 embedding
+    // [[A, −B], [B, A]] (each eigenvalue appears twice) and cyclic Jacobi.
+    function minEig(H) {
+      const n = 8, M = Array.from({ length: n }, () => new Float64Array(n));
+      for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) {
+        const a = H.re[i*4+j], b = H.im[i*4+j];
+        M[i][j] = a; M[i+4][j+4] = a; M[i][j+4] = -b; M[i+4][j] = b;
+      }
+      for (let sweep = 0; sweep < 30; sweep++) {
+        let off = 0;
+        for (let p = 0; p < n; p++) for (let q = p + 1; q < n; q++) off += M[p][q] * M[p][q];
+        if (off < 1e-22) break;
+        for (let p = 0; p < n; p++) for (let q = p + 1; q < n; q++) {
+          if (Math.abs(M[p][q]) < 1e-15) continue;
+          const th = (M[q][q] - M[p][p]) / (2 * M[p][q]);
+          const t = Math.sign(th || 1) / (Math.abs(th) + Math.sqrt(th * th + 1));
+          const c = 1 / Math.sqrt(t * t + 1), s = t * c;
+          for (let k = 0; k < n; k++) {
+            const mkp = M[k][p], mkq = M[k][q];
+            M[k][p] = c * mkp - s * mkq; M[k][q] = s * mkp + c * mkq;
+          }
+          for (let k = 0; k < n; k++) {
+            const mpk = M[p][k], mqk = M[q][k];
+            M[p][k] = c * mpk - s * mqk; M[q][k] = s * mpk + c * mqk;
+          }
+        }
+      }
+      let m = Infinity; for (let i = 0; i < n; i++) m = Math.min(m, M[i][i]);
+      return m;
+    }
+    // Negativity of ρ^{T_B}: Σ|negative eigenvalues|. For two qubits at most
+    // one is negative, so N = max(0, −λmin). 0 = separable, ½ = Bell state.
+    function negativity(P) {
+      const T = mk();
+      for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) {
+        const a = i >> 1, b = i & 1, a2 = j >> 1, b2 = j & 1;
+        const src = (a * 2 + b2) * 4 + (a2 * 2 + b);       // swap B indices
+        T.re[i*4+j] = P.re[src]; T.im[i*4+j] = P.im[src];
+      }
+      return Math.max(0, -minEig(T));
+    }
+    // How far ρ is from the product of its marginals (max entry difference).
+    function productGap(P) {
+      const Q = fromBloch(reduced(P, 0), reduced(P, 1));
+      let g = 0;
+      for (let k = 0; k < 16; k++) g = Math.max(g, Math.abs(P.re[k] - Q.re[k]), Math.abs(P.im[k] - Q.im[k]));
+      return g;
+    }
+    return { fromBloch, rotate, cnot, decay, reduced, p1, zz, measure, negativity, productGap };
+  })();
+
+  // ── Pickups ──────────────────────────────────────────────────────────
+  // calib and tgate are the originals (and the only ones in Duel Training,
+  // whose missions are tuned around them). The free duel adds four more, each
+  // a real control-hardware technique, on a fixed rotation so you can plan
+  // for them (no random rewards). Each one helps the ship that collects it:
+  // in this game decay drains the charge an opponent put on you, so longer
+  // T₁/T₂ would protect THEIR work. That is why there is no coherence boost.
+  const PICKUPS = {
+    calib:   { glyph:'⌖', color:'#3fe08a', name:'CALIBRATION',
+               effect:'+15% pulse fidelity: your beams land closer to the angle you charged.' },
+    tgate:   { glyph:'T', color:'#f5b73c', name:'T-CHARGE',
+               effect:'+1 T-phase (a π/4 turn about z) to knock a camper off its eigenstate.' },
+    readout: { glyph:'M', color:'#7fd0ff', name:'FAST READOUT', windS:0.35,
+               effect:'Your MEASURE is ready now, and its wind-up drops from 1 s to 0.35 s.',
+               physics:'A Purcell filter lets the readout resonator couple strongly to the qubit without shortening T₁, so a measurement finishes faster.' },
+    reset:   { glyph:'0', color:'#e8ecff', name:'ACTIVE RESET',
+               effect:'Your qubit snaps to |0⟩, so a MEASURE on you is a sure dud. It also breaks an entangled link.',
+               physics:'Hardware reset pulses pump the excitation out through a lossy mode, leaving the qubit in |0⟩ in well under a microsecond.' },
+    drive:   { glyph:'Ω', color:'#ff9f43', name:'DRIVE ×2', durS:10, rabiMult:2,
+               effect:'For 10 s your Rabi rate doubles: a full π-pulse charges in 0.6 s instead of 1.2 s.',
+               physics:'The rotation angle is θ = Ω·t, and Ω grows with drive amplitude, so twice the amplitude turns the qubit twice as far in the same time.' },
+    detune:  { glyph:'Δ', color:'#b18cff', name:'FLUX DETUNE', durS:8, dOverO:2,
+               effect:'For 8 s you are tuned away from their drive (Δ = 2Ω): their X/Y beams turn you about a tilted axis, and from |0⟩ they can lift you to 20% at most. Best grabbed while you are near |0⟩.',
+               physics:'Off resonance the drive turns the qubit about a tilted axis, so starting from |0⟩ the highest P(|1⟩) it can reach is Ω²/(Ω² + Δ²).' },
+  };
+  const PICKUP_CYCLE = ['readout', 'calib', 'reset', 'tgate', 'drive', 'detune'];
 
   // ── Duel missions: the campaign's concept gating, reborn ─────────────
   // The 7-mission campaign's real value was never the chess board — it was
@@ -1576,11 +1850,25 @@ const DuelCore = (() => {
   //              elapsed, measuredIdx }
   const DUEL_MISSIONS = [
     { id:0, title:'THE BORN RULE', concept:'Born rule',
-      brief:'Their qubit starts in |0⟩ — a MEASURE now is guaranteed to fail. Rotate them toward |1⟩ with the X-beam, then MEASURE. Your hit chance IS P(|1⟩).',
+      drone:true, par:{ s:25, shots:3 },
+      steps:[
+        { text:'Hit Sage with an X-beam: hold SHIFT, aim, release', done:ev => ev.hits >= 1 },
+        { text:'Rotate Sage to 90% or more (a full charge is a π-pulse)', done:ev => ev.maxFoeOdds >= 0.9,
+          progress:v => `Sage ${Math.round(v.foeOdds * 100)}% / 90%` },
+        { text:'MEASURE (SPACE): it hits with probability P(|1⟩)', done:ev => ev.won },
+      ],
+      brief:'Sage is a training drone here: it flies but never shoots. Its qubit starts in |0⟩, so a MEASURE now is guaranteed to fail. Rotate it toward |1⟩ with the X-beam, then MEASURE. Your hit chance IS P(|1⟩).',
       win:'Born rule: the probability you read on the HUD is the probability you got.',
       gate: () => ({ blocked:false }) },
 
     { id:1, title:'DECOHERENCE RACE', concept:'T₁ relaxation',
+      drone:true, par:{ s:8, shots:0 },
+      steps:[
+        { text:'Sage starts at |1⟩. Watch T₁ pull the odds down', done:ev => ev.elapsed > 1.5 || ev.won,
+          progress:v => `Sage ${Math.round(v.foeOdds * 100)}%` },
+        { text:'MEASURE (SPACE) before the odds are gone', done:ev => ev.won,
+          progress:v => `${Math.max(0, 20 - v.t).toFixed(0)} s left` },
+      ],
       brief:'They start fully charged, but T₁ is bleeding them back to |0⟩ fast. Land the MEASURE inside 20 seconds — after that the odds are gone and so is the round.',
       win:'T₁ conquered: an excited state is a perishable asset, not a bank balance.',
       hurry: 20,
@@ -1589,14 +1877,29 @@ const DuelCore = (() => {
         : { blocked:false } },
 
     { id:2, title:'THE BELL GAMBIT', concept:'Entanglement & correlated collapse',
-      brief:'This opponent is shielded: a direct MEASURE cannot resolve them. ENTANGLE first (E) — once you share |Φ+⟩, one measurement collapses BOTH, correlated, and that is a result the shield cannot refuse.',
+      drone:true, par:{ s:35, shots:2 },
+      steps:[
+        { text:'Self-pulse into superposition: hold F to about π/2', done:ev => ev.selfSuperposed || ev.entangled,
+          progress:v => `you ${Math.round(v.myOdds * 100)}% (aim for ~50%)` },
+        { text:'ENTANGLE Sage (E) while you are in superposition', done:ev => ev.entangled },
+        { text:'MEASURE the pair (SPACE): both collapse together', done:ev => ev.won },
+      ],
+      brief:'This opponent is shielded: a direct MEASURE cannot resolve them. Your coupler (E) is a CNOT with YOUR qubit as control, so first put yourself in superposition (self-pulse F, about π/2). From |+⟩|0⟩ the CNOT makes |Φ+⟩, and one MEASURE then collapses BOTH: a result the shield cannot refuse.',
       win:'Correlated collapse: you did not measure them, you measured the PAIR.',
       shielded:true,
       gate: ev => ev.entangled
         ? { blocked:false }
-        : { blocked:true, reason:'Shielded — a lone qubit cannot be resolved here. Entangle (E) and measure the pair.' } },
+        : { blocked:true, reason:'Shielded: a lone qubit cannot be resolved here. Self-pulse into superposition, entangle (E), then measure the pair.' } },
 
     { id:3, title:'SUPERPOSITION GAMBIT', concept:'Superposition',
+      drone:true, par:{ s:35, shots:4 },
+      steps:[
+        { text:'Self-pulse into superposition: hold F to about π/2', done:ev => ev.selfSuperposed || ev.superposedShot,
+          progress:v => `you ${Math.round(v.myOdds * 100)}% (aim for ~50%)` },
+        { text:'Fire at Sage while you are still in superposition', done:ev => ev.superposedShot },
+        { text:'Rotate Sage up and MEASURE (SPACE)', done:ev => ev.won,
+          progress:v => `Sage ${Math.round(v.foeOdds * 100)}%` },
+      ],
       brief:'Their armour only yields to a beam fired from superposition. Put YOUR OWN qubit off the poles first (a partial X-charge, not a full π), then fire.',
       win:'Superposition: the state between the poles is a real, usable resource.',
       gate: ev => ev.superposedShot
@@ -1604,6 +1907,13 @@ const DuelCore = (() => {
         : { blocked:true, reason:'Every hit bounced — you fired from a pole. Charge partway (≈π/2) so your own qubit is in superposition, then fire.' } },
 
     { id:4, title:'PHASE GAMBIT', concept:'Non-Clifford phase (Gottesman–Knill)',
+      par:{ s:40, shots:4 },
+      steps:[
+        { text:'Select the T-phase (3) and hit the camper with it', done:ev => ev.usedT },
+        { text:'Knock Sage off its axis (a landed T breaks the camp)', done:ev => ev.tCampBroken },
+        { text:'Switch back to X (1), rotate Sage up, MEASURE', done:ev => ev.won,
+          progress:v => `Sage ${Math.round(v.foeOdds * 100)}%` },
+      ],
       brief:'They camp on an eigenstate, where your attack beams are a no-op. A Clifford phase flip just moves them to the other pole of the same axis — still camped. Spend a T-charge (3): only a non-Clifford π/4 knocks them off every axis.',
       win:'Non-Clifford phase: T is the gate that buys real quantum power — and breaks a turtle.',
       camper:true,
@@ -1612,7 +1922,16 @@ const DuelCore = (() => {
         : { blocked:true, reason:'They re-camped every time. Clifford gates map eigenstates to eigenstates — you need a T-phase (3) to land them off-axis.' } },
 
     { id:5, title:'THE ZENO CAGE', concept:'Quantum Zeno effect',
-      brief:'This one re-charges the instant you stop watching. Land two MEASUREs inside 4 seconds to pin it — a watched qubit cannot evolve — then finish it while it is frozen.',
+      // Your MEASURE recharges in 1.5 s here (6 s elsewhere): with the usual
+      // cooldown two landings inside the 4 s window were impossible.
+      drone:true, measureCd:1.5, par:{ s:20, shots:0 },
+      steps:[
+        { text:'MEASURE twice within 4 s while Sage is still low', done:ev => ev.zenoLocked,
+          progress:v => `Sage ${Math.round(v.foeOdds * 100)}%` },
+        { text:'When the freeze ends it climbs again: MEASURE near the top', done:ev => ev.won,
+          progress:v => `Sage ${Math.round(v.foeOdds * 100)}%` },
+      ],
+      brief:'Sage is being driven: its P(1) climbs as sin²(Ωt/2). Measure it early and often (your MEASURE recharges in 1.5 s here): each dud snaps it back to |0⟩, and two duds inside 4 s freeze it there. When the freeze ends it climbs again: MEASURE it near the top.',
       win:'Quantum Zeno: observation itself is the cage.',
       regen:true,
       gate: ev => ev.zenoLocked
@@ -1620,6 +1939,13 @@ const DuelCore = (() => {
         : { blocked:true, reason:'It out-charged you. Two MEASUREs inside 4s freeze it — pin it first, then finish it.' } },
 
     { id:6, title:'PULSE FORGE', concept:'Pulse calibration',
+      par:{ s:60, shots:5 },
+      steps:[
+        { text:'Collect calibration pickups (⌖) to 90% fidelity', done:ev => ev.fidelity >= 0.9,
+          progress:v => `fidelity ${Math.round(v.fidelity * 100)}% / 90%` },
+        { text:'Rotate Sage up and MEASURE (SPACE)', done:ev => ev.won,
+          progress:v => `Sage ${Math.round(v.foeOdds * 100)}%` },
+      ],
       brief:'Your drive is badly detuned: every beam misses the angle you asked for. Collect calibration pickups until fidelity ≥ 90%, then land a MEASURE. A pulse you cannot aim is not a gate.',
       win:'Calibration: θ = Ω·t only means something if your Ω is what you think it is.',
       lowFidelity:0.15,
@@ -1627,6 +1953,16 @@ const DuelCore = (() => {
         ? { blocked:false }
         : { blocked:true, reason:`Fidelity ${Math.round(ev.fidelity*100)}% — your pulses are still guesswork. Reach 90% before you measure.` } },
   ];
+
+  // Stars, Rabi Rider style: ★ clear, ★★ under par time, ★★★ under par
+  // time in at most par shots.
+  function missionStars(idx, seconds, shots) {
+    const m = DUEL_MISSIONS[idx];
+    if (!m || !m.par) return 1;
+    const fast = seconds <= m.par.s;
+    return 1 + (fast ? 1 : 0) + (fast && shots <= m.par.shots ? 1 : 0);
+  }
+  const starText = n => '★'.repeat(n) + '☆'.repeat(3 - n);
 
   function missionGate(idx, evidence) {
     const m = DUEL_MISSIONS[idx];
@@ -1669,9 +2005,10 @@ const DuelCore = (() => {
     return L.slice(0, 3);
   }
 
-  return { debriefLines, parkPulse,
+  return { debriefLines, parkPulse, missionStars, starText,
            K, AXES, BEAMS, ZONE, ZENO, DUEL_MISSIONS, missionGate,
-           mulberry32, chargeToTheta, rotateBloch,
+           mulberry32, chargeToTheta, driveTheta, rotateBloch,
+           detunedRotate, reducedBloch, Pair, PICKUPS, PICKUP_CYCLE, bestPulse, bestAttack,
            eigenstateAngleDeg, isEigenstate, isCardinal, applyBeamHit,
            resolveBeam, decayStep, zoneAt, odds, measureRoll,
            sigmaFor, applyFidelity, bellPair, bellOdds, bellMeasure };
@@ -1741,6 +2078,8 @@ const DuelProgress = (() => {
       const bestTimeS = finite(src.bestTimeS, 0, 86400);
       const fewestShots = whole(src.fewestShots, 0, 100000);
       const bestMeasureP = finite(src.bestMeasureP, 0, 1);
+      const bestStars = whole(src.bestStars, 1, 3);
+      if (bestStars != null) rec.bestStars = bestStars;
       if (bestTimeS != null) rec.bestTimeS = +bestTimeS.toFixed(2);
       if (fewestShots != null) rec.fewestShots = fewestShots;
       if (bestMeasureP != null) rec.bestMeasureP = +bestMeasureP.toFixed(4);
@@ -1784,6 +2123,10 @@ const DuelProgress = (() => {
       }
       if (p != null && (rec.bestMeasureP == null || p > rec.bestMeasureP)) {
         rec.bestMeasureP = +p.toFixed(4); newRecords.push(`MISSION ${mission + 1} BEST MEASURE`);
+      }
+      const stars = whole(result.stars, 1, 3);
+      if (stars != null && (rec.bestStars == null || stars > rec.bestStars)) {
+        rec.bestStars = stars; newRecords.push(`MISSION ${mission + 1} ${DuelCore.starText(stars)}`);
       }
       next.missions[mission] = rec;
     }
@@ -1837,6 +2180,13 @@ function missionRecordText(missionId) {
   if (rec.bestMeasureP != null) fields.push(`${Math.round(rec.bestMeasureP * 100)}% MEASURE`);
   return fields.join(' · ');
 }
+function starHTML(n) {
+  return `<span style="color:#ffd166;letter-spacing:.1em">${'★'.repeat(n)}</span><span style="color:#4a5277;letter-spacing:.1em">${'★'.repeat(3 - n)}</span>`;
+}
+function totalStars() {
+  const ms = GAME.duelProfile.missions || {};
+  return Object.values(ms).reduce((a, r) => a + (r.bestStars || 0), 0);
+}
 function masteryPanelHTML() {
   const have = new Set(GAME.duelProfile.badges || []);
   return `<div class="mastery-grid" aria-label="Optional quantum mastery challenges">${DuelProgress.BADGES.map(b => `
@@ -1844,6 +2194,21 @@ function masteryPanelHTML() {
       <strong>${have.has(b.id) ? '✓ ' : '◇ '}${b.title}</strong>
       <span>${b.requirement}</span>
     </div>`).join('')}</div>`;
+}
+function duelPickupsHTML() {
+  const P = DuelCore.PICKUPS;
+  return `<div class="lb-wrap" data-pickups="v1">${DuelCore.PICKUP_CYCLE.map(k => `
+    <div class="lb-row"><span style="white-space:nowrap;margin-right:14px"><b style="color:${P[k].color}">${P[k].glyph}</b> ${P[k].name}</span><span class="lb-val">${P[k].effect}</span></div>`).join('')}
+  </div>`;
+}
+function duelEntangleHTML() {
+  const row = (k, v) => `<div class="lb-row"><span style="white-space:nowrap;margin-right:14px">${k}</span><span class="lb-val">${v}</span></div>`;
+  return `<div class="lb-wrap" data-entangle="v1">
+    ${row('E is a CNOT', 'Your qubit is the control. At |0⟩ nothing happens; at |1⟩ it flips theirs; in superposition it entangles you (|+⟩|0⟩ → |Φ+⟩) and their odds become 50%.')}
+    ${row('Match or opposite', 'A MEASURE on one half collapses both. If outcomes MATCH, a dud drops you to |0⟩ with them; if OPPOSITE, a dud leaves you at |1⟩.')}
+    ${row('Flip it', 'An X or Y π-pulse on either half swaps MATCH and OPPOSITE. It cannot change the other side\'s odds (no signalling). Sage flips when it sees your MEASURE wind up.')}
+    ${row('Keep it alive', 'Each qubit still decays: T₁/T₂ wear the link down, and a hotspot destroys it in about 2 s. Active reset breaks it instantly.')}
+  </div>`;
 }
 function duelControlsHTML() {
   const k = DUEL_CONTROLS.keyboard, g = DUEL_CONTROLS.gamepad;
@@ -1910,7 +2275,7 @@ const DuelInput = (() => {
       selfPressed:selfHeld && (prev[B.selfPulse] || 0) <= 0.25,
       selfReleased:fall(B.selfPulse),
       measurePressed:rise(B.measure), entanglePressed:rise(B.entangle), pausePressed:rise(B.pause),
-      replayPressed:rise(B.entangle), confirmPressed:rise(B.measure),
+      replayPressed:rise(B.entangle), confirmPressed:rise(B.measure), quitPressed:rise(1),
       beamPrevPressed:rise(B.beamPrev), beamNextPressed:rise(B.beamNext),
       beamDirect:rise(B.beamX) ? 'X' : rise(B.beamY) ? 'Y' : rise(B.beamT) ? 'T' : null,
       anyActive:buttons.some(v => v > 0.25),
@@ -1941,7 +2306,16 @@ const GAME = {
   evQuizEnabled:false, evQuizResults:[],   // EV-1 — off by default
   importedT1Ns:null,                       // BR-1 — ?t1=<ns> deep link
   difficulty:1,                            // 0=Cadet 1=Duelist 2=Menace
+  // Beginner help, both on by default and both disclosed in the HUD:
+  // aim assist bends YOUR projectiles toward Sage (never Sage's toward you);
+  // coach shows the next step and the physics behind it.
+  aimAssist:loadFlag('qb_aim_assist', true),
+  coach:loadFlag('qb_coach', true),
 };
+function loadFlag(key, dflt) {
+  try { const v = localStorage.getItem(key); return v == null ? dflt : v === '1'; } catch (e) { return dflt; }
+}
+function saveFlag(key, on) { try { localStorage.setItem(key, on ? '1' : '0'); } catch (e) {} }
 
 
 // ═══════════════════════════════════════════════════════
@@ -2350,6 +2724,10 @@ const DUEL = (() => {
     introT: 0, shake: 0, flash: 0, flashColor: '#ffffff',
     announcer: '', announceT: 0,
     frameMs: [], showPerf: false,
+    // Measurement reveal: the Born-rule roll shown on screen, with a short
+    // hit-stop (sim frozen, drawing continues). A winning collapse holds the
+    // freeze a little longer, then ends the round.
+    reveal: null, hitStop: 0, pendingEnd: null, pickupSeq: 0,
   };
 
   // ── Entity pools — preallocated; the sim never allocates (perf budget) ──
@@ -2412,7 +2790,7 @@ const DUEL = (() => {
   const sfxFire    = () => sweep(880, 180, 0.16, 'sawtooth', 0.16);
   const sfxHit     = () => noise(0.14, 0.22);
   const sfxShield  = () => sweep(300, 900, 0.16, 'sine', 0.13);
-  const sfxWind    = () => sweep(220, 1400, DuelCore.K.MEASURE_WIND_S, 'sine', 0.10);
+  const sfxWind    = (d) => sweep(220, 1400, d || DuelCore.K.MEASURE_WIND_S, 'sine', 0.10);
   const sfxCollapse= () => { noise(0.3, 0.3); sweep(400, 60, 0.5, 'sawtooth', 0.2); };
   const sfxDud     = () => sweep(240, 90, 0.3, 'triangle', 0.15);
   const sfxRoundWin= () => { sweep(280, 840, 0.24, 'triangle', 0.14); sweep(520, 1180, 0.34, 'sine', 0.10); };
@@ -2453,10 +2831,12 @@ const DUEL = (() => {
              bellIdx: -1,         // 0/1 while entangled, else -1
              zenoUntil: 0,        // Zeno lock expiry (S.t seconds)
              measStamps: [],      // recent MEASURE landings on THIS ship
+             // free-duel power-ups (S.t expiry times; fastReadout is one-shot)
+             driveUntil: 0, detuneUntil: 0, fastReadout: false, windTotal: 0,
              inHot: false };
   }
 
-  function start(seed, mission, keepMatch) {
+  function start(seed, mission, keepMatch, opts) {
     initPools();
     S.seed = seed || (Date.now() & 0xffffffff);
     S.rand = DuelCore.mulberry32(S.seed);
@@ -2472,6 +2852,8 @@ const DUEL = (() => {
       { x: K.WORLD_W*0.79, y: K.WORLD_H*0.74, r:  96, t1: DuelCore.ZONE.HOT_T1, t2: DuelCore.ZONE.HOT_T2 },
     ];
     S.pickups = []; S.pickupTimer = 4; S.beam = 'X'; S.bell = null;
+    S.reveal = null; S.hitStop = 0; S.pendingEnd = null; S.pickupSeq = 0;
+    S.pairNeg = 0; S.pairZZ = 0; S.botFlipT = 0;
     S.stars = [];
     for (let i = 0; i < 140; i++)
       S.stars.push({ x: S.rand() * K.WORLD_W, y: S.rand() * K.WORLD_H,
@@ -2483,6 +2865,10 @@ const DUEL = (() => {
     S.round = { winner: null, method: null, p: 0, endedAt: 0 };
     S.debrief = null; S.progress = null;
     S.introT = 2.4; S.shake = 0; S.flash = 0;
+    // Brief card (Rabi Rider style): the goal, the steps and the physics,
+    // before anything moves. Shown when a player starts from the menus.
+    S.briefing = !!(opts && opts.brief);
+    S.learnQ = [];
     S.announcer = ''; S.announceT = 0;
     S.rstat = { shieldedAgainstYou: 0, duds: 0, selfPulses: 0, hotspotTime: 0,
                 hotspotDefenseTime: 0, lastTheta: null };
@@ -2499,7 +2885,8 @@ const DUEL = (() => {
     S.mission = (mission == null) ? -1 : mission;
     S.ev = { entangled:false, bellCollapse:false, usedT:false, tCampBroken:false,
              hotspotDefenseTime:0, superposedShot:false, zenoLocked:false,
-             fidelity:0, elapsed:0, measuredIdx:-1 };
+             fidelity:0, elapsed:0, measuredIdx:-1,
+             hits:0, maxFoeOdds:0, selfSuperposed:false, won:false };
     S.gateMsg = ''; S.gateMsgT = 0;
     const M = DuelCore.DUEL_MISSIONS[S.mission];
     if (M) {
@@ -2570,17 +2957,51 @@ const DUEL = (() => {
     const th = spec.fixedTheta != null ? spec.fixedTheta
       : DuelCore.applyFidelity(theta, ship.fidelity, S.rand);
     const before = ship.bloch;
-    ship.bloch = DuelCore.rotateBloch(before, DuelCore.AXES[spec.axis], th);
-    ship.arc = { from: before, to: ship.bloch, t: 0 };
+    if (S.bell && ship.bellIdx >= 0) linkedPulse(ship, DuelCore.AXES[spec.axis], th, spec.color, false);
+    else {
+      ship.bloch = DuelCore.rotateBloch(before, DuelCore.AXES[spec.axis], th);
+      ship.arc = { from: before, to: ship.bloch, t: 0 };
+    }
     ship.beamCd = K.BEAM_CD_S;
     spawnParts(10, ship.x, ship.y, spec.color, 70, 0.45);
-    floatTxt(ship, 'SELF ' + beamKey, spec.color);
+    if (ship.bellIdx < 0) floatTxt(ship, 'SELF ' + beamKey, spec.color);
     sweep(300, 620, 0.14, 'sine', 0.12);
     if (ship.owner === 0 && S.ev) {
+      if (!DuelCore.isEigenstate(ship.bloch, 'Z')) S.ev.selfSuperposed = true;
+      learn('self');
       S.selfPulses = (S.selfPulses || 0) + 1;
       if (S.rstat) S.rstat.selfPulses++;
       if (!DuelCore.isEigenstate(ship.bloch, 'Z')) S.ev.superposedShot = true;
     }
+  }
+
+  // ── Entangled link (S.bell holds a DuelCore.Pair density matrix) ──────
+  // Ship k of the pair is qubit bellIdx; its .bloch is always its reduced
+  // state, so every reader (odds, spheres, bot) sees the real marginal.
+  const LINK_ENT_MIN = 0.05;          // negativity that counts as entangled (Bell = 0.5)
+  const AIM_CONE = 0.6, AIM_TURN = 0.5;   // aim assist: ±35° cone, turn rate in rad/s
+  function syncPair() {
+    if (!S.bell) return;
+    for (const sh of S.ships) if (sh.bellIdx >= 0) sh.bloch = DuelCore.Pair.reduced(S.bell, sh.bellIdx);
+    S.pairNeg = DuelCore.Pair.negativity(S.bell);
+    S.pairZZ = DuelCore.Pair.zz(S.bell);
+    // Once the pair is (numerically) a product state, nothing is shared any
+    // more and two Bloch vectors describe it exactly: drop the link.
+    if (DuelCore.Pair.productGap(S.bell) < 2e-3) endLink();
+  }
+  function endLink() {
+    for (const sh of S.ships) sh.bellIdx = -1;
+    S.bell = null; S.pairNeg = 0; S.pairZZ = 0;
+  }
+
+  const rabiMult = ship => ship.driveUntil > S.t ? DuelCore.PICKUPS.drive.rabiMult : 1;
+  const detuneOf = ship => ship.detuneUntil > S.t ? DuelCore.PICKUPS.detune.dOverO : 0;
+  // Start a MEASURE wind-up; FAST READOUT shortens this one.
+  function windMeasure(ship) {
+    const w = ship.fastReadout ? DuelCore.PICKUPS.readout.windS : K.MEASURE_WIND_S;
+    ship.fastReadout = false;
+    ship.winding = ship.windTotal = w;
+    sfxWind(w);
   }
 
   function fireMeasure(ship) {
@@ -2590,19 +3011,37 @@ const DUEL = (() => {
     p.y = ship.y + Math.sin(ship.ang) * K.SHIP_R;
     p.vx = Math.cos(ship.ang) * K.MEASURE_SPEED;
     p.vy = Math.sin(ship.ang) * K.MEASURE_SPEED;
-    ship.measCd = K.MEASURE_CD_S;
+    const MC = DuelCore.DUEL_MISSIONS[S.mission];
+    ship.measCd = (ship.owner === 0 && MC && MC.measureCd) ? MC.measureCd : K.MEASURE_CD_S;
     if (ship.owner === 0) S.measures++;
   }
 
   // A landed beam: rotate the target's qubit. The 250ms arc animation IS the
   // damage number — the sphere swinging is the feedback (design pillar 2).
   function landBeam(p, target) {
+    // Linked target: the pulse is a local unitary on the PAIR. It cannot
+    // change the partner's marginal (no-signalling), but it can change the
+    // correlations: an X or Y π-pulse turns "outcomes match" into "opposite".
+    if (S.bell && target.bellIdx >= 0 && !(target.zenoUntil > S.t)) {
+      const spec = DuelCore.BEAMS[p.beam] || DuelCore.BEAMS.X;
+      const shooter = S.ships[p.owner];
+      let axis = DuelCore.AXES[spec.axis];
+      let th = spec.fixedTheta != null ? spec.fixedTheta
+        : DuelCore.applyFidelity(p.theta, shooter.fidelity, S.rand);
+      const d = spec.kind === 'attack' ? detuneOf(target) : 0;
+      if (d) { axis = { x: axis.x, y: axis.y, z: axis.z + d }; th *= Math.sqrt(1 + d * d); }
+      linkedPulse(target, axis, th, spec.color, true);
+      if (p.owner === 0 && S.ev) S.ev.hits++;
+      sfxHit();
+      return;
+    }
     const before = target.bloch;
     const wasCardinal = DuelCore.isCardinal(before);
     const shooter = S.ships[p.owner];
     const res = DuelCore.resolveBeam(before, p.beam, p.theta, {
       fidelity: shooter.fidelity, rand: S.rand,
       zenoUntil: target.zenoUntil, now: S.t,
+      detune: detuneOf(target),
     });
     if (res.zenoBlocked) {
       target.shieldFlash = 0.4;
@@ -2615,20 +3054,15 @@ const DUEL = (() => {
       target.shieldFlash = 0.4;
       spawnParts(10, p.x, p.y, '#9aa3cf', 90, 0.5);
       floatTxt(target, 'EIGENSTATE!', '#9aa3cf');
+      if (p.owner === 0) learn('shield');
       if (p.owner === 0 && S.rstat) S.rstat.shieldedAgainstYou++;
       sfxShield();
       return;
     }
-    // While entangled, a local rotation cannot change the partner's odds —
-    // the no-communication theorem. We keep the pair's 50/50 and just show
-    // the beam landing; the link is broken only by a MEASURE.
-    if (target.bellIdx >= 0) {
-      target.hitFlash = 0.35;
-      spawnParts(10, p.x, p.y, '#c97bff', 100, 0.5);
-      floatTxt(target, 'NO-SIGNALLING', '#c97bff');
-      return;
-    }
     target.bloch = res.bloch;
+    if (p.owner === 0 && S.ev) S.ev.hits++;
+    if (p.owner === 0) learn('hit');
+    if (p.owner === 1 && DuelCore.odds(target.bloch) > 0.4) learn('hurt');
     if (p.owner === 0 && p.beam === 'T' && wasCardinal && !DuelCore.isCardinal(res.bloch) && S.ev)
       S.ev.tCampBroken = true;
     target.arc = { from: before, to: res.bloch, t: 0 };
@@ -2636,6 +3070,7 @@ const DUEL = (() => {
     const spec = DuelCore.BEAMS[p.beam] || DuelCore.BEAMS.X;
     spawnParts(14, p.x, p.y, spec.color, 130, 0.6);
     if (spec.kind === 'phase') floatTxt(target, 'PHASE ' + (p.beam === 'T' ? 'π/4' : ''), spec.color);
+    else if (res.detuned) floatTxt(target, 'OFF-RESONANT', DuelCore.PICKUPS.detune.color);
     if (p.theta >= Math.PI * 0.75) triggerFx('MAX-CHARGE HIT', spec.color, 0.28);
     sfxHit();
     // §8 item 3 — the learning beat: the player's beam visibly moved the
@@ -2655,25 +3090,32 @@ const DUEL = (() => {
   }
 
   function landMeasure(p, target) {
+    if (S.pendingEnd) return;                      // round already decided this frame
     const other = S.ships[1 - (target.owner)];
     let res, method = 'measure';
+    let partnerP1 = null, wasEntangled = false;
     if (S.bell && target.bellIdx >= 0) {
-      // Entangled: one measurement collapses BOTH, correlated. The shooter
-      // wins only if the TARGET lands on |1⟩ — which is now a coin flip
-      // regardless of how charged either side was before the link.
-      const r = DuelCore.bellMeasure(S.bell, target.bellIdx, S.rand);
-      target.bloch = r.blochSelf;
-      other.bloch = r.blochPartner;
-      target.bellIdx = other.bellIdx = -1; S.bell = null;
-      floatTxt(target, 'CORRELATED', '#c97bff');
-      res = { outcome: r.outcome, p: r.p };
+      // Linked: a Z measurement on one half of the real two-qubit state.
+      // The target collapses by the Born rule on its marginal, and the
+      // partner collapses to whatever the correlations leave it in (for
+      // |Φ+⟩ the same outcome, for |Ψ+⟩ the opposite one).
+      wasEntangled = (S.pairNeg || 0) > LINK_ENT_MIN;
+      const r = DuelCore.Pair.measure(S.bell, target.bellIdx, S.rand);
+      endLink();
+      target.bloch = r.self;
+      other.bloch = r.partner;
+      partnerP1 = r.partnerP1;
+      floatTxt(other, partnerP1 > 0.98 ? 'COLLAPSED → |1⟩' : partnerP1 < 0.02 ? 'COLLAPSED → |0⟩' : `P(1) NOW ${(partnerP1*100).toFixed(0)}%`, '#c97bff');
+      res = { outcome: r.outcome, p: r.p, draw: r.draw };
       method = 'bell-measure';
-      if (p.owner === 0 && S.ev) S.ev.bellCollapse = true;
+      if (p.owner === 0 && S.ev && wasEntangled) S.ev.bellCollapse = true;
     } else {
       res = DuelCore.measureRoll(target.bloch, S.rand);
       target.bloch = res.bloch;
     }
     target.arc = null;
+    S.reveal = { shooter: p.owner, p: res.p, draw: res.draw, outcome: res.outcome,
+                 bell: method === 'bell-measure', partnerP1, blocked: false, t: 0 };
 
     // Zeno bookkeeping: NEEDED landings inside WINDOW pin the target.
     target.measStamps.push(S.t);
@@ -2699,38 +3141,128 @@ const DUEL = (() => {
           floatTxt(target, 'SHIELDED', '#9aa3cf');
           sfxShield();
           tele('mission_gate_blocked', { mission: S.mission, reason: g.reason });
+          S.reveal.blocked = true; S.hitStop = REVEAL_DUD_STOP_S;
           return;
         }
       }
       sfxCollapse();
       spawnParts(60, target.x, target.y, target.col, 260, 1.1);
-      endRound(p.owner, method, res.p);
+      // Freeze on the reveal, then end the round (see frame()).
+      S.hitStop = REVEAL_WIN_STOP_S;
+      S.pendingEnd = [p.owner, method, res.p];
     } else {
+      S.hitStop = REVEAL_DUD_STOP_S;
       sfxDud();
       spawnParts(18, target.x, target.y, '#9aa3cf', 110, 0.6);
       floatTxt(target, 'DUD — reset to |0⟩', '#9aa3cf');
+      if (p.owner === 0) learn('dud');
       triggerFx('MEASURE → |0⟩ · NO WIN', '#9aa3cf', 0.12);
       if (p.owner === 0 && S.rstat) S.rstat.duds++;
     }
   }
 
-  // Entangle beam: puts both duellists into |Φ+⟩ (see DuelCore's Bell notes).
+  // A pulse on one half of a linked pair (a beam on them, or a self-pulse).
+  function linkedPulse(ship, axis, theta, col, incoming) {
+    const before = ship.bloch, zz0 = DuelCore.Pair.zz(S.bell);
+    S.bell = DuelCore.Pair.rotate(S.bell, ship.bellIdx, axis, theta);
+    syncPair();
+    ship.arc = { from: before, to: ship.bloch, t: 0 };
+    if (incoming) ship.hitFlash = 0.35;
+    spawnParts(12, ship.x, ship.y, col, 100, 0.5);
+    const zz1 = S.bell ? DuelCore.Pair.zz(S.bell) : 0;
+    if (S.bell && zz0 > 0.3 && zz1 < -0.3) floatTxt(ship, 'NOW OPPOSITE', '#c97bff');
+    else if (S.bell && zz0 < -0.3 && zz1 > 0.3) floatTxt(ship, 'NOW MATCHED', '#c97bff');
+    else floatTxt(ship, 'PAIR PULSE', '#c97bff');
+  }
+
+  // Coupler beam: a CNOT on the real two-qubit state, shooter = control.
+  //   your qubit at |0⟩ → nothing happens
+  //   your qubit at |1⟩ → their qubit is flipped (X)
+  //   your qubit in superposition → entanglement (|+⟩|0⟩ → |Φ+⟩)
+  // and with a control in superposition the target's P(|1⟩) becomes 50%
+  // whatever it was, which is why entangling is the comeback move.
   function landEntangle(p, target) {
     const shooter = S.ships[p.owner];
     if (S.bell) return;
-    S.bell = DuelCore.bellPair();
+    const Pr = DuelCore.Pair;
+    const rho = Pr.cnot(Pr.fromBloch(shooter.bloch, target.bloch), 0);
+    const neg = Pr.negativity(rho), gap = Pr.productGap(rho);
+    const before = target.bloch;
+    if (gap < 2e-3) {
+      // Nothing shared: the CNOT acted as identity or as a plain X on them.
+      target.bloch = Pr.reduced(rho, 1);
+      target.arc = { from: before, to: target.bloch, t: 0 };
+      const flipped = DuelCore.odds(target.bloch) - DuelCore.odds(before);
+      floatTxt(target, Math.abs(flipped) > 0.05 ? 'CNOT FLIP' : 'CNOT: CONTROL AT |0⟩', '#c97bff');
+      if (Math.abs(flipped) <= 0.05) floatTxt(shooter, 'NEED SUPERPOSITION', '#c97bff');
+      sfxShield();
+      return;
+    }
+    S.bell = rho;
     shooter.bellIdx = 0; target.bellIdx = 1;
-    shooter.arc = target.arc = null;
+    syncPair();
+    shooter.arc = null; target.arc = { from: before, to: target.bloch, t: 0 };
     spawnParts(40, target.x, target.y, '#c97bff', 190, 1.0);
-    floatTxt(target, 'ENTANGLED — 50/50', '#c97bff');
-    if (p.owner === 0 && S.ev) S.ev.entangled = true;
+    floatTxt(target, neg > LINK_ENT_MIN ? `ENTANGLED · ${S.pairZZ >= 0 ? 'MATCH' : 'OPPOSITE'}` : 'CORRELATED (classical)', '#c97bff');
+    if (p.owner === 0 && S.ev && neg > LINK_ENT_MIN) S.ev.entangled = true;
+    if (neg > LINK_ENT_MIN) learn('linked');
     sfxShield();
-    tele('entangled', { by: p.owner === 0 ? 'player' : 'sage' });
+    tele('entangled', { by: p.owner === 0 ? 'player' : 'sage', negativity: +neg.toFixed(3) });
+  }
+
+  const REVEAL_S = 2.2, REVEAL_WIN_STOP_S = 1.1, REVEAL_DUD_STOP_S = 0.35;
+
+  // A ship collects a pickup. Works the same for you and for Sage.
+  function applyPickup(sh, kind) {
+    const P = DuelCore.PICKUPS[kind];
+    if (kind === 'calib') {
+      sh.fidelity = Math.min(1, sh.fidelity + 0.15);
+      floatTxt(sh, `FIDELITY ${(sh.fidelity*100)|0}%`, P.color);
+      if (sh.owner === 0) tele('pickup', { kind: 'calibration', fidelity: +sh.fidelity.toFixed(2) });
+      return;
+    }
+    if (kind === 'tgate') {
+      sh.tCharges = Math.min(3, sh.tCharges + 1);
+      floatTxt(sh, `T-CHARGE ×${sh.tCharges}`, P.color);
+      if (sh.owner === 0) tele('pickup', { kind: 't_charge', held: sh.tCharges });
+      return;
+    }
+    if (kind === 'readout') {
+      sh.measCd = 0;
+      if (sh.winding > 0) sh.winding = Math.min(sh.winding, P.windS);   // already winding: hurry it
+      else sh.fastReadout = true;
+    } else if (kind === 'reset') {
+      if (S.bell && sh.bellIdx >= 0) {
+        // Resetting one half of a pair leaves the partner in its reduced
+        // state: for |Φ+⟩ that is the maximally mixed I/2 (P(|1⟩) = 50%).
+        const other = S.ships[1 - sh.owner];
+        other.bloch = DuelCore.Pair.reduced(S.bell, other.bellIdx);
+        endLink();
+      }
+      const before = sh.bloch;
+      sh.bloch = { x: 0, y: 0, z: 1 };
+      sh.arc = { from: before, to: sh.bloch, t: 0 };
+      sh.zenoUntil = 0;
+    } else if (kind === 'drive') {
+      sh.driveUntil = S.t + P.durS;
+    } else if (kind === 'detune') {
+      sh.detuneUntil = S.t + P.durS;
+    }
+    floatTxt(sh, P.name, P.color);
+    if (sh.owner === 0) { tele('pickup', { kind }); learn('pickup', kind); }
   }
 
   // Small world-space floater, reusing the campaign's float list shape.
   function floatTxt(ship, text, col) {
-    const f = { text, x: w2sx(ship.x), y: w2sy(ship.y) - 26, vy: -0.5,
+    // Stack above any fresh floater nearby (either ship) so labels never overprint.
+    const x = w2sx(ship.x);
+    let y = w2sy(ship.y) - 26;
+    for (let pass = 0, moved = true; moved && pass < 8; pass++) {
+      moved = false;
+      for (const o of S.floats)
+        if (o.life > 0.3 && Math.abs(o.x - x) < 130 && Math.abs(o.y - y) < 13) { y = o.y - 14; moved = true; }
+    }
+    const f = { text, x, y, vy: -0.5,
                 life: 1.6, color: col, size: 8 };
     S.floats.push(f);
     if (S.floats.length > 24) S.floats.shift();
@@ -2742,7 +3274,7 @@ const DUEL = (() => {
     if (winner === 0) S.match.you++; else S.match.them++;
     const won = winner === 0;
     const progress = recordDuelOutcome({
-      mission:S.mission, won, method, seconds:S.t, shots:S.shotCount, p,
+      mission:S.mission, won, method, seconds:S.t, shots:S.shotCount, p, stars:S.missionStars || null,
       matchFinished:S.mission < 0 && matchOver(),
       matchWon:S.match.you > S.match.them,
       evidence:{
@@ -2780,6 +3312,8 @@ const DUEL = (() => {
         concept: (DuelCore.DUEL_MISSIONS[S.mission] || {}).concept });
     }
     S.round = { winner, method, p, endedAt: S.t };
+    if (S.ev && winner === 0) S.ev.won = true;
+    S.missionStars = (winner === 0 && S.mission >= 0) ? DuelCore.missionStars(S.mission, S.t, S.shotCount) : 0;
     triggerFx(winner === 0 ? 'ROUND WON · QUBIT COLLAPSED' : 'ROUND LOST · YOUR QUBIT COLLAPSED',
               winner === 0 ? '#3fe08a' : '#ff5a72', 0.75);
     if (winner === 0) sfxRoundWin(); else sfxRoundLoss();
@@ -2831,10 +3365,14 @@ const DUEL = (() => {
       // but the LOCAL T1/T2 if this ship is standing in a hotspot.
       const zone = DuelCore.zoneAt(sh.x, sh.y, S.zones);
       const oddsBeforeDecay = DuelCore.odds(sh.bloch);
+      if (zone && !sh.inHot && sh.owner === 0) learn('hotspot');
       sh.inHot = !!zone;
-      // An entangled qubit's own vector is meaningless until collapse (the
-      // pair holds the state), so skip local decay while linked.
-      if (sh.bellIdx < 0) sh.bloch = DuelCore.decayStep(sh.bloch, dt, zone);
+      // Linked: each qubit decays through its own channel on the pair's
+      // density matrix (hotspots kill entanglement fast). syncPair() below.
+      if (sh.bellIdx >= 0 && S.bell)
+        S.bell = DuelCore.Pair.decay(S.bell, sh.bellIdx,
+          { T1: (zone && zone.t1) || K.T1_S, T2: (zone && zone.t2) || K.T2_S, dt });
+      else sh.bloch = DuelCore.decayStep(sh.bloch, dt, zone);
       if (sh.owner === 0 && zone && S.rstat) {
         S.rstat.hotspotTime += dt;
         if (sh.bellIdx < 0 && oddsBeforeDecay >= 0.35
@@ -2846,17 +3384,23 @@ const DUEL = (() => {
       sh.entCd = Math.max(0, (sh.entCd || 0) - dt);
       // Mission 5's cage re-charges itself unless Zeno-pinned.
       const MM = DuelCore.DUEL_MISSIONS[S.mission];
-      if (MM && MM.regen && sh.owner === 1 && sh.zenoUntil <= S.t && sh.bellIdx < 0) {
-        const want = { x:0, y:0, z:-1 };
-        sh.bloch = { x: sh.bloch.x*0.9, y: sh.bloch.y*0.9,
-                     z: sh.bloch.z + (want.z - sh.bloch.z) * Math.min(1, dt*0.9) };
-      }
+      // A real resonant drive on Sage (rotation about x, π in 6 s), so it
+      // climbs P(1) = sin²(Ωt/2) and, left alone, Rabi-oscillates back down.
+      // Each dud MEASURE resets it to |0⟩, where the climb starts over slowly
+      // (quadratically): measure often and it stays near |0⟩.
+      if (MM && MM.regen && sh.owner === 1 && sh.zenoUntil <= S.t && sh.bellIdx < 0 && S.introT <= 0)
+        sh.bloch = DuelCore.rotateBloch(sh.bloch, DuelCore.AXES.X, Math.PI / 6 * dt);
       if (sh.arc) { sh.arc.t += dt * 1000 / K.ARC_MS; if (sh.arc.t >= 1) sh.arc = null; }
       // MEASURE wind-up (telegraph), then launch.
       if (sh.winding > 0) {
         sh.winding = Math.max(0, sh.winding - dt);
         if (sh.winding === 0) fireMeasure(sh);
       }
+    }
+    syncPair();
+    if (S.ev) {
+      S.ev.maxFoeOdds = Math.max(S.ev.maxFoeOdds, DuelCore.odds(foe.bloch));
+      S.ev.elapsed = S.t; S.ev.fidelity = me.fidelity;
     }
     if (S.gateMsgT > 0) S.gateMsgT = Math.max(0, S.gateMsgT - dt);
     if (S.actions.aim.active) {
@@ -2874,6 +3418,20 @@ const DUEL = (() => {
     // Projectiles
     for (const p of S.proj) {
       if (!p.live) continue;
+      // Aim assist (player only): a beam takes ~0.7 s to cross the arena and
+      // Sage moves several ship-widths in that time, so unassisted shots at
+      // where Sage IS almost always miss. Steer toward Sage inside a 60° cone.
+      if (p.owner === 0 && GAME.aimAssist) {
+        const tg = S.ships[1];
+        const cur = Math.atan2(p.vy, p.vx);
+        let da = Math.atan2(tg.y - p.y, tg.x - p.x) - cur;
+        da = Math.atan2(Math.sin(da), Math.cos(da));
+        if (Math.abs(da) < AIM_CONE) {
+          const a = cur + Math.max(-AIM_TURN * dt, Math.min(AIM_TURN * dt, da));
+          const sp = Math.hypot(p.vx, p.vy);
+          p.vx = Math.cos(a) * sp; p.vy = Math.sin(a) * sp;
+        }
+      }
       p.x += p.vx * dt; p.y += p.vy * dt;
       p.ttl -= dt;
       if (p.ttl <= 0 || p.x < -40 || p.x > K.WORLD_W + 40 || p.y < -40 || p.y > K.WORLD_H + 40) {
@@ -2891,9 +3449,14 @@ const DUEL = (() => {
     // Fixed cadence, alternating type, never random-rewarded (P6 bans
     // variable-ratio gambling) — you can plan for them.
     S.pickupTimer -= dt;
-    if (S.pickupTimer <= 0 && S.pickups.length < 3) {
-      S.pickupTimer = 9;
-      const kind = (S.pickups.length + S.shotCount) % 2 === 0 ? 'calib' : 'tgate';
+    const freeDuel = S.mission < 0;
+    if (S.pickupTimer <= 0 && S.pickups.length < (freeDuel ? 4 : 3)) {
+      S.pickupTimer = freeDuel ? 6 : 9;
+      // Duel Training keeps its original calib/T alternation (its missions
+      // are tuned around it); the free duel walks the full fixed rotation.
+      const kind = freeDuel
+        ? DuelCore.PICKUP_CYCLE[(S.pickupSeq++) % DuelCore.PICKUP_CYCLE.length]
+        : (S.pickups.length + S.shotCount) % 2 === 0 ? 'calib' : 'tgate';
       let px, py, tries = 0;
       do {
         px = 120 + S.rand() * (K.WORLD_W - 240);
@@ -2907,15 +3470,7 @@ const DUEL = (() => {
       pk.t += dt;
       for (const sh of S.ships) {
         if (Math.hypot(pk.x - sh.x, pk.y - sh.y) > K.SHIP_R + 14) continue;
-        if (pk.kind === 'calib') {
-          sh.fidelity = Math.min(1, sh.fidelity + 0.15);
-          floatTxt(sh, `FIDELITY ${(sh.fidelity*100)|0}%`, '#3fe08a');
-          if (sh.owner === 0) tele('pickup', { kind: 'calibration', fidelity: +sh.fidelity.toFixed(2) });
-        } else {
-          sh.tCharges = Math.min(3, sh.tCharges + 1);
-          floatTxt(sh, `T-CHARGE ×${sh.tCharges}`, '#f5b73c');
-          if (sh.owner === 0) tele('pickup', { kind: 't_charge', held: sh.tCharges });
-        }
+        applyPickup(sh, pk.kind);
         beep(660, 'triangle', 0.07, 0.14);
         S.pickups.splice(i, 1);
         break;
@@ -2952,7 +3507,7 @@ const DUEL = (() => {
       const d = Math.hypot(z.x - foe.x, z.y - foe.y);
       if (d < best) { best = d; nearestZone = z; }
     }
-    const foeOdds = S.bell ? 0.5 : DuelCore.odds(me.bloch);     // odds on the PLAYER
+    const foeOdds = DuelCore.odds(me.bloch);     // odds on the PLAYER (reduced state if linked)
     return {
       me: { x: foe.x, y: foe.y, inHot: foe.inHot, tCharges: foe.tCharges,
             beamReady: foe.beamCd === 0, measReady: foe.measCd === 0 && foe.winding === 0,
@@ -2960,7 +3515,7 @@ const DUEL = (() => {
       foe: { x: me.x, y: me.y, measReady: me.measCd === 0 },
       foeOdds,                                   // what the bot can win with
       foeOddsFalling: foeOdds < _botPrevOdds - 1e-4,
-      myOdds: S.bell ? 0.5 : DuelCore.odds(foe.bloch),
+      myOdds: DuelCore.odds(foe.bloch),
       myEigen: eig(foe.bloch), foeEigen: eig(me.bloch),
       myBloch: foe.bloch,
       foeAxisCounts: S.axisCounts,
@@ -2973,6 +3528,17 @@ const DUEL = (() => {
 
   function botThink(foe, me, dt) {
     if (S.over) return;
+    const MD = DuelCore.DUEL_MISSIONS[S.mission];
+    if (MD && MD.drone) {
+      // Training drone: a slow, readable figure-eight across the right half.
+      // Closer and slower in the Zeno mission, where MEASURE orbs must land often.
+      const near = MD.measureCd ? 1 : 0;
+      const tx = K.WORLD_W * ((near ? 0.55 : 0.68) + (near ? 0.06 : 0.14) * Math.sin(S.t * 0.35)),
+            ty = K.WORLD_H * (0.5 + (near ? 0.15 : 0.28) * Math.sin(S.t * 0.7));
+      foe.vx += (tx - foe.x) * dt * 1.2; foe.vy += (ty - foe.y) * dt * 1.2;
+      foe.ang = Math.atan2(me.y - foe.y, me.x - foe.x);
+      return;
+    }
     const L = DuelBot.levelOf(GAME.difficulty);
     _botT -= dt;
     const view = botView(foe, me);
@@ -3003,9 +3569,23 @@ const DUEL = (() => {
     }
     foe.ang = it.aim;
 
+    // Linked counterplay: when the player telegraphs a MEASURE while the
+    // outcomes MATCH, a π self-pulse makes them OPPOSITE, so a dud leaves the
+    // player at |1⟩. Duelist and up, after a human-ish reaction delay.
+    if (S.bell && foe.bellIdx >= 0 && me.winding > 0 && (S.pairZZ || 0) > 0.3
+        && L.useBell && foe.beamCd === 0) {
+      S.botFlipT = (S.botFlipT || 0) + dt;
+      if (S.botFlipT > 0.45) { selfPulse(foe, Math.PI, 'X'); S.botFlipT = 0; }
+    } else S.botFlipT = 0;
+
     // One-shot actions, cleared so they fire once per decision.
     if (it.measure && foe.measCd === 0 && foe.winding === 0) {
-      foe.winding = K.MEASURE_WIND_S; sfxWind(); it.measure = false;
+      windMeasure(foe); it.measure = false;
+    } else if (it.entangle && !S.bell && (foe.entCd || 0) <= 0
+               && Math.abs(foe.bloch.z) > 0.7 && foe.beamCd === 0) {
+      // A CNOT from a pole does nothing useful: get into superposition first.
+      selfPulse(foe, Math.PI / 2, 'X');
+      it.entangle = false;
     } else if (it.entangle && !S.bell && (foe.entCd || 0) <= 0) {
       const q = take(S.proj);
       if (q) {
@@ -3020,7 +3600,7 @@ const DUEL = (() => {
       // Charge for the requested hold, then release.
       _botHold -= dt;
       if (_botHold <= 0) {
-        const theta = it.theta != null ? it.theta : DuelCore.chargeToTheta(it.hold || 0.6);
+        const theta = it.theta != null ? it.theta : DuelCore.driveTheta(it.hold || 0.6, rabiMult(foe));
         if (it.selfPulse) selfPulse(foe, theta, it.beam);
         else fireBeam(foe, theta, it.beam);
         it.fire = it.selfPulse = false;
@@ -3036,15 +3616,32 @@ const DUEL = (() => {
     if (!(dt > 0)) dt = 1 / 60;
     dt = Math.min(dt, 0.25);                       // tab-return clamp
     const t0 = performance.now();
-    S.introT = Math.max(0, S.introT - dt);
+    if (!S.briefing) S.introT = Math.max(0, S.introT - dt);
+    if (S.learnQ && S.learnQ.length && !S.paused && !S.briefing) {
+      S.learnQ[0].t += dt; if (S.learnQ[0].t > LEARN_S) S.learnQ.shift();
+    }
     S.announceT = Math.max(0, S.announceT - dt);
     S.shake = Math.max(0, S.shake - dt * 2.4);
     S.flash = Math.max(0, S.flash - dt * 2.8);
     pollGamepad();
-    if (!S.paused && !S.over) {
-      S.acc += dt;
-      let guard = 0;
-      while (S.acc >= 1 / 60 && guard++ < 8) { step(1 / 60); S.acc -= 1 / 60; }
+    if (!S.paused && !S.over && !S.briefing) {
+      if (S.hitStop > 0) {
+        // Measurement reveal: the sim holds still while the roll is shown.
+        S.hitStop = Math.max(0, S.hitStop - dt);
+        if (S.hitStop === 0 && S.pendingEnd) {
+          const pe = S.pendingEnd; S.pendingEnd = null;
+          S.reveal = null;
+          endRound(pe[0], pe[1], pe[2]);
+        }
+      } else {
+        S.acc += dt;
+        let guard = 0;
+        while (S.acc >= 1 / 60 && !(S.hitStop > 0) && guard++ < 8) { step(1 / 60); S.acc -= 1 / 60; }
+      }
+    }
+    if (S.reveal && !S.paused) {
+      S.reveal.t += dt;
+      if (S.reveal.t > REVEAL_S && !S.pendingEnd) S.reveal = null;
     }
     draw();
     const ms = performance.now() - t0;
@@ -3118,8 +3715,12 @@ const DUEL = (() => {
     }
     ctx.restore();
     drawHud();
+    drawCoach();
+    drawLearn();
+    drawReveal();
     drawAnnouncer();
-    if (S.paused) banner('PAUSED', 'ESC / MENU to resume');
+    if (S.paused) drawPauseMenu();
+    if (S.briefing) drawBrief();
     if (S.over) drawDebrief();
   }
 
@@ -3150,7 +3751,8 @@ const DUEL = (() => {
     for (const pk of S.pickups) {
       const x = w2sx(pk.x), y = w2sy(pk.y);
       const bob = Math.sin(pk.t * 3) * 3;
-      const col = pk.kind === 'calib' ? '#3fe08a' : '#f5b73c';
+      const P = DuelCore.PICKUPS[pk.kind] || DuelCore.PICKUPS.calib;
+      const col = P.color;
       ctx.save(); ctx.translate(x, y + bob);
       ctx.strokeStyle = col; ctx.lineWidth = 2;
       ctx.shadowColor = col; ctx.shadowBlur = 12;
@@ -3165,7 +3767,7 @@ const DUEL = (() => {
       ctx.fillStyle = col;
       ctx.font = `700 ${Math.round(BOARD * 0.014)}px ${CANVAS_BODY}`;
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillText(pk.kind === 'calib' ? '⌖' : 'T', 0, 0);
+      ctx.fillText(P.glyph, 0, 0);
       ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
       ctx.restore();
     }
@@ -3197,8 +3799,9 @@ const DUEL = (() => {
   function drawEntangleLink() {
     if (!S.bell) return;
     const [a, b] = S.ships;
-    ctx.strokeStyle = `rgba(201,123,255,${0.5 + 0.25 * Math.sin(S.t * 8)})`;
-    ctx.lineWidth = 2; ctx.setLineDash([8, 6]);
+    const e = Math.min(1, 2 * (S.pairNeg || 0));            // 1 = Bell pair, 0 = none left
+    ctx.strokeStyle = `rgba(201,123,255,${(0.2 + 0.6 * e) * (0.75 + 0.25 * Math.sin(S.t * 8))})`;
+    ctx.lineWidth = 1 + 2.5 * e; ctx.setLineDash(e > 0.1 ? [8, 6] : [2, 8]);
     ctx.beginPath();
     ctx.moveTo(w2sx(a.x), w2sy(a.y)); ctx.lineTo(w2sx(b.x), w2sy(b.y));
     ctx.stroke(); ctx.setLineDash([]);
@@ -3220,6 +3823,20 @@ const DUEL = (() => {
       ctx.lineWidth = 3;
       ctx.beginPath(); ctx.arc(x, y, R * 1.5, 0, Math.PI * 2); ctx.stroke();
     }
+    // P(|1⟩) ring: the qubit's state, drawn where the action is. A MEASURE
+    // on this ship hits with exactly this probability.
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = 'rgba(255,255,255,0.10)';
+    ctx.beginPath(); ctx.arc(x, y, R * 1.35, 0, Math.PI * 2); ctx.stroke();
+    if (od > 0.005) {
+      ctx.strokeStyle = od > 0.75 ? '#3fe08a' : od > 0.4 ? '#f5b73c' : '#ff8fa0';
+      ctx.beginPath(); ctx.arc(x, y, R * 1.35, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * od); ctx.stroke();
+    }
+    ctx.font = `700 ${Math.round(BOARD * 0.0138)}px ${CANVAS_BODY}`;
+    ctx.textAlign = 'center';
+    ctx.fillStyle = 'rgba(230,235,255,0.85)';
+    ctx.fillText(`${sh.owner === 0 ? 'YOU' : 'SAGE'} ${Math.round(od * 100)}%`, x, y + R * 1.35 + 14);
+    ctx.textAlign = 'left';
     ctx.save();
     ctx.translate(x, y); ctx.rotate(sh.ang);
     ctx.fillStyle = sh.hitFlash > 0 ? '#ffffff' : sh.col;
@@ -3238,7 +3855,7 @@ const DUEL = (() => {
       ctx.stroke();
     }
     if (sh.winding > 0) {
-      const frac = 1 - sh.winding / K.MEASURE_WIND_S;
+      const frac = 1 - sh.winding / (sh.windTotal || K.MEASURE_WIND_S);
       ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2;
       ctx.setLineDash([4, 4]);
       ctx.beginPath(); ctx.arc(x, y, R * 2.1 - frac * R, 0, Math.PI * 2); ctx.stroke();
@@ -3261,17 +3878,28 @@ const DUEL = (() => {
   function drawHud() {
     const me = S.ships[0], foe = S.ships[1];
     // Opponent — top-left, with the live win-odds readout (§5).
-    drawMiniSphere(ctx, 62, 74, 42, S.bell ? null : shownBloch(foe), foe.col, true);
-    const od = S.bell ? DuelCore.bellOdds(S.bell, foe.bellIdx) : DuelCore.odds(foe.bloch);
-    hudText('MEASURE ODDS', 118, 52, '#aeb8e6', 'var');
+    drawMiniSphere(ctx, 62, 74, 42, shownBloch(foe), foe.col, true);
+    const pvw = chargePreview(me, foe);
+    if (pvw && !S.selfAim) drawGhostVector(62, 74, 42, pvw.bloch);
+    const od = DuelCore.odds(foe.bloch);
+    hudText('YOUR WIN CHANCE IF YOU MEASURE SAGE NOW', 118, 52, '#aeb8e6', 'var');
     ctx.font = `600 ${Math.round(BOARD * 0.045)}px 'Rajdhani','Space Grotesk',sans-serif`;
     ctx.fillStyle = od > 0.75 ? '#3fe08a' : od > 0.4 ? '#f5b73c' : '#ff5a72';
     ctx.textAlign = 'left';
     ctx.fillText(`${(od * 100).toFixed(0)}%`, 118, 92);
-    hudText(S.bell ? 'ENTANGLED — one MEASURE collapses BOTH, correlated'
-                   : 'their qubit — rotate it to |1⟩, then MEASURE',
-            118, 112, S.bell ? '#c97bff' : '#6f79a8');
-    if (foe.zenoUntil > S.t) hudText('ZENO-PINNED — cannot be rotated', 118, 130, '#8b7dff');
+    const zz = S.pairZZ || 0, ent = (S.pairNeg || 0) > LINK_ENT_MIN;
+    const corr = zz > 0.3 ? 'outcomes MATCH' : zz < -0.3 ? 'outcomes OPPOSITE' : 'outcomes uncorrelated';
+    hudText(S.bell ? `${ent ? `ENTANGLED ${Math.round(S.pairNeg * 200)}%` : 'CORRELATED, no entanglement left'} · ${corr} (⟨ZZ⟩ ${zz >= 0 ? '+' : ''}${zz.toFixed(2)})`
+                   : 'GOAL: rotate Sage\'s qubit to |1⟩, then MEASURE it · don\'t get measured at |1⟩ yourself',
+            118, 112, S.bell ? '#c97bff' : '#cfd6ee');
+    if (S.bell && Math.abs(zz) > 0.3)
+      hudText(zz > 0 ? 'a dud MEASURE on them drops you to |0⟩ too · hotspots break the link'
+                     : 'careful: a dud MEASURE on them leaves YOU at |1⟩ · π self-pulse to re-match',
+              118, 130, zz > 0 ? '#c97bff' : '#f5b73c');
+    else if (foe.zenoUntil > S.t) hudText('ZENO-PINNED — cannot be rotated', 118, 130, '#8b7dff');
+    else if (!S.bell && foe.detuneUntil > S.t)
+      hudText(`DETUNED ${(foe.detuneUntil - S.t).toFixed(0)}s — your X/Y beams are off-resonant (from |0⟩: ${Math.round(100 / (1 + DuelCore.PICKUPS.detune.dOverO ** 2))}% max)`,
+              118, 130, DuelCore.PICKUPS.detune.color);
     else if (!S.bell && DuelCore.BEAMS[S.beam] && DuelCore.BEAMS[S.beam].kind === 'attack'
              && DuelCore.isEigenstate(foe.bloch, DuelCore.BEAMS[S.beam].axis))
       // Only when the camp actually blocks the beam you have SELECTED —
@@ -3285,7 +3913,7 @@ const DUEL = (() => {
       ctx.font = `700 ${Math.round(BOARD * 0.0175)}px ${CANVAS_BODY}`;
       ctx.fillStyle = '#f5b73c';
       ctx.fillText(`MISSION ${M.id + 1} · ${M.title}`, 118, 30);
-      wrapHud(M.brief, 118, BAND + 22, BOARD - 150, '#8f9ac4');
+      drawSteps(M);
       if (M.hurry) {
         const left = Math.max(0, M.hurry - S.t);
         ctx.textAlign = 'right';
@@ -3312,28 +3940,43 @@ const DUEL = (() => {
 
     // Round pips — top-right (best-of-3 lands in D1; D0 shows one round).
     ctx.textAlign = 'right';
-    hudText(S.over ? (S.round.winner === 0 ? 'ROUND: WON' : 'ROUND: LOST') : 'ROUND 1', BOARD - 16, 40, '#aeb8e6');
-    hudText(`shots ${S.shotCount}   ${(S.t).toFixed(0)}s`, BOARD - 16, 60, '#6f79a8');
+    hudText(M ? (M.par ? `PAR ${M.par.s}s · ${M.par.shots} shot${M.par.shots === 1 ? '' : 's'}` : '')
+              : `ROUND ${S.match.no} OF 3 · YOU ${S.match.you} – ${S.match.them} SAGE`, BOARD - 16, 40, '#aeb8e6');
+    hudText(`shots ${S.shotCount}   ${(S.t).toFixed(0)}s   ·   ESC pause / menu`, BOARD - 16, 60, '#6f79a8');
     if (S.showPerf) hudText(`p95 ${p95().toFixed(2)}ms`, BOARD - 16, 80, '#3fe08a');
     ctx.textAlign = 'left';
 
     // Player — bottom-left.
     const by = BOARD - BAND;
-    drawMiniSphere(ctx, 62, by + 74, 42, S.bell ? null : shownBloch(me), me.col, true);
-    hudText('YOUR QUBIT', 118, by + 34, '#aeb8e6');
-    const myOdds = S.bell ? 0.5 : DuelCore.odds(me.bloch);
-    hudText(`their odds on you: ${(myOdds * 100).toFixed(0)}%`
-            + (me.inHot ? '   ·  IN HOTSPOT: discharging fast' : ''),
-            118, by + 54, me.inHot ? '#3fe08a' : myOdds > 0.6 ? '#ff5a72' : '#6f79a8');
+    drawMiniSphere(ctx, 62, by + 74, 42, shownBloch(me), me.col, true);
+    if (pvw && S.selfAim) drawGhostVector(62, by + 74, 42, pvw.bloch);
+    const myOdds = DuelCore.odds(me.bloch);
+    hudText('YOUR QUBIT = YOUR HEALTH', 118, by + 34, '#aeb8e6');
+    // Health bar: green while you sit near |0⟩, red as Sage pushes you to |1⟩.
+    const hx = 300, hw = 170;
+    ctx.fillStyle = 'rgba(255,255,255,0.10)'; roundRect(hx, by + 24, hw, 12, 3); ctx.fill();
+    ctx.fillStyle = myOdds > 0.6 ? '#ff5a72' : myOdds > 0.3 ? '#f5b73c' : '#3fe08a';
+    roundRect(hx, by + 24, hw * Math.max(0.03, 1 - myOdds), 12, 3); ctx.fill();
+    hudText(`risk: Sage's MEASURE would hit you ${(myOdds * 100).toFixed(0)}% of the time`
+            + (me.inHot ? ' · hotspot pulling you to |0⟩' : ''),
+            118, by + 54, me.inHot ? '#3fe08a' : myOdds > 0.6 ? '#ff5a72' : '#8f9ac4');
 
     // Charge bar with π-fraction ticks — the player reads pulse AREA.
-    const bx = 118, bw = BOARD - 118 - 190, bh = 14, byy = by + 74;
+    const kx = BOARD - 292;                       // control strip column (right)
+    const bx = 118, bw = kx - 20 - bx, bh = 14, byy = by + 74;
     ctx.fillStyle = 'rgba(255,255,255,0.08)';
     roundRect(bx, byy, bw, bh, 3); ctx.fill();
-    const frac = S.charging ? Math.min(1, S.chargeT / K.CHARGE_FULL_S) : 0;
+    const frac = S.charging ? Math.min(1, S.chargeT * rabiMult(me) / K.CHARGE_FULL_S) : 0;
     if (frac > 0) {
       ctx.fillStyle = frac >= 0.999 ? '#3fe08a' : '#f5b73c';
       roundRect(bx, byy, bw * frac, bh, 3); ctx.fill();
+    }
+    // Green mark: the best charge for the selected beam, from Sage's current state.
+    const bp = (GAME.coach && !S.bell) ? DuelCore.bestPulse(foe.bloch, S.beam) : null;
+    if (bp && bp.theta > 0.02 && bp.p1 > DuelCore.odds(foe.bloch) + 0.05) {
+      const tx = bx + bw * (bp.theta / Math.PI);
+      ctx.fillStyle = '#3fe08a';
+      ctx.fillRect(tx - 2, byy - 3, 4, bh + 6);
     }
     ctx.strokeStyle = 'rgba(255,255,255,0.25)'; ctx.lineWidth = 1;
     [[0.25,'π/4'],[0.5,'π/2'],[0.75,'3π/4'],[1,'π']].forEach(([f, lab]) => {
@@ -3343,7 +3986,7 @@ const DUEL = (() => {
       hudText(lab, tx, byy + bh + 15, '#6f79a8');
     });
     ctx.textAlign = 'left';
-    hudText(S.charging ? (S.selfAim ? 'RELEASE — PULSE YOURSELF (defence)' : 'RELEASE TO FIRE')
+    hudText(S.charging ? chargePreviewText(me, foe)
                        : `${DUEL_CONTROLS.keyboard.attack} / LEFT-HOLD attack  ·  ${DUEL_CONTROLS.keyboard.selfPulse} / RIGHT-HOLD self-pulse`,
             bx, byy - 6, S.charging ? (S.selfAim ? '#2fe0d0' : '#f5b73c') : '#6f79a8');
 
@@ -3360,8 +4003,19 @@ const DUEL = (() => {
       ctx.beginPath(); ctx.arc(rx + 305 + i * 15, ry - 4, 5, 0, Math.PI * 2); ctx.fill();
     }
 
+    // Active power-ups — one line under the resource row.
+    const boosts = [];
+    if (me.driveUntil > S.t) boosts.push([`DRIVE ×2 ${(me.driveUntil - S.t).toFixed(0)}s`, DuelCore.PICKUPS.drive.color]);
+    if (me.detuneUntil > S.t) boosts.push([`DETUNED ${(me.detuneUntil - S.t).toFixed(0)}s`, DuelCore.PICKUPS.detune.color]);
+    if (me.fastReadout) boosts.push(['FAST READOUT armed', DuelCore.PICKUPS.readout.color]);
+    if (GAME.aimAssist) boosts.push(['AIM ASSIST on', '#6f79a8']);
+    let bxx = rx;
+    for (const [txt, col] of boosts) {
+      hudText(txt, bxx, ry + 20, col);
+      bxx += ctx.measureText(txt).width + 16;
+    }
+
     // Control strip — one manifest feeds the live behavior and these labels.
-    const kx = BOARD - 292;
     const beamName = (DuelCore.BEAMS[S.beam] || {}).label || 'X-BEAM';
     hudText(`ACTIVE INPUT · ${S.inputDevice}`, kx, by + 22, S.inputDevice === 'GAMEPAD' ? '#2fe0d0' : '#6f79a8');
     hudText(`${DUEL_CONTROLS.keyboard.move} move · ${DUEL_CONTROLS.keyboard.aim} aim`, kx, by + 42, '#6f79a8');
@@ -3370,12 +4024,304 @@ const DUEL = (() => {
     ctx.font = `700 ${Math.round(BOARD * 0.0163)}px ${CANVAS_BODY}`;
     ctx.fillText(`${DUEL_CONTROLS.keyboard.beams}  ${beamName}${S.beam === 'T' ? ' ×' + me.tCharges : ''}`, kx, by + 82);
     const measReady = me.measCd === 0 && me.winding === 0;
-    hudText(`${DUEL_CONTROLS.keyboard.measure} measure ${measReady ? '(ready)' : '(' + me.measCd.toFixed(1) + 's)'} · ${DUEL_CONTROLS.keyboard.entangle} entangle`,
-            kx, by + 102, measReady ? '#3fe08a' : '#6f79a8');
     const entReady = !S.bell && (me.entCd || 0) <= 0;
+    const entTag = S.bell ? ' (linked)' : entReady ? '' : ` (${(me.entCd||0).toFixed(0)}s)`;
+    hudText(`${DUEL_CONTROLS.keyboard.measure} measure ${measReady ? '(ready)' : '(' + me.measCd.toFixed(1) + 's)'} · ${DUEL_CONTROLS.keyboard.entangle} entangle${entTag}`,
+            kx, by + 102, measReady ? '#3fe08a' : '#6f79a8');
     hudText(`${S.gamepad.index == null ? 'PAD' : 'PAD CONNECTED'} · LS/RS move/aim · RT/LT pulses`,
             kx, by + 122, S.gamepad.index == null ? '#6f79a8' : '#2fe0d0');
-    if (!entReady || S.bell) hudText(S.bell ? 'ENTANGLE · linked' : `ENTANGLE · ${(me.entCd||0).toFixed(0)}s`, kx - 160, by + 122, '#c97bff');
+  }
+
+  // Mission checklist (Qubit Copter / Rabi Rider style): every step of the
+  // mission, done ✓, the current one highlighted with its live progress.
+  // What releasing the charge right now would do, from the current states
+  // (the exact rotation, before pulse-fidelity error and flight time).
+  function chargePreview(me, foe) {
+    if (!S.charging || S.bell) return null;
+    const spec = DuelCore.BEAMS[S.beam] || DuelCore.BEAMS.X;
+    const th = spec.fixedTheta != null ? spec.fixedTheta : DuelCore.driveTheta(S.chargeT, rabiMult(me));
+    const who = S.selfAim ? me : foe;
+    let after;
+    if (!S.selfAim && spec.kind === 'attack' && detuneOf(foe))
+      after = DuelCore.detunedRotate(foe.bloch, DuelCore.AXES[spec.axis], th, detuneOf(foe));
+    else if (!S.selfAim && spec.kind === 'attack' && DuelCore.isEigenstate(foe.bloch, spec.axis))
+      after = foe.bloch;
+    else after = DuelCore.rotateBloch(who.bloch, DuelCore.AXES[spec.axis], th);
+    return { who, before: DuelCore.odds(who.bloch), after: DuelCore.odds(after), bloch: after, th };
+  }
+  function chargePreviewText(me, foe) {
+    const pv = chargePreview(me, foe);
+    if (!pv) return S.selfAim ? 'RELEASE: pulse YOUR qubit' : 'RELEASE TO FIRE';
+    const a = Math.round(pv.before * 100), b = Math.round(pv.after * 100), th = (pv.th / Math.PI).toFixed(2);
+    return S.selfAim
+      ? `RELEASE: ${th}π on YOU · your risk ${a}% → ${b}%${b < a - 2 ? ' (safer)' : b > a + 2 ? ' (riskier!)' : ''}`
+      : `RELEASE: ${th}π on Sage · your win chance ${a}% → ${b}%`;
+  }
+
+  // Mission checklist height, so banners and the reveal can sit below it.
+  const stepsOffset = () => {
+    const M = DuelCore.DUEL_MISSIONS[S.mission];
+    return M && M.steps ? 22 + M.steps.length * 20 + (M.drone ? 16 : 0) + 18 : 0;
+  };
+  function drawSteps(M) {
+    if (S.briefing) return;
+    if (!M.steps) { wrapHud(M.brief, 118, BAND + 22, BOARD - 150, '#8f9ac4'); return; }
+    const me = S.ships[0], foe = S.ships[1];
+    const v = { foeOdds: DuelCore.odds(foe.bloch), myOdds: DuelCore.odds(me.bloch), t: S.t, fidelity: me.fidelity };
+    const done = M.steps.map(st => !!st.done(S.ev || {}, v));
+    let cur = done.indexOf(false);
+    const x0 = 14, y0 = BAND + 12, W = 330, H = 22 + M.steps.length * 20 + (M.drone ? 16 : 0);
+    ctx.save();
+    ctx.fillStyle = 'rgba(5,7,15,0.78)'; roundRect(x0, y0, W, H, 6); ctx.fill();
+    ctx.strokeStyle = 'rgba(245,183,60,0.45)'; ctx.lineWidth = 1; roundRect(x0, y0, W, H, 6); ctx.stroke();
+    ctx.font = `700 ${Math.round(BOARD * 0.0138)}px ${CANVAS_BODY}`; ctx.fillStyle = '#f5b73c';
+    ctx.fillText(`MISSION ${M.id + 1} · ${done.filter(Boolean).length}/${M.steps.length} STEPS`, x0 + 10, y0 + 16);
+    M.steps.forEach((st, i) => {
+      const y = y0 + 36 + i * 20, ok = done[i], now = i === cur;
+      ctx.font = `${now ? 700 : 500} ${Math.round(BOARD * 0.0138)}px ${CANVAS_BODY}`;
+      ctx.fillStyle = ok ? '#3fe08a' : now ? '#ffffff' : '#6f79a8';
+      let line = `${ok ? '✓' : now ? '▶' : '○'} ${st.text}`;
+      while (ctx.measureText(line).width > W - 20 && line.length > 10) line = line.slice(0, -2);
+      ctx.fillText(line, x0 + 10, y);
+      if (now && st.progress) {
+        ctx.textAlign = 'right'; ctx.fillStyle = '#f5b73c';
+        ctx.fillText(st.progress(v), x0 + W + 170, y);   // outside the box, toward the arena centre
+        ctx.textAlign = 'left';
+      }
+    });
+    if (M.drone) { ctx.fillStyle = '#8f9ac4'; ctx.font = `500 ${Math.round(BOARD * 0.0128)}px ${CANVAS_BODY}`;
+      ctx.fillText('Training drone: Sage flies but never shoots back', x0 + 10, y0 + H - 6); }
+    ctx.restore();
+  }
+
+  // Coach: the single most useful next step, with the physics reason.
+  // Pure function of state so it is cheap and testable in the browser.
+  function coachHint() {
+    const me = S.ships[0], foe = S.ships[1];
+    if (!me || !foe || S.over) return null;
+    const pf = DuelCore.odds(foe.bloch), pm = DuelCore.odds(me.bloch), pct = v => Math.round(v * 100);
+    const kb = DUEL_CONTROLS.keyboard;
+    const spec = DuelCore.BEAMS[S.beam] || DuelCore.BEAMS.X;
+    if (S.charging) {
+      const th = DuelCore.driveTheta(S.chargeT, rabiMult(me)) / Math.PI;
+      return [`Release to ${S.selfAim ? 'pulse yourself' : 'fire'}: a ${th.toFixed(2)}π rotation${th > 0.97 ? ' (a π-pulse flips |0⟩ ↔ |1⟩)' : ''}`, '#f5b73c'];
+    }
+    if (foe.winding > 0) return ['Sage is winding up a MEASURE: dodge the white orb, or drop your odds first', '#ff5a72'];
+    if (pm > 0.6 && !S.bell)
+      return [`You are ${pct(pm)}% |1⟩, so a MEASURE on you likely hits. Self-pulse (${kb.selfPulse}) back toward |0⟩, or fly into a hotspot: decay pulls you to |0⟩`, '#ff5a72'];
+    if (S.bell) {
+      const zz = S.pairZZ || 0;
+      if (zz < -0.3) return [`Linked, outcomes OPPOSITE: a dud would leave YOU at |1⟩. A π self-pulse (${kb.selfPulse}) makes them MATCH`, '#f5b73c'];
+      return [`Linked, outcomes MATCH: MEASURE now (${kb.measure}) is a safe 50% shot. If it is a dud you both go to |0⟩`, '#c97bff'];
+    }
+    if (pf >= 0.7 && me.measCd === 0 && me.winding === 0)
+      return [`Sage is ${pct(pf)}% |1⟩. MEASURE (${kb.measure}) now, and stop firing: another π-pulse would rotate them back toward |0⟩`, '#3fe08a'];
+    if (pf >= 0.7)
+      return [`Sage is ${pct(pf)}% |1⟩. Hold fire: rotations are cyclic, and a π-pulse from here undoes your work`, '#3fe08a'];
+    if (spec.kind === 'attack' && DuelCore.isEigenstate(foe.bloch, spec.axis) && pf > 0.02)
+      return [`Sage sits on the ${spec.axis} axis, where an ${spec.axis}-rotation does nothing. Switch beam (1/2) or use a T-phase (3)`, '#f5b73c'];
+    const best = DuelCore.bestAttack(foe.bloch, S.beam === 'Y' ? 'Y' : 'X');
+    const frac = (best.theta / Math.PI).toFixed(2);
+    const sw = (S.beam !== best.beam) ? ` (switch with ${best.beam === 'X' ? '1' : '2'})` : '';
+    const purity = Math.hypot(foe.bloch.x, foe.bloch.y, foe.bloch.z);
+    if (purity < 0.5 && pf > 0.2)
+      return [`Decoherence made Sage's qubit mixed: no rotation gets past ${pct((1 + purity) / 2)}%. MEASURE: a dud resets it to a clean |0⟩`, '#c97bff'];
+    if (best.p1 < pf + 0.05)
+      return [`Sage is ${pct(pf)}% |1⟩ and no single beam does much better. MEASURE (${kb.measure}) and trust the odds`, '#aeb8e6'];
+    if (pf < 0.1 && best.theta > 0.9 * Math.PI)
+      return [`Hold ${kb.attack} for a FULL charge and hit Sage: a π-pulse rotates their qubit from |0⟩ to |1⟩`, '#aeb8e6'];
+    return [`Best shot: ${best.beam}-beam${sw} charged to ${frac}π (green mark on your charge bar) takes Sage from ${pct(pf)}% to ${pct(best.p1)}%`, '#aeb8e6'];
+  }
+  function drawCoach() {
+    if (!GAME.coach || S.introT > 0 || S.briefing || S.paused) return;
+    const h = coachHint(); if (!h) return;
+    const y = BAND + VIEW_H - 14;
+    ctx.save();
+    let fs = Math.round(BOARD * 0.0163);
+    ctx.font = `600 ${fs}px ${CANVAS_BODY}`;
+    while (ctx.measureText(h[0]).width > BOARD - 64 && fs > 9) { fs--; ctx.font = `600 ${fs}px ${CANVAS_BODY}`; }
+    const w = Math.min(BOARD - 40, ctx.measureText(h[0]).width + 24);
+    ctx.fillStyle = 'rgba(5,7,15,0.78)';
+    roundRect((BOARD - w) / 2, y - 15, w, 22, 6); ctx.fill();
+    ctx.textAlign = 'center';
+    ctx.fillStyle = h[1];
+    ctx.fillText(h[0], BOARD / 2, y);
+    ctx.restore();
+  }
+
+  // Measurement reveal: the Born rule, drawn. The bar is split at P(|1⟩); the
+  // marker slides to the uniform draw, and the outcome is |1⟩ iff it stops
+  // in the left (|1⟩) part. Entangled measures have no single draw to show,
+  // so they show the 50/50 split and the correlated result.
+  function drawReveal() {
+    const R = S.reveal; if (!R) return;
+    const fadeIn = Math.min(1, R.t / 0.12);
+    const fadeOut = S.pendingEnd ? 1 : Math.min(1, (REVEAL_S - R.t) / 0.4);
+    const a = Math.max(0, Math.min(fadeIn, fadeOut));
+    if (a <= 0) return;
+    const yours = R.shooter === 0;
+    const W = 440, H = 82, x0 = (BOARD - W) / 2, y0 = BAND + 70 + stepsOffset();
+    ctx.save();
+    ctx.globalAlpha = a;
+    ctx.fillStyle = 'rgba(5,7,15,.9)';
+    roundRect(x0, y0, W, H, 8); ctx.fill();
+    ctx.strokeStyle = yours ? '#2fe0d0' : '#ff4d9d'; ctx.lineWidth = 1;
+    roundRect(x0, y0, W, H, 8); ctx.stroke();
+    ctx.textAlign = 'center';
+    hudText(yours ? 'YOUR MEASURE ON SAGE' : 'SAGE MEASURES YOUR QUBIT', BOARD / 2, y0 + 18,
+            yours ? '#2fe0d0' : '#ff4d9d');
+    // Bar: [0, p) is |1⟩ (hit), [p, 1) is |0⟩ (dud)
+    const bx = x0 + 20, bw = W - 40, by = y0 + 28, bh = 16;
+    ctx.fillStyle = 'rgba(255,255,255,0.10)';
+    roundRect(bx, by, bw, bh, 3); ctx.fill();
+    ctx.fillStyle = yours ? 'rgba(63,224,138,.75)' : 'rgba(255,90,114,.75)';
+    if (R.p > 0) { roundRect(bx, by, bw * R.p, bh, 3); ctx.fill(); }
+    ctx.font = `700 ${Math.round(BOARD * 0.0138)}px ${CANVAS_BODY}`;
+    ctx.fillStyle = '#05070f';
+    if (R.p > 0.16) { ctx.textAlign = 'left'; ctx.fillText(`|1⟩ ${(R.p * 100).toFixed(0)}%`, bx + 6, by + 12); }
+    ctx.fillStyle = '#cfd6ee';
+    if (R.p < 0.84) { ctx.textAlign = 'right'; ctx.fillText(`|0⟩ ${((1 - R.p) * 100).toFixed(0)}%`, bx + bw - 6, by + 12); }
+    let line;
+    if (R.draw != null) {
+      const k = REDUCE_MOTION ? 1 : Math.min(1, R.t / 0.3), e = 1 - Math.pow(1 - k, 3);
+      const mx = bx + bw * R.draw * e;
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(mx - 1.5, by - 5, 3, bh + 10);
+      ctx.beginPath(); ctx.moveTo(mx - 6, by - 9); ctx.lineTo(mx + 6, by - 9); ctx.lineTo(mx, by - 3); ctx.fill();
+      line = `random draw ${R.draw.toFixed(2)} ${R.outcome ? '<' : '≥'} P(|1⟩) ${R.p.toFixed(2)}  →  |${R.outcome}⟩`;
+      if (R.bell && R.partnerP1 != null) {
+        const pp = R.partnerP1, who = yours ? 'you' : 'Sage';
+        line += pp > 0.98 ? ` · ${who} → |1⟩` : pp < 0.02 ? ` · ${who} → |0⟩` : ` · ${who} now ${(pp * 100).toFixed(0)}%`;
+      }
+    } else {
+      line = `entangled: P(|1⟩) = ${(R.p * 100).toFixed(0)}% and both qubits collapse to |${R.outcome}⟩`;
+    }
+    const verdict = R.blocked ? ' · SHIELDED'
+      : R.outcome ? (yours ? ' · HIT' : ' · YOU ARE HIT') : ' · DUD';
+    ctx.textAlign = 'center';
+    hudText(line + verdict, BOARD / 2, y0 + 68,
+            R.outcome && !R.blocked ? (yours ? '#3fe08a' : '#ff5a72') : '#aeb8e6');
+    ctx.textAlign = 'left';
+    ctx.restore();
+  }
+
+  // Dashed "after release" vector, same projection as drawMiniSphere.
+  function drawGhostVector(cx, cy, R, b) {
+    const sx = cx + R * (b.x * 0.7 + b.y * 0.3), sy = cy - R * b.z;
+    ctx.save(); ctx.setLineDash([3, 3]); ctx.strokeStyle = '#ffd166'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(sx, sy); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle = '#ffd166'; ctx.beginPath(); ctx.arc(sx, sy, 3, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+  }
+
+  // ── Pause menu, brief card, first-time concept cards ─────────────────
+  function drawPauseMenu() {
+    ctx.save();
+    ctx.fillStyle = 'rgba(5,7,15,0.92)'; ctx.fillRect(0, BAND, BOARD, VIEW_H);
+    ctx.textAlign = 'center';
+    ctx.font = `bold ${canvasFontPx(20, 17)}px 'Press Start 2P',monospace`;
+    ctx.fillStyle = '#8b7dff'; ctx.fillText('PAUSED', BOARD / 2, BOARD * 0.43);
+    PAUSE_BTNS.forEach((b, i) => {
+      const q = pauseBtnRect(i);
+      ctx.fillStyle = i === 0 ? 'rgba(63,224,138,0.16)' : 'rgba(255,255,255,0.06)';
+      roundRect(q.x, q.y, q.w, q.h, 6); ctx.fill();
+      ctx.strokeStyle = i === 0 ? '#3fe08a' : 'rgba(174,184,230,0.5)'; ctx.lineWidth = 1;
+      roundRect(q.x, q.y, q.w, q.h, 6); ctx.stroke();
+      ctx.font = `700 ${Math.round(BOARD * 0.018)}px ${CANVAS_BODY}`;
+      ctx.fillStyle = '#e8ecff'; ctx.fillText(`${b.label}  ·  ${b.key}`, BOARD / 2, q.y + 22);
+    });
+    ctx.font = `500 ${Math.round(BOARD * 0.0145)}px ${CANVAS_BODY}`; ctx.fillStyle = '#8f9ac4';
+    ctx.fillText('Gamepad: MENU or A resume · X restart · B quit · click a button with the mouse', BOARD / 2, BOARD * 0.5 + 3 * 44 + 18);
+    ctx.restore();
+  }
+
+  function drawBrief() {
+    const M = DuelCore.DUEL_MISSIONS[S.mission];
+    ctx.save();
+    ctx.fillStyle = 'rgba(5,7,15,0.97)'; ctx.fillRect(0, BAND, BOARD, VIEW_H);
+    const x0 = 70, w = BOARD - 140, cx = BOARD / 2; let y = BAND + 46;
+    ctx.textAlign = 'center';
+    ctx.font = `bold ${canvasFontPx(15, 15)}px 'Press Start 2P',monospace`; ctx.fillStyle = '#f5b73c';
+    ctx.fillText(M ? `MISSION ${M.id + 1} · ${M.title}` : 'PHOTON DUEL · BEST OF 3', cx, y); y += 26;
+    ctx.font = `600 ${Math.round(BOARD * 0.0175)}px ${CANVAS_BODY}`; ctx.fillStyle = '#2fe0d0';
+    ctx.fillText(M ? `Concept: ${M.concept}` : 'Concept: rotations, the Born rule and decoherence', cx, y); y += 26;
+    ctx.font = `500 ${Math.round(BOARD * 0.0165)}px ${CANVAS_BODY}`; ctx.fillStyle = '#cfd6ee';
+    const body = M ? M.brief
+      : 'Both ships carry one qubit, starting in |0⟩. Your beams are drive pulses that ROTATE Sage\'s qubit toward |1⟩. A MEASURE collapses it by the Born rule: it reads |1⟩ (you win the round) with probability P(1). Sage does the same to you, so YOUR qubit is your health: keep it near |0⟩.';
+    y = wrapCenteredLines(body, cx, y, w - 40) + 10;
+    const rows = M && M.steps ? M.steps.map((st, i) => `${i + 1}. ${st.text}`) : [
+      'SHIFT (hold, aim, release): rotate SAGE. Longer hold = bigger angle θ = Ω·t',
+      'F (hold, release): rotate YOURSELF. Lowers your risk, or puts you in superposition',
+      'SPACE: MEASURE Sage. Wins with probability P(1). A miss resets it to |0⟩',
+      'Hotspots: decay pulls a qubit to |0⟩ · E: entangle · ESC: pause / menu',
+    ];
+    ctx.textAlign = 'left'; ctx.font = `600 ${Math.round(BOARD * 0.016)}px ${CANVAS_BODY}`;
+    for (const r of rows) { ctx.fillStyle = '#e8ecff'; y = wrapLeftLines(r, x0 + 30, y, w - 60) + 4; }
+    ctx.textAlign = 'center';
+    if (M) {
+      ctx.font = `600 ${Math.round(BOARD * 0.015)}px ${CANVAS_BODY}`; ctx.fillStyle = '#8f9ac4';
+      y += 8;
+      ctx.fillText(`${M.drone ? 'Training drone: Sage flies but never shoots.' : 'Live opponent: Sage fights back.'}${M.par ? `   ★ clear · ★★ under ${M.par.s} s · ★★★ also ≤ ${M.par.shots} shots` : ''}`, cx, y);
+    }
+    ctx.font = `700 ${Math.round(BOARD * 0.02)}px ${CANVAS_BODY}`; ctx.fillStyle = '#ffd166';
+    ctx.fillText('▶ SPACE / ENTER / click to start     ·     ESC back', cx, BAND + VIEW_H - 30);
+    ctx.restore();
+  }
+  function wrapLines(txt, maxW) {
+    const words = txt.split(' '), out = []; let line = '';
+    for (const w of words) { const t = line ? line + ' ' + w : w;
+      if (ctx.measureText(t).width > maxW && line) { out.push(line); line = w; } else line = t; }
+    if (line) out.push(line); return out;
+  }
+  function wrapCenteredLines(txt, cx, y, maxW) {
+    for (const l of wrapLines(txt, maxW)) { ctx.fillText(l, cx, y); y += Math.round(BOARD * 0.024); } return y;
+  }
+  function wrapLeftLines(txt, x, y, maxW) {
+    for (const l of wrapLines(txt, maxW)) { ctx.fillText(l, x, y); y += Math.round(BOARD * 0.023); } return y;
+  }
+
+  // First-time concept cards: the physics of a mechanic, once, the moment
+  // the player first meets it. Remembered across sessions; off with Coach.
+  const LEARN_S = 8;
+  const LEARN = {
+    hit:     ['YOU ROTATED SAGE\'S QUBIT', 'A beam is a resonant drive pulse. Holding longer gives a bigger angle θ = Ω·t; from |0⟩, P(1) = sin²(θ/2), so a full π-pulse takes it all the way to |1⟩.'],
+    self:    ['YOU ROTATED YOUR OWN QUBIT', 'A self-pulse is the same kind of rotation, aimed at you. Use it to bring your P(1) back down (less risk if Sage measures you), or to enter superposition before you entangle.'],
+    hurt:    ['SAGE ROTATED YOUR QUBIT', 'Your qubit is your health. Sage\'s MEASURE on you would now hit with probability P(1). Self-pulse back toward |0⟩ or fly into a hotspot, where T₁ decay pulls you down.'],
+    dud:     ['MEASURE READ |0⟩', 'The Born rule picked the other outcome. Measuring collapsed the qubit, so it is now exactly |0⟩: one full π-pulse puts it back at |1⟩.'],
+    hotspot: ['YOU ENTERED A HOTSPOT', 'This patch of chip is noisy: T₁ = 4 s pulls a qubit toward |0⟩ (safer for you) and T₂ = 2 s scrambles its phase. It drains Sage too, if Sage is in one.'],
+    shield:  ['EIGENSTATE: NO EFFECT', 'Sage sits on the axis of your beam. A rotation cannot move a vector that points along its own axis. Switch beam (1/2) or use a T-phase (3).'],
+    pickup:  ['POWER-UP', ''],
+    linked:  ['YOU ARE ENTANGLED', 'Neither qubit has a state of its own now: one MEASURE collapses both. Whether the outcomes MATCH or are OPPOSITE decides who a miss hurts.'],
+  };
+  let _seen = null;
+  function seen() {
+    if (_seen) return _seen;
+    try { _seen = new Set(JSON.parse(localStorage.getItem('qb_seen_concepts') || '[]')); } catch (e) { _seen = new Set(); }
+    return _seen;
+  }
+  function learn(id, extraText) {
+    if (!GAME.coach || !S.learnQ) return;
+    const key = id === 'pickup' ? 'pickup:' + extraText : id;
+    if (seen().has(key)) return;
+    seen().add(key);
+    try { localStorage.setItem('qb_seen_concepts', JSON.stringify([...seen()])); } catch (e) {}
+    const [title, text] = LEARN[id];
+    const P = id === 'pickup' ? DuelCore.PICKUPS[extraText] : null;
+    S.learnQ.push({ title: P ? `POWER-UP: ${P.name}` : title, text: P ? (P.physics || P.effect) : text, t: 0 });
+  }
+  function drawLearn() {
+    const c = S.learnQ && S.learnQ[0]; if (!c || S.briefing || S.paused) return;
+    const a = Math.min(1, c.t / 0.25, (LEARN_S - c.t) / 0.6); if (a <= 0) return;
+    ctx.save(); ctx.globalAlpha = a;
+    ctx.font = `500 ${Math.round(BOARD * 0.0145)}px ${CANVAS_BODY}`;
+    const W = 330, lines = wrapLines(c.text, W - 24), H = 30 + lines.length * 17;
+    const x0 = BOARD - 14 - W, y0 = BAND + VIEW_H - 42 - H;
+    ctx.fillStyle = 'rgba(12,18,38,0.94)'; roundRect(x0, y0, W, H, 7); ctx.fill();
+    ctx.strokeStyle = '#2fe0d0'; ctx.lineWidth = 1; roundRect(x0, y0, W, H, 7); ctx.stroke();
+    ctx.font = `700 ${Math.round(BOARD * 0.015)}px ${CANVAS_BODY}`; ctx.fillStyle = '#2fe0d0';
+    ctx.fillText('WHAT JUST HAPPENED · ' + c.title, x0 + 12, y0 + 18);
+    ctx.font = `500 ${Math.round(BOARD * 0.0145)}px ${CANVAS_BODY}`; ctx.fillStyle = '#e8ecff';
+    lines.forEach((l, i) => ctx.fillText(l, x0 + 12, y0 + 36 + i * 17));
+    ctx.restore();
   }
 
   // Tiny word-wrapper for the mission brief (the one place duel HUD has prose).
@@ -3400,6 +4346,7 @@ const DUEL = (() => {
   }
 
   function drawAnnouncer() {
+    if (S.briefing || S.paused) return;
     let label = '';
     if (S.introT > 0) {
       const beat = S.introT > 1.7 ? 'SYNC 3' : S.introT > 1.0 ? 'SYNC 2' : S.introT > 0.35 ? 'SYNC 1' : 'DUEL!';
@@ -3411,13 +4358,14 @@ const DUEL = (() => {
     ctx.save();
     ctx.globalAlpha = alpha;
     ctx.fillStyle = 'rgba(5,7,15,.82)';
-    roundRect(190, BAND + 18, BOARD - 380, 42, 8); ctx.fill();
+    const ay = BAND + 18 + stepsOffset();
+    roundRect(190, ay, BOARD - 380, 42, 8); ctx.fill();
     ctx.strokeStyle = '#8b7dff'; ctx.lineWidth = 1;
-    roundRect(190, BAND + 18, BOARD - 380, 42, 8); ctx.stroke();
+    roundRect(190, ay, BOARD - 380, 42, 8); ctx.stroke();
     ctx.textAlign = 'center';
     ctx.font = `bold ${canvasFontPx(15, 15)}px 'Press Start 2P',monospace`;
     ctx.fillStyle = '#ffffff';
-    ctx.fillText(label, BOARD / 2, BAND + 45);
+    ctx.fillText(label, BOARD / 2, ay + 27);
     ctx.restore();
   }
 
@@ -3445,6 +4393,14 @@ const DUEL = (() => {
                      : (over ? (S.match.you > S.match.them ? 'MATCH WON' : 'MATCH LOST')
                              : (won ? 'ROUND WON' : 'ROUND LOST'));
     ctx.fillText(title, cx, cy + 42);
+    if (MM && won && S.missionStars) {
+      ctx.font = `bold ${canvasFontPx(22, 22)}px 'Space Grotesk',sans-serif`;
+      const n = S.missionStars, sw = 30;
+      for (let i = 0; i < 3; i++) {
+        ctx.fillStyle = i < n ? '#ffd166' : '#3a4166';
+        ctx.fillText('★', cx + (i - 1) * sw, cy + 74);
+      }
+    }
 
     // Best-of-3 pips
     if (!MM) {
@@ -3486,14 +4442,15 @@ const DUEL = (() => {
       wrapCentered(`NEXT CHALLENGE · ${nextBadge.requirement}`, cx, cy + 298, cw - 90);
     }
 
-    ctx.font = `500 ${Math.round(BOARD * 0.016)}px ${CANVAS_BODY}`;
-    ctx.fillStyle = '#6f79a8';
     const nextMission = MM && won ? nextTrainingMission(S.mission) : null;
+    const forward = (MM && won && nextMission != null) || !MM;
+    ctx.font = `${forward ? 700 : 500} ${Math.round(BOARD * (forward ? 0.019 : 0.016))}px ${CANVAS_BODY}`;
+    ctx.fillStyle = forward ? '#ffd166' : '#6f79a8';
     const action = MM
       ? (won && nextMission != null
-          ? `ENTER / A next mission (${nextMission + 1})  ·  R / X replay  ·  ESC / MENU training`
+          ? `▶ ENTER / A: NEXT MISSION ${nextMission + 1}  ·  R replay  ·  ESC training`
           : `${won ? 'ALL TRAINING CLEARED' : 'ENTER / A retry'}  ·  R / X replay  ·  ESC / MENU training`)
-      : (over ? 'SPACE / A rematch  ·  ESC / MENU menu' : 'SPACE / A next round  ·  ESC / MENU menu');
+      : (over ? '▶ SPACE / A: REMATCH  ·  ESC menu' : `▶ SPACE / A: ROUND ${S.match.no + 1} OF 3  ·  ESC menu`);
     wrapCentered(action, cx, cy + VIEW_H - 122, cw - 38);
     ctx.textAlign = 'left';
   }
@@ -3570,7 +4527,7 @@ const DUEL = (() => {
     selectBeam(BEAM_ORDER[(at + delta + BEAM_ORDER.length) % BEAM_ORDER.length]);
   }
   function beginCharge(kind, source) {
-    if (MODE !== 'duel' || S.paused || S.over || S.charging || !S.ships[0]) return false;
+    if (MODE !== 'duel' || S.paused || S.over || S.hitStop > 0 || S.charging || !S.ships[0]) return false;
     ac();
     S.charging = true; S.chargeT = 0;
     S.selfAim = kind === 'self'; S.chargeSource = source;
@@ -3579,11 +4536,11 @@ const DUEL = (() => {
   }
   function releaseCharge(source) {
     if (!S.charging || S.chargeSource !== source) return false;
-    const theta = DuelCore.chargeToTheta(S.chargeT);
+    const theta = DuelCore.driveTheta(S.chargeT, S.ships[0] ? rabiMult(S.ships[0]) : 1);
     const self = S.selfAim;
     S.charging = false; S.chargeT = 0; S.selfAim = false; S.chargeSource = null;
     const me = S.ships[0];
-    if (!S.paused && !S.over && me && me.beamCd === 0) {
+    if (!S.paused && !S.over && !(S.hitStop > 0) && me && me.beamCd === 0) {
       if (self) selfPulse(me, theta, S.beam); else fireBeam(me, theta, S.beam);
       return true;
     }
@@ -3595,14 +4552,15 @@ const DUEL = (() => {
   function beginMeasure() {
     if (S.paused || S.over) return false;
     const me = S.ships[0];
+    if (S.hitStop > 0) return false;
     if (!me || me.measCd !== 0 || me.winding !== 0) return false;
-    me.winding = K.MEASURE_WIND_S; sfxWind();
+    windMeasure(me);
     return true;
   }
   function launchEntangle() {
     if (S.paused || S.over) return false;
     const me = S.ships[0];
-    if (!me || S.bell || (me.entCd || 0) > 0) return false;
+    if (S.hitStop > 0 || !me || S.bell || (me.entCd || 0) > 0) return false;
     const q = take(S.proj); if (!q) return false;
     q.live = true; q.kind = 'entangle'; q.owner = 0; q.ttl = 4;
     q.x = me.x + Math.cos(me.ang) * K.SHIP_R;
@@ -3614,16 +4572,28 @@ const DUEL = (() => {
   }
   function pauseOrExit() {
     if (S.over) { exitDuel(S.mission >= 0); return; }
+    if (S.briefing) { exitDuel(S.mission >= 0); return; }
     S.paused = !S.paused;
     clearInput();
     announceA11y(S.paused ? 'Photon Duel paused.' : 'Photon Duel resumed.');
   }
   function replayRound() { if (S.over) start(S.seed, S.mission); }
+  function quitToMenu() { S.paused = false; clearInput(); exitDuel(S.mission >= 0); }
+  function restartFromPause() { S.paused = false; clearInput(); start(undefined, S.mission); }
+  function beginFromBrief() { if (!S.briefing) return false; S.briefing = false; clearInput(); ac(); return true; }
+  // Pause-menu buttons, in canvas coordinates (drawn by drawPauseMenu).
+  const PAUSE_BTNS = [
+    { id: 'resume',  label: 'RESUME',          key: 'ESC' },
+    { id: 'restart', label: 'RESTART',         key: 'R' },
+    { id: 'quit',    label: 'QUIT TO MENU',    key: 'Q' },
+  ];
+  const pauseBtnRect = i => ({ x: BOARD / 2 - 130, y: BOARD * 0.5 + i * 44, w: 260, h: 34 });
   function confirmDebrief() {
     if (!S.over) return;
     if (S.mission >= 0) {
       const next = S.round.winner === 0 ? nextTrainingMission(S.mission) : null;
-      start(undefined, next == null ? S.mission : next);
+      const nm = next == null ? S.mission : next;
+      start(undefined, nm, false, { brief: nm !== S.mission });
     } else nextRound();
   }
 
@@ -3636,6 +4606,14 @@ const DUEL = (() => {
     const pressed = down && !wasDown;
     if (pressed) S.inputDevice = 'KEYBOARD';
     if (pressed && k === kb.pause) { pauseOrExit(); e.preventDefault(); return; }
+    if (S.briefing) {
+      if (pressed && (k === kb.measure || k === kb.confirm)) { beginFromBrief(); e.preventDefault(); }
+      return;
+    }
+    if (S.paused && pressed) {
+      if (k === 'q') { quitToMenu(); e.preventDefault(); return; }
+      if (k === kb.replay) { restartFromPause(); e.preventDefault(); return; }
+    }
     if (pressed && k === kb.replay && S.over) { replayRound(); e.preventDefault(); return; }
     if (pressed && (k === kb.measure || k === kb.confirm) && S.over) { confirmDebrief(); e.preventDefault(); return; }
     // Beam select — 1 X (attack), 2 Y (attack), 3 T (phase, scarce).
@@ -3711,7 +4689,14 @@ const DUEL = (() => {
       return; // baseline held buttons: reconnect never replays an old action
     }
     if (f.anyActive || f.move.active || f.aim.active) S.inputDevice = 'GAMEPAD';
-    if (S.over) {
+    if (S.briefing) {
+      if (f.confirmPressed) beginFromBrief();
+      else if (f.pausePressed) pauseOrExit();
+    } else if (S.paused) {
+      if (f.pausePressed || f.confirmPressed) pauseOrExit();
+      else if (f.quitPressed) quitToMenu();
+      else if (f.replayPressed) restartFromPause();
+    } else if (S.over) {
       if (f.replayPressed) replayRound();
       else if (f.confirmPressed) confirmDebrief();
       else if (f.pausePressed) pauseOrExit();
@@ -3742,6 +4727,15 @@ const DUEL = (() => {
   }
   function onMouseDown(e) {
     if (MODE !== 'duel' || (e.button !== 0 && e.button !== 2)) return;
+    if (S.briefing) { beginFromBrief(); e.preventDefault(); return; }
+    if (S.paused && e.button === 0) {
+      const r = canvas.getBoundingClientRect();
+      const x = (e.clientX - r.left) * BOARD / r.width, y = (e.clientY - r.top) * BOARD / r.height;
+      PAUSE_BTNS.forEach((b, i) => { const q = pauseBtnRect(i);
+        if (x >= q.x && x <= q.x + q.w && y >= q.y && y <= q.y + q.h)
+          (b.id === 'resume' ? pauseOrExit : b.id === 'restart' ? restartFromPause : quitToMenu)(); });
+      e.preventDefault(); return;
+    }
     beginCharge(e.button === 2 ? 'self' : 'attack', `pointer-${e.button}`);
     e.preventDefault();
   }
@@ -3753,18 +4747,18 @@ const DUEL = (() => {
   return { start, stop, frame, onKey, clearKeys:clearInput, clearInput,
            onMouseMove, onMouseDown, onMouseUp, onGamepadConnected, onGamepadDisconnected,
            setGamepadProvider, pollGamepad,
-           state: S, triggerFx, p95, telemetry: () => S.tele.slice(),
+           state: S, triggerFx, p95, coachHint, telemetry: () => S.tele.slice(),
            togglePerf: () => (S.showPerf = !S.showPerf) };
 })();
 
 // PD-1 — mode seams. Kept tiny and outside the DUEL closure so the D1
 // landing screen (PD-26) can call them directly.
-function startDuel(seed, mission) {
+function startDuel(seed, mission, opts) {
   closeModal();
   MODE = 'duel';
   document.body.classList.add('duel-mode');
   sizeCanvasBackingStore();
-  DUEL.start(seed, mission);
+  DUEL.start(seed, mission, false, opts);
 }
 function exitDuel(toMissions) {
   MODE = 'story';
@@ -3798,21 +4792,25 @@ function openMenu() {
   One arena. Real qubit physics. Choose your fight.</p>
 
 <div class="mode-grid" aria-label="Choose how to play">
-  <button class="mode-card" data-play-mode="photon-duel" onclick="startDuel()">
+  <button class="mode-card" data-play-mode="photon-duel" onclick="startDuel(undefined, undefined, {brief:true})">
     <span class="mode-kicker">COMPETITIVE · BEST OF 3</span>
     <strong>⚡ PHOTON DUEL</strong>
-    <span class="mode-copy">Outfly Sage, rotate their live Bloch vector, and risk the MEASURE when the odds are yours.</span>
+    <span class="mode-copy">Rotate Sage's qubit toward |1⟩ with pulse beams, then MEASURE it before they measure you. The coach tells you the best shot and why.</span>
     <span class="mode-status">PLAY FREE DUEL →</span>
   </button>
   <button class="mode-card training" data-play-mode="duel-training" onclick="openDuelMissions()">
-    <span class="mode-kicker">GUIDED · ${total} CONCEPT MISSIONS</span>
+    <span class="mode-kicker">${cleared === 0 ? 'NEW? START HERE · ' : ''}GUIDED · ${total} CONCEPT MISSIONS</span>
     <strong>◈ DUEL TRAINING</strong>
     <span class="mode-copy">Master the same arena through missions that refuse the win until you use the quantum concept.</span>
-    <span class="mode-status">${cleared}/${total} CLEARED${next == null ? ' · TRAINING COMPLETE' : ` · NEXT: MISSION ${next + 1}`} →</span>
+    <span class="mode-status">${cleared}/${total} CLEARED · ${totalStars()}/${3 * total} ★${next == null ? ' · TRAINING COMPLETE' : ` · NEXT: MISSION ${next + 1}`} →</span>
   </button>
 </div>
 <h3>CONTROLS</h3>
 ${duelControlsHTML()}
+<h3>ENTANGLEMENT</h3>
+${duelEntangleHTML()}
+<h3>POWER-UPS · FREE DUEL</h3>
+${duelPickupsHTML()}
 <h3>LAB TOOLS</h3>
 <div class="support-actions">
   <button class="btn" onclick="openGlossaryIndex()">▸ GLOSSARY</button>
@@ -3823,6 +4821,16 @@ ${duelControlsHTML()}
 
 <h3>SETTINGS</h3>
 <p style="color:var(--dim);font-size:var(--fs-0);margin-bottom:6px;">
+  <label style="cursor:pointer">
+    <input type="checkbox" id="aim-assist-toggle" ${GAME.aimAssist?'checked':''}
+      onchange="GAME.aimAssist=this.checked;saveFlag('qb_aim_assist',this.checked)">
+    Aim assist: your shots curve toward Sage (on by default)
+  </label><br>
+  <label style="cursor:pointer">
+    <input type="checkbox" id="coach-toggle" ${GAME.coach?'checked':''}
+      onchange="GAME.coach=this.checked;saveFlag('qb_coach',this.checked)">
+    Coach: show the next step and the quantum reason (on by default)
+  </label><br>
   <label style="cursor:pointer">
     <input type="checkbox" id="ev-quiz-toggle" ${GAME.evQuizEnabled?'checked':''}
       onchange="GAME.evQuizEnabled=this.checked">
@@ -3855,25 +4863,28 @@ function openDuelMissions() {
   const rows = DuelCore.DUEL_MISSIONS.map(m => `
     <div class="mission-card${m.id === next ? ' is-next' : ''}" data-training-mission="${m.id}">
       ${m.id === next ? '<div class="mission-next">NEXT RECOMMENDED MISSION</div>' : ''}
-      <h4>${m.id + 1}. ${m.title}</h4>
+      <h4>${m.id + 1}. ${m.title} ${starHTML(((GAME.duelProfile.missions || {})[m.id] || {}).bestStars || 0)}</h4>
       <p><b style="color:var(--teal)">${m.concept}</b> — ${m.brief}</p>
+      ${m.steps ? `<ol class="mission-steps">${m.steps.map(st => `<li>${st.text}</li>`).join('')}</ol>` : ''}
+      <div class="mission-par">${m.drone ? 'TRAINING DRONE · Sage flies but never shoots' : 'LIVE OPPONENT · Sage fights back'}</div>
+      ${m.par ? `<div class="mission-par">★ clear · ★★ under ${m.par.s} s · ★★★ also ≤ ${m.par.shots} shot${m.par.shots === 1 ? '' : 's'}</div>` : ''}
       <div class="mission-record">BEST · ${missionRecordText(m.id)}</div>
       ${done.includes(m.id) ? '<div class="mission-done">✓ CLEARED</div>' : ''}
-      <button class="btn" onclick="startDuel(undefined, ${m.id})">▶ ${done.includes(m.id) ? 'REPLAY' : 'FLY'} MISSION ${m.id + 1}</button>
+      <button class="btn" onclick="startDuel(undefined, ${m.id}, {brief:true})">▶ ${done.includes(m.id) ? 'REPLAY' : 'FLY'} MISSION ${m.id + 1}</button>
     </div>`).join('');
   document.getElementById('modal-content').innerHTML = `
 <h2>◈ DUEL TRAINING ◈</h2>
 <p style="text-align:center;color:var(--dim);font-size:var(--fs-0);margin:-8px 0 14px">
   Seven concepts, seven duels. Each one is built so it CANNOT be cleared without
   actually using its concept — the win is refused, with a reason, if you try.</p>
-<p style="text-align:center;color:var(--gold);font-weight:700">${done.length}/${total} MISSIONS CLEARED${next == null ? ' · TRAINING COMPLETE' : ` · NEXT: MISSION ${next + 1}`}</p>
+<p style="text-align:center;color:var(--gold);font-weight:700">${done.length}/${total} MISSIONS CLEARED · ${totalStars()} of ${3 * total} ★${next == null ? ' · TRAINING COMPLETE' : ` · NEXT: MISSION ${next + 1}`}</p>
 <div class="training-progress" role="progressbar" aria-label="Duel Training progress" aria-valuemin="0" aria-valuemax="${total}" aria-valuenow="${done.length}">
   <span style="width:${Math.round(done.length / total * 100)}%"></span>
 </div>
 <h3>OPTIONAL QUANTUM MASTERY</h3>
 ${masteryPanelHTML()}
 ${rows}
-<button class="btn" onclick="startDuel()">⚡ FREE DUEL (no mission)</button>
+<button class="btn" onclick="startDuel(undefined, undefined, {brief:true})">⚡ FREE DUEL (no mission)</button>
 <button class="btn close-btn" onclick="openMenu()">◀ BACK</button>`;
   document.getElementById('modal-overlay').classList.add('show');
 }

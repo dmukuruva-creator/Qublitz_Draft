@@ -27,7 +27,9 @@ async function finishMeasureFixture(page) {
   await page.evaluate(() => {
     const s = DUEL.state;
     let ts = s.last == null ? performance.now() : s.last;
-    for (let i = 0; i < 120 && !s.over; i++) {
+    // 240 frames: 1 s wind-up + flight + the winning measurement reveal's
+    // hit-stop (REVEAL_WIN_STOP_S), after which the round ends.
+    for (let i = 0; i < 240 && !s.over; i++) {
       const me = s.ships[0], foe = s.ships[1];
       foe.x = me.x + 45; foe.y = me.y; foe.vx = foe.vy = 0;
       s.aim = {x:me.x + 1000, y:me.y};
@@ -267,6 +269,9 @@ async function finishMeasureFixture(page) {
     s.rand = () => 0.1;
     s.ships[0].x = 300; s.ships[0].y = 400;
     s.ships[1].x = 370; s.ships[1].y = 400;
+    // The coupler is a CNOT with the player as control, so it entangles only
+    // from superposition: start the player at |+⟩ (a π/2 self-pulse's result).
+    s.ships[0].bloch = { x:1, y:0, z:0 };
     s.aim = {x:1000,y:400};
   });
   await page.keyboard.press('e');
