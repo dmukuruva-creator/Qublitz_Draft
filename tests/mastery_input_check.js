@@ -269,6 +269,9 @@ async function finishMeasureFixture(page) {
     s.rand = () => 0.1;
     s.ships[0].x = 300; s.ships[0].y = 400;
     s.ships[1].x = 370; s.ships[1].y = 400;
+    // The coupler is a CNOT with the player as control, so it entangles only
+    // from superposition: start the player at |+⟩ (a π/2 self-pulse's result).
+    s.ships[0].bloch = { x:1, y:0, z:0 };
     s.aim = {x:1000,y:400};
   });
   await page.keyboard.press('e');
