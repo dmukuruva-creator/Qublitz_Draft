@@ -2,8 +2,22 @@
   "name": "qublitz",
   "version": "1.1.0",
   "private": true,
-  "description": "QuBlitz — a quantum qubit-battle arena (canonical app: quantum_chess.html).",
+  "description": "QuBlitz — Photon Duel and its guided Duel Training campaign.",
   "scripts": {
-    "test": "node tests/qphysics.test.js"
+    "test": "node tests/qphysics.test.js",
+    "test:duel": "node tests/duel_harness.test.js",
+    "test:input": "node tests/input_lifecycle_check.js",
+    "test:focus": "node tests/two_mode_focus_check.js",
+    "test:mastery-input": "node tests/mastery_input_check.js",
+    "capture": "node tests/capture_responsive.js",
+    "live-check": "node tests/live_regression_check.js",
+    "contrast": "node tests/contrast_check.js",
+    "offline": "node tests/offline_check.js",
+    "test:embed": "node tests/capture_embedded.js",
+    "test:app": "python3 tests/app_smoke.py",
+    "playwright:install": "playwright install chromium"
+  },
+  "devDependencies": {
+    "playwright": "^1.61.1"
   }
 }

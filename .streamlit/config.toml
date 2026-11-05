@@ -8,8 +8,15 @@ font            = "sans serif"
 
 [server]
 headless        = true
-enableCORS      = false
-enableXsrfProtection = false
+# BE-6 — both were disabled from this file's very first commit with no
+# comment or commit message ever explaining why (checked: `git log -p` on
+# this file, both prior commits carry no rationale). The game embeds via
+# st.components.v1.html, which injects inline HTML into the same origin —
+# not a cross-origin iframe src fetch — so neither exception has ever been
+# load-bearing here. Re-enabled 2026-07-09; verified locally (streamlit run
+# app.py) that the app still boots and the embed still renders with both on.
+enableCORS      = true
+enableXsrfProtection = true
 
 [browser]
 gatherUsageStats = false

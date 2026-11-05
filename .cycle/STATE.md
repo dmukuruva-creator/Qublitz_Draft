@@ -1,0 +1,159 @@
+# Cycle state
+cycle: 03
+phase: ship
+waiting: |
+  2026-07-26 — NEW WORK IN FLIGHT outside this cycle's scope, per David's approved plan
+  (~/.claude/plans/fancy-hugging-salamander.md): the typography/density + Photon Duel D0–D3
+  rework. Phase 0 (TY-1..5 type scale + SM-1..7 story declutter) is COMMITTED on branch
+  `duel-phase0` (stacked on arena-evidence; commits 8949e38 + f8f771b), full gate green
+  (qphysics, contrast 0-AA, offline 3-fonts, harnesses, captures, live-checks 5/5; extracted
+  blocks hash-identical; bot_guard bit-identical, only the known GD-1 bar fails). FE-6's
+  pixel-font classification is superseded — see HANDOFF.md's FE-6 amendment. Cycle 03 close
+  (Gate-2) still awaits David; when cycle 04 opens, this plan becomes its PLAN.md.
+  **D0 (the Photon Duel spike, PD-1..PD-12) is COMMITTED on `duel-d0` (7894627)** — playable
+  at `?mode=duel` or via the menu button; DuelCore + tests/duel_harness.test.js (17 checks)
+  green, p95 frame 0.30ms vs a 4ms budget, file 561KB of the 2MB cap, story mode unchanged.
+  **D0's exit gate is DAVID'S to run: the PI (Mattias) plays it before D1 opens** (design doc
+  §10 + P6.6 — he is playtester #0). Two things to watch in that session, both pre-registered
+  risks: whether hold-to-charge feels bad on a trackpad (§11.1 — fallback is tap-to-cycle
+  preset θ, not yet built), and the first_shot Δt against the 30s FTUE target (telemetry
+  event 2 records it; read it from the gate-log export). D1 (Z/Y beams, eigenstate shield,
+  echo pickups, Cadet/Duelist bots, debrief cards, landing screen) is NOT started.
+  **2026-07-27 — David steered the revamp: the laser duel becomes the product.**
+  Two more commits on `duel-d0`: (a) `3dc374d` the mechanics layer — decoherence
+  hotspots (flee-to-discharge sanctuary), pulse fidelity + calibration pickups,
+  T-charge scarcity (Clifford/non-Clifford as the anti-turtle tactic), Bell
+  entangle traps (the 95%-vs-5% comeback reset), Zeno lock; (b) `56eaf19` the
+  7 campaign concepts PORTED into duel missions, each with a pure gate that
+  refuses a win which didn't use the concept — the missionShieldBlocks property,
+  proven by harness cases m1/m3/m4/m5 and verified live. duel_harness is at 43
+  checks. **DECISION (David, 2026-07-27): the turn-based board is retired as the
+  delivery vehicle for the campaign** — its concepts now live in the duel. The
+  old CAMPAIGN_MISSIONS code is still present and reachable via Story Mode; it
+  has not been deleted, and deleting it is a separate call.
+  **2026-07-28 — THE BOARD IS DELETED.** David: "delete the old board first, continue
+  development... it's okay if QuBlitz can have multiple minigames within it as long as they're
+  adversarial or duel-based." ~3,400 lines removed (BotAI, CAMPAIGN_MISSIONS, board render/turn/
+  combat, gate menu, crowd vote, attract, Sage advisor, Pulse Forge, panels, event log);
+  quantum_chess.html 7,052 -> ~3,960 lines, 337KB. New hub lists three adversarial modes:
+  Photon Duel, Duel Training (the 7 concept missions), and **Bell Trial** — a CHSH game where
+  winning means pushing S past the classical bound of 2 (DuelCore.CHSH; harness cases c1-c6
+  include an EXHAUSTIVE proof that all 16 deterministic local-hidden-variable strategies cap at
+  75%). Four harnesses deleted with their subject; duel_harness is at 49 checks. QPhysics
+  byte-identical throughout.
+  **2026-07-29 — iteration 2.** (a) `118a134` the REAL bot: DuelBot
+  (Cadet/Duelist/Menace), pure and harness-extractable, which parks on
+  eigenstates, spends a T-charge to break your camp, flees to hotspots and
+  entangles when losing — plus SELF-PULSE (right mouse), the missing
+  defensive half without which eigenstate parking was literally unreachable.
+  Two physics bugs and two shell bugs found en route (see the commit body);
+  §9.6 bot liveness is closed. Measured live per 11s: Cadet 6 actions and
+  harmless, Duelist 9 and pushes you to 0.68, Menace 4 and WINS the round.
+  (b) `5fd830a` ECHO SIEGE, minigame #3: real-time dynamical decoupling — a
+  Saboteur dephases you and you drop π-pulses to refocus (Hahn/CPMG). Live:
+  no echo 37.6%, one echo at T/2 → 93.7%. duel_harness now 69 checks.
+  QuBlitz is three adversarial minigames + concept training.
+  **2026-07-29 — DEMO CLEANUP (`acefc9f`), demo-ready.** Best-of-3 matches with a
+  3-line debrief card (what won · concept · one pattern-keyed tip, pure + tested
+  D1-D5). Dead code purged: 73 CSS rules, ~16 orphan JS symbols, and ASSET_GRASS
+  (103KB of unreferenced base64 — a third of the file). 366KB -> 254KB.
+  Re-wired rather than deleted, since they only lost their call sites: the
+  leaderboard (rebuilt on duel stats), EV-1's quick check (now offered after a
+  mission clear), and the Physics Lab's decoherence chart. Two self-inflicted
+  breakages caught and fixed (an over-eager regex ate the C complex helpers; the
+  lab read a trimmed GAME field). duel_harness 74 checks; C/GATES/QPhysics/π all
+  hash-identical to the pre-rework baseline. Prior status follows.
+  ---
+  nothing structural. BE-8/UP-5/GD-1 closed 2026-07-11 (see prior note below). As of
+  2026-07-13, PED-1..5, BR-1..4, GOV-2/3/4, and EV-1/2/3 are ALSO all DONE — every carried-forward
+  v1 item is now closed except GD-1's remaining tuning ceiling (documented, structural) and EV-4
+  (the actual pilot, hard IRB gate, deliberately not attempted). Six new game-repo branches
+  (arena-pedagogy through arena-evidence) turned out stacked rather than independent — a
+  mechanical error found mid-session; NOT fully unwound since some dependencies are real (see
+  HANDOFF.md's "Branch topology" row in the carried-forward table) — merge in stack order.
+  Remaining open items are per-task, not structural: UP-0 (draft ready, needs user approval to
+  post — outward-facing), UP-2 (mocked 2026-07-13 on branch `platform-home` off `simulator-bridges`,
+  live-tested, NOT merged — merge itself still needs UP-0/PI sign-off, only the visual was built
+  early at explicit user request so it could be shown to the PI bundled with everything else in one
+  sitting), push/merge go-ahead for the full ten-branch set (PR-A/C/D/F from before + the new
+  six-branch stack) + PR-E (`platform-home`), and eventually IRB consultation for EV-4.
+  Prior note (2026-07-11): BE-8's iCloud relocation done (both repos + the linked worktree moved
+  to ~/Developer/, verified via xattr to be outside iCloud sync); Phase F's other former blocker,
+  "upstream PR #28 clears", was already done (#27/#28 merged 2026-07-04); UP-5 and GD-1 (initial
+  27.5%->44.0% re-tune) done the same day.
+goals_locked: true
+last_updated: 2026-07-13
+note_cleanup_pass: |
+  2026-07-06 — user requested "pressure-test, debug, clean up, final PR". Findings + actions
+  (all in the game repo only; fork untouched, #27/#28 still open upstream):
+  1. GD-2's X-lock was PROVEN a no-op (off-by-one: lockedUntilTurn=turnCount+2 vs strict `>`;
+     0 activations in 182,310 instrumented checks across 600 harness games). Fixing it (+3)
+     measurably breaks the game (171-200/200 draws — re-charge loops). Mechanic REMOVED
+     (game + harness + UI + copy); GD-2's bar re-verified passing via the GD-1 GUARD fixes
+     alone (bit-identical direct matchup 70/118/12). See HANDOFF GD-2 + harness tuning note.
+  2. ~143KB (26%) dead code removed from quantum_chess.html: retired biome system (ASSET_SNOW,
+     ASSET_TILES, imgGrass/imgSnow/imgTiles Image objects, initBiomeToggle, biome CSS,
+     isSnowBiome/activeBiomeImg/alternateBiomeImg, DECOR_SRC) + never-drawn bg NPC wanderers
+     (_drawPed, bgNPCs, NPC_COLORS). ASSET_GRASS kept (live: boot-screen backdrop).
+  3. Phone-width (390px) defects found by live play and fixed: sage-bar text garbling
+     (line-height:0 inherited from #canvas-wrap collapsed wrapped lines onto one baseline —
+     fixed via explicit line-heights + nowrap/ellipsis name + opaque footer + compact <=560px
+     type), kb-hint ribbon suppressed on touch-only devices, vote badge hidden at phone width,
+     canvas-wrap bottom padding 72->84px so the 82px sage bar stops covering the board row.
+  Verification: qphysics + mission_shield + debrief + coherence_budget green; bot_guard has
+  only its known documented GD-1-bar failure; capture_responsive clean at all 5 widths;
+  full Playwright pressure-test (desktop flow, GUARD persistence, missions 4/5/6 shields,
+  touch tap-through, 44px menu rows) passing; zero console errors.
+note: C02 recap (unchanged): C02-T9 DONE, PRs #27 and #28 open against mvwf/qublitz, awaiting
+  upstream review/merge. Per the user's explicit instruction this session, NOTHING touches the
+  fork's `arena-pr` branch (sync, docstring, commits) until #28 clears.
+
+  C03 (this cycle): per HANDOFF.md's own suggested cycle mapping, scoped to Phase 1 (incentive
+  design, GD-2..GD-5) + Phase 3 (input/devices, IN-1..IN-4), confirmed with the user up front.
+  All 9 tasks are CODE-COMPLETE with passing tests in the game repo (`QuBlitz Project/`,
+  quantum_chess.html + tests/); per-task implementation notes are in HANDOFF.md's checkboxes.
+  Additionally, at the user's follow-up request this same session:
+
+  1. **GD-1 was actually fixed**, not just re-tuned. Root cause (found by tracing an exact
+     ply-by-ply sequence): `endTurn()` cleared a side's own `guarding` flag in the SAME ply it
+     was set, before the opponent's very next turn ever happened — GUARD had never protected
+     anyone, for any role, since its original commit. The previous session's conclusion
+     ("warriors have no GUARD lever, inherent ~50/50") was itself downstream of this bug, not
+     the true root cause. Fixed: the clear now runs for the new side right after the turn flips.
+     GUARD was then extended to every role (was guardian-only) — quantum_chess.html's
+     `GATE_INFO`/`openGateMenu`/keyboard/crowd-vote/`BotAI.chooseAction` all dropped their
+     `role==='guardian'` gate. This immediately exposed a SECOND bug (guard-preference firing on
+     any adjacent enemy, not a genuinely charged threat — traced: a bot that never once chose
+     ATTACK in 30 plies, 0/200 games won), fixed by narrowing the trigger to `threat`. Both
+     fixes verified live in Chromium via Playwright (guard confirmed to survive into the
+     opponent's turn, which it did not before). Net measured result: GD-2's bar now passes
+     clearly (mixed ~59-65% vs X-only, was ~48%); GD-1's own stricter bar (X-only loses ≥65% to
+     the Medium bot) is substantially improved (was 38.5% loss, now ~26-30%) but not fully met —
+     documented as a live balance/turn-economy question in tests/bot_guard_harness.test.js, not
+     a broken mechanic anymore. Two further tuning attempts were tried live and one was reverted
+     after it measured worse — not pushed further past that point (diminishing-returns judgment
+     call, consistent with this file's established practice this session).
+  2. **Stray duplicate files removed in both repos.** Every untracked `<name> 2.<ext>` file
+     (game repo: `tests/bot_guard_harness.test 2.js`, `node_modules 2/`; fork repo: 12 files
+     including `pages/QuBlitz_Arena 2.py`, `pages/_assets/quantum_chess 2.html`) was verified
+     byte-identical to its real counterpart (or, for the one that differed slightly, the real
+     file was first confirmed to match the fork's git HEAD exactly) before deleting — no data
+     loss risk. This also removed the duplicated "QuBlitz Arena 2" entry from the live Streamlit
+     nav sidebar (it was a side effect of the stray page file). If new `<name> 2.<ext>` files
+     reappear on their own between sessions, that's a live iCloud-sync signal, not an assistant
+     artifact — flagged to the user.
+
+  Verification: `node tests/qphysics.test.js` green (hard gate, unchanged). All 4 new/extended
+  harness test files green except bot_guard_harness's one remaining, now-much-smaller,
+  documented gap (GD-1's ≥65% bar). `node tests/capture_responsive.js` clean at
+  390/640/768/1024/1440px. GUARD-availability fix live-verified via Playwright (see above).
+
+  NOT done / explicitly deferred, per user instruction — WAIT for PR #28 to clear before any of:
+    1. Copying quantum_chess.html's changes to the fork's vendored `pages/_assets/quantum_chess.html`
+       (the CLAUDE.md "golden rule") — still LOCAL ONLY in the game repo, nothing committed,
+       nothing pushed, no PR opened.
+    2. Writing the IN-4 rerun-persistence finding into `pages/QuBlitz_Arena.py`'s docstring.
+    3. Any other edit to the fork's `arena-pr` branch.
+  Also still unstarted (out of this pass's confirmed scope): HANDOFF.md's Phase 2
+  (onboarding/jargon), Phase 4 (control-layer bridge), Phase 5 (evidence of learning), Phase 6
+  (governance).

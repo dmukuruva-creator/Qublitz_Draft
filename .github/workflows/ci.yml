@@ -5,12 +5,78 @@ on:
   pull_request:
 
 jobs:
-  qphysics-test:
+  engine:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - name: Run QPhysics regression tests
+      - name: Physics regression
         run: node tests/qphysics.test.js
+      - name: Duel rules regression
+        run: node tests/duel_harness.test.js
+
+  streamlit-wrapper:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - run: python tests/app_smoke.py
+
+  browsers:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, firefox, webkit]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      - run: npx playwright install --with-deps ${{ matrix.browser }}
+      - name: Browser suites
+        env:
+          QB_BROWSER: ${{ matrix.browser }}
+          # Set here, not on the job: it would also load in actions/checkout,
+          # before this file exists.
+          NODE_OPTIONS: -r ./tests/support/select_browser.js
+        run: |
+          suites="input_lifecycle_check two_mode_focus_check mastery_input_check contrast_check live_regression_check capture_responsive"
+          # WebKit's driver cannot navigate to file:// in an offline context, so
+          # it cannot run this check. That is a driver limit, not a convenience.
+          if [ "$QB_BROWSER" != webkit ]; then suites="$suites offline_check"; fi
+          failed=""
+          for suite in $suites; do
+            echo "::group::$suite"
+            node "tests/$suite.js" || failed="$failed $suite"
+            echo "::endgroup::"
+          done
+          if [ -n "$failed" ]; then echo "FAILED:$failed"; exit 1; fi
+
+  arena-embed:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: mvwf/qublitz
+          path: platform-under-test
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      # qutip 4.7.6 builds from source on 3.12 and needs BLAS.
+      - run: sudo apt-get update && sudo apt-get install -y libopenblas-dev
+      - run: pip install -r platform-under-test/requirements.txt
+      - run: cp quantum_chess.html platform-under-test/pages/_assets/quantum_chess.html
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: node tests/capture_embedded.js platform-under-test
