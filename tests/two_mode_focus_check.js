@@ -29,7 +29,7 @@ async function openGame(context) {
   const normal = await browser.newContext({ viewport: { width: 1280, height: 900 } });
   const page = await openGame(normal);
   const consoleErrors = [];
-  page.on('console', msg => { if (msg.type() === 'error') consoleErrors.push(msg.text()); });
+  page.on('console', msg => { if (msg.type() === 'error') { const at = msg.location(); consoleErrors.push(`${msg.text()} @ ${at.url.split('/').pop()}:${at.lineNumber}:${at.columnNumber}`); } });
 
   const hub = await page.evaluate(() => ({
     modes: [...document.querySelectorAll('[data-play-mode]')].map(el => ({

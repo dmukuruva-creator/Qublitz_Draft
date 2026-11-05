@@ -119,9 +119,10 @@ async function checkDprAndClick(chromium) {
     await page.mouse.move(box.x + box.width * 0.5, box.y + box.height * 0.5);
     await page.mouse.down();
     await page.waitForTimeout(220);
+    await page.waitForFunction(() => DUEL.state.charging === true, null, { timeout: 5000 }).catch(() => {});
     const charging = await page.evaluate(() => DUEL.state.charging === true);
     await page.mouse.up();
-    await page.waitForTimeout(150);
+    await page.waitForFunction(() => DUEL.state.shotCount > 0, null, { timeout: 5000 }).catch(() => {});
     const fired = await page.evaluate(() => DUEL.state.shotCount > 0);
     const clickOk = charging && fired;
 

@@ -44,7 +44,7 @@ async function finishMeasureFixture(page) {
   const context = await browser.newContext({ viewport:{ width:1440, height:1000 } });
   const page = await context.newPage();
   const consoleErrors = [];
-  page.on('console', msg => { if (msg.type() === 'error') consoleErrors.push(msg.text()); });
+  page.on('console', msg => { if (msg.type() === 'error') { const at = msg.location(); consoleErrors.push(`${msg.text()} @ ${at.url.split('/').pop()}:${at.lineNumber}:${at.columnNumber}`); } });
   await boot(page);
 
   const pure = await page.evaluate(() => {
