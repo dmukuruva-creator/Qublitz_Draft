@@ -15,6 +15,7 @@
 //
 // Run: node tests/offline_check.js
 'use strict';
+const watchPageErrors = require('./support/page_errors');
 const path = require('path');
 
 const GAME_URL = 'file://' + path.join(__dirname, '..', 'quantum_chess.html');
@@ -34,6 +35,8 @@ const GAME_URL = 'file://' + path.join(__dirname, '..', 'quantum_chess.html');
   const ctx = await browser.newContext();
   await ctx.setOffline(true);
   const page = await ctx.newPage();
+  const pageErrors = [];
+  watchPageErrors(page, pageErrors);
 
   const externalRequests = [];
   page.on('request', (req) => {
@@ -50,31 +53,27 @@ const GAME_URL = 'file://' + path.join(__dirname, '..', 'quantum_chess.html');
   await page.goto(GAME_URL, { waitUntil: 'load' });
   await page.waitForTimeout(1000);
 
-  // Measure a known glyph's width in each custom font vs the browser's
-  // generic fallback at the same size — if the embed silently failed and
-  // fell back, the two widths would match (fallback == fallback).
-  const widths = await page.evaluate(() => {
-    function widthOf(fontFamily) {
-      const c = document.createElement('canvas');
-      const ctx2 = c.getContext('2d');
-      ctx2.font = `16px ${fontFamily}`;
-      return ctx2.measureText('QuBlitz0123').width;
-    }
-    // TY-2 — Rajdhani is digits-only, so its probe string must be numeric
-    // (letters would fall through to the next face and measure as fallback).
-    function numWidthOf(fontFamily) {
-      const c = document.createElement('canvas');
-      const ctx2 = c.getContext('2d');
-      ctx2.font = `600 16px ${fontFamily}`;
-      return ctx2.measureText('0123456789:%').width;
-    }
+  // Each probe names a font and a generic fallback. If the font did not load, the
+  // browser draws the fallback and the two widths match exactly.
+  const widths = await page.evaluate(async () => {
+    const c = document.createElement('canvas').getContext('2d');
+    const width = (font, text) => { c.font = font; return c.measureText(text).width; };
+    const word = 'QuBlitz0123', digits = '0123456789:%';  // Rajdhani only carries digits
+    // Embedded fonts load on first use, and the hub never uses Rajdhani. Request
+    // each one; a font that is not embedded resolves to nothing and fails below.
+    await Promise.all([
+      document.fonts.load("16px 'Press Start 2P'", word),
+      document.fonts.load("16px 'Space Grotesk'", word),
+      document.fonts.load("600 16px 'Rajdhani'", digits),
+    ]);
     return {
-      pixelFont: widthOf("'Press Start 2P'"),
-      pixelFallback: widthOf('monospace'),
-      bodyFont: widthOf("'Space Grotesk'"),
-      bodyFallback: widthOf('sans-serif'),
-      numFont: numWidthOf("'Rajdhani'"),
-      numFallback: numWidthOf('sans-serif'),
+      gamePresent: typeof DUEL !== 'undefined' && !!document.getElementById('game-canvas'),
+      pixelFont: width("16px 'Press Start 2P', monospace", word),
+      pixelFallback: width('16px monospace', word),
+      bodyFont: width("16px 'Space Grotesk', serif", word),
+      bodyFallback: width('16px serif', word),
+      numFont: width("600 16px 'Rajdhani', serif", digits),
+      numFallback: width('600 16px serif', digits),
     };
   });
 
@@ -85,6 +84,8 @@ const GAME_URL = 'file://' + path.join(__dirname, '..', 'quantum_chess.html');
   await browser.close();
 
   const results = [
+    { name: 'The game itself loaded', pass: widths.gamePresent, detail: `DUEL and #game-canvas present=${widths.gamePresent}` },
+    { name: 'No uncaught page errors', pass: pageErrors.length === 0, detail: pageErrors.join(' | ') || 'none' },
     { name: 'Zero external requests while offline', pass: externalRequests.length === 0, detail: externalRequests.join(', ') || '(none)' },
     { name: 'Zero failed requests while offline', pass: failedRequests.length === 0, detail: failedRequests.join(', ') || '(none)' },
     { name: 'Press Start 2P actually rendered (not fallback)', pass: pixelFontLoaded, detail: `custom=${widths.pixelFont.toFixed(2)}px vs fallback=${widths.pixelFallback.toFixed(2)}px` },

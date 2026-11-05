@@ -136,10 +136,7 @@ GAME_HTML_PATH = Path(__file__).parent / "quantum_chess.html"
 @st.cache_data(show_spinner=False)
 def load_game_html(_mtime: float) -> str:
     if not GAME_HTML_PATH.exists():
-        return (
-            "<p style='color:#ff5a72;font-family:monospace;padding:20px'>"
-            "⚠ quantum_chess.html not found — place it next to app.py and restart.</p>"
-        )
+        return ""
     return GAME_HTML_PATH.read_text(encoding="utf-8")
 
 
@@ -151,6 +148,9 @@ def _game_html_mtime() -> float:
 
 
 GAME_HTML = load_game_html(_game_html_mtime())
+if not GAME_HTML.strip():
+    st.error("quantum_chess.html is missing or empty. Place it next to app.py and restart.")
+    st.stop()
 
 
 # Controls mirror DUEL_CONTROLS in quantum_chess.html. The in-game help is authoritative.

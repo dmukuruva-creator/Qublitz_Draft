@@ -24,6 +24,8 @@ if [ ! -d "$DEST_DIR" ]; then
 fi
 
 cp "$SRC" "$DEST_DIR/quantum_chess.html"
+mkdir -p "$DEST_DIR/tests"
+cp "$(dirname "$SRC")/tests/qphysics.test.js" "$(dirname "$SRC")/tests/duel_harness.test.js" "$DEST_DIR/tests/"
 SHA="$(shasum -a 256 "$SRC" | awk '{print $1}')"
 echo "$SHA" > "$DEST_DIR/VENDOR_SHA"
 

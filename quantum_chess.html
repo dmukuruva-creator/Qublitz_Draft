@@ -309,10 +309,6 @@ canvas { display: block; cursor: pointer; }
   #canvas-wrap { padding-bottom: calc(var(--hub-reserve-h) + 2px); }
   .panel { min-width: 0; padding: 8px; }
   
-  /* The floating crowd-vote badge is viewport-fixed; on a scrolling phone
-     layout it hovers over whatever panel is at the bottom of the screen.
-     Crowd Vote is a projector/classroom feature — keep it reachable via the
-     Settings menu, drop the badge. */
   
 }
 
@@ -425,7 +421,7 @@ canvas { display: block; cursor: pointer; }
 .mode-card:hover { transform:translateY(-2px); border-color:var(--teal); box-shadow:0 12px 30px rgba(47,224,208,.14); }
 .mode-card.training:hover { border-color:var(--gold); box-shadow:0 12px 30px rgba(245,183,60,.13); }
 .mode-card .mode-kicker { display:block; color:var(--dim); font:700 var(--fs-0) var(--font-body); letter-spacing:1.5px; }
-.mode-card strong { display:block; margin:8px 0 7px; color:var(--teal); font:700 var(--fs-2) var(--font-display); letter-spacing:1px; }
+.mode-card strong { display:block; margin:8px 0 7px; color:var(--teal); font:700 var(--fs-2) var(--font-body); letter-spacing:1px; }
 .mode-card.training strong { color:var(--gold); }
 .mode-card .mode-copy { display:block; color:var(--ink-2); font:500 var(--fs-0) var(--font-body); line-height:1.5; }
 .mode-card .mode-status { display:block; margin-top:10px; color:var(--green); font:700 var(--fs-0) var(--font-body); }
@@ -3297,9 +3293,9 @@ const DUEL = (() => {
     hudText(`${DUEL_CONTROLS.keyboard.measure} measure ${measReady ? '(ready)' : '(' + me.measCd.toFixed(1) + 's)'} · ${DUEL_CONTROLS.keyboard.entangle} entangle`,
             kx, by + 102, measReady ? '#3fe08a' : '#6f79a8');
     const entReady = !S.bell && (me.entCd || 0) <= 0;
-    hudText(`${S.gamepad.index == null ? 'PAD' : 'PAD CONNECTED'} · LS/RS move/aim · RT/LT pulses`,
+    hudText(`${S.gamepad.index == null ? 'PAD' : 'PAD READY'} · LS/RS move/aim · RT/LT pulses`,
             kx, by + 122, S.gamepad.index == null ? '#6f79a8' : '#2fe0d0');
-    if (!entReady || S.bell) hudText(S.bell ? 'ENTANGLE · linked' : `ENTANGLE · ${(me.entCd||0).toFixed(0)}s`, kx - 160, by + 122, '#c97bff');
+    if (!entReady || S.bell) hudText(S.bell ? 'ENTANGLE · linked' : `ENTANGLE · ${(me.entCd||0).toFixed(0)}s`, kx - 160, by + 34, '#c97bff');
   }
 
   // Tiny word-wrapper for the mission brief (the one place duel HUD has prose).
@@ -3681,7 +3677,7 @@ const DUEL = (() => {
     return { stripLeft, barLeft, barRight: stripLeft - 24 };
   }
 
-  return { start, stop, frame, onKey, clearKeys:clearInput, clearInput, hudLayout,
+  return { start, stop, frame, onKey, clearKeys:clearInput, clearInput,
            onMouseMove, onMouseDown, onMouseUp, onGamepadConnected, onGamepadDisconnected,
            setGamepadProvider, pollGamepad,
            state: S, triggerFx, p95, telemetry: () => S.tele.slice(),
@@ -4119,7 +4115,6 @@ document.addEventListener('visibilitychange', () => {
 
 window.addEventListener('resize',()=>{
   initBg();
-  _sageBarHCache = 0;  // SM-2 — canvasCssScale changed; menuPos re-measures
   // Under reduced motion there's no running rAF chain (animateBg returns
   // after its one frame and never reschedules) — redraw once at the new
   // size directly. Otherwise the already-running chain picks up the new
@@ -4296,11 +4291,11 @@ function openPhysicsLab() {
   document.getElementById('modal-content').innerHTML = `
 <h2>✦ PHYSICS LAB</h2>
 <p style="text-align:center;color:var(--dim);font-size:var(--fs-0);margin:-8px 0 12px">Charge decays like a real qubit's does — here's the proof, then the math behind it.</p>
-${GAME.importedT1Ns ? `<p style="text-align:center;color:var(--teal);font-size:var(--fs-0);margin:-4px 0 12px">T₁ imported from the Qubit Simulator page: ${GAME.importedT1Ns}ns there, scaled into this game's turn economy.</p>` : ''}
+${GAME.importedT1Ns ? `<p style="text-align:center;color:var(--teal);font-size:var(--fs-0);margin:-4px 0 12px">T₁ imported from the Qubit Simulator page: ${GAME.importedT1Ns}ns there, scaled for this Physics Lab model.</p>` : ''}
 
 <canvas id="diag-canvas" width="360" height="190" style="width:100%;max-width:360px;display:block;margin:8px auto;background:#0a0f22;border:1px solid var(--border);border-radius:4px"></canvas>
 <p id="diag-readout" style="text-align:center;color:var(--dim);font-size:var(--fs-0);margin:4px 0"></p>
-<p style="color:var(--dim);font-size:var(--fs-0);line-height:1.6">A unit prepared fully charged, left alone: the real curve (teal) is exponential, not the straight line (red) a naive "charge just drains steadily" model would predict.</p>
+<p style="color:var(--dim);font-size:var(--fs-0);line-height:1.6">A qubit prepared fully charged, left alone: the real curve (teal) is exponential, not the straight line (red) a naive "charge just drains steadily" model would predict.</p>
 
 <h3>LIVE STATE INSPECTOR</h3>
 ${unitBlock}
@@ -4310,7 +4305,7 @@ ${unitBlock}
   role="button" tabindex="0" style="cursor:pointer;color:var(--teal);font-size:var(--fs-0);margin-top:12px">▸ Show me the math</div>
 <div id="physics-math" style="display:none">
   <h3>THE MODEL</h3>
-  <p style="color:var(--dim);font-size:var(--fs-0);line-height:1.7">Every unit is a single qubit whose state ρ evolves under the <b style="color:var(--teal)">Lindblad master equation</b> for amplitude damping (T₁) plus dephasing (T₂):</p>
+  <p style="color:var(--dim);font-size:var(--fs-0);line-height:1.7">Each ship is a single qubit whose state ρ evolves under the <b style="color:var(--teal)">Lindblad master equation</b> for amplitude damping (T₁) plus dephasing (T₂):</p>
   <pre style="color:var(--gold);font-size:var(--fs-0);line-height:1.6;text-align:center;background:#0a0f22;border:1px solid var(--border);border-radius:4px;padding:10px;margin:6px 0">dρ/dt = −(i/ℏ)[H,ρ] + Σ γₖ( Lₖ ρ Lₖ† − ½{Lₖ†Lₖ, ρ} )</pre>
   <p style="color:var(--dim);font-size:var(--fs-0);line-height:1.7">Each simulation step applies its <b>exact</b> solution toward |0⟩: charge relaxes as <b style="color:var(--red)">e<sup>−t/T₁</sup></b>, transverse coherence as <b style="color:var(--teal)">e<sup>−t/T₂</sup></b> (with T₂ ≤ 2T₁). In the duel this runs in real time: <b style="color:var(--gold)">T₁ = ${DuelCore.K.T1_S}s</b>, <b style="color:var(--gold)">T₂ = ${DuelCore.K.T2_S}s</b> in open space, and <b style="color:var(--red)">T₂ = ${DuelCore.ZONE.HOT_T2}s</b> inside a decoherence hotspot. The chart below uses the diagnostic's own per-step rate (${GAME.decoRate.toFixed(2)}): <b style="color:var(--gold)">T₁ = ${T1.toFixed(1)}</b>, <b style="color:var(--gold)">T₂ = ${T2.toFixed(1)}</b> steps.${GAME.importedT1Ns ? ` <span style="color:var(--teal)">Imported from the Qubit Simulator page: T₁ = ${GAME.importedT1Ns}ns there, scaled to this game's turn economy.</span>` : ''}</p>
   <p style="color:var(--dim);font-size:var(--fs-0);line-height:1.6">The chart above fits the engine's own generated data against this exponential model AND a linear model — confirming the <i>implementation</i> matches what the equation prescribes.</p>

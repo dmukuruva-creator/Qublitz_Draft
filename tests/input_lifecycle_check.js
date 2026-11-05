@@ -33,6 +33,7 @@
 //
 // Run: node tests/input_lifecycle_check.js
 'use strict';
+const watchPageErrors = require('./support/page_errors');
 const path = require('path');
 
 const GAME_URL = 'file://' + path.join(__dirname, '..', 'quantum_chess.html');
@@ -45,6 +46,8 @@ const OBSERVE_MS   = 400;   // ~24 frames at 60Hz
 const MIN_HELD_SPD = 40;    // px/s — terminal speed under a held key is ~172
 const STILL_EPS    = 1;     // px/s — with no accel term this should be exactly 0
 const MIN_SIM_ADV  = 0.15;  // s of sim time that must elapse inside OBSERVE_MS
+
+const pageErrors = [];
 
 // Enter Photon Duel the way a player does, and prove we got there.
 async function enterDuel(page) {
@@ -113,6 +116,7 @@ function verdict(name, r) {
 async function runCheck(chromium, name, key, axis, makeRelease) {
   const browser = await chromium.launch();
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+  watchPageErrors(page, pageErrors);
   try {
     await enterDuel(page);
     const r = await heldThenReleased(page, key, axis, makeRelease(page, key));
@@ -158,6 +162,7 @@ async function runCheck(chromium, name, key, axis, makeRelease) {
       })),
   ];
 
+  results.push({ name: 'no uncaught page errors', pass: pageErrors.length === 0, detail: pageErrors.join(' | ') || 'none' });
   let anyFail = false;
   for (const r of results) {
     if (!r.pass) anyFail = true;

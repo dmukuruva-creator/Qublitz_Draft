@@ -13,12 +13,8 @@
 // (already a game-repo devDependency, see CLAUDE.md).
 //
 // Run: node tests/capture_embedded.js [path-to-qublitz-fork-checkout]
-//   Defaults to ../../qublitz (a sibling of this repo's parent dir) if no
-//   path is given, matching this project's documented repo layout
-//   (CLAUDE.md's "two repos in play" table). Skips cleanly (exit 0) if the
-//   fork checkout or a `streamlit` binary can't be found — same pattern
-//   scripts/sync_vendor.sh and the fork's scripts/check_vendor.sh already
-//   use for "nothing to check yet," not a hard failure.
+//   Defaults to ../release-platform. A missing checkout or `streamlit` binary
+//   fails, because a skipped embed check would otherwise read as a pass.
 'use strict';
 const path = require('path');
 const fs = require('fs');
@@ -32,7 +28,7 @@ const WIDTH = 1440; // one width is enough to prove the embed mechanism itself
 
 function forkDirFromArgOrDefault() {
   if (process.argv[2]) return path.resolve(process.argv[2]);
-  return path.join(__dirname, '..', '..', 'qublitz');
+  return path.join(__dirname, '..', '..', 'release-platform');
 }
 
 function readEmbedHeight(forkDir) {
@@ -70,9 +66,9 @@ async function killProc(proc) {
   const forkDir = forkDirFromArgOrDefault();
 
   if (!fs.existsSync(path.join(forkDir, ARENA_PATH))) {
-    console.log(`FE-14d: SKIPPED — no qublitz fork checkout found at ${forkDir}`
-      + ` (pass its path as an argument: node tests/capture_embedded.js <path>)`);
-    process.exit(0);
+    console.error(`FE-14d: FAILED — no platform checkout at ${forkDir}`
+      + ` (pass its path: node tests/capture_embedded.js <path>)`);
+    process.exit(1);
   }
 
   let chromium;
@@ -193,20 +189,18 @@ async function killProc(proc) {
     const fullFile = path.join(OUT_DIR, `embedded-${WIDTH}px.png`);
     await page.screenshot({ path: fullFile, fullPage: true });
 
-    // IN-4's rerun-persistence finding, made a standing regression guard
-    // instead of a one-time prose note: trigger a real Streamlit rerun via
-    // the page's own sidebar expander, then confirm the iframe's live game
-    // state (the "Battle start" log line written when the match began)
-    // survived — i.e. the iframe was not remounted.
-    const logHadBattleStart = await gameFrame.locator('#log').evaluate(el => el.textContent.includes('Battle start')).catch(() => false);
+    // A Streamlit rerun must not remount the iframe and reset a live game. A marker
+    // set inside the frame only survives if the same document stays loaded.
+    const iframeBody = gameFrame.locator('body');
+    await iframeBody.evaluate(() => { window.__qbRerunMarker = true; });
     const expander = page.locator('[data-testid="stExpander"]').first();
-    if (await expander.count() > 0) {
+    if (await expander.count() === 0) {
+      errors.push('no expander on the page, so the rerun check could not run');
+    } else {
       await expander.click({ timeout: 3000 }).catch(() => {});
       await page.waitForTimeout(800);
-      const logStillHasBattleStart = await gameFrame.locator('#log').evaluate(el => el.textContent.includes('Battle start')).catch(() => false);
-      if (logHadBattleStart && !logStillHasBattleStart) {
-        errors.push('iframe game state (log) did not survive a Streamlit rerun — iframe was remounted');
-      }
+      const survived = await iframeBody.evaluate(() => window.__qbRerunMarker === true).catch(() => false);
+      if (!survived) errors.push('the iframe was remounted by a Streamlit rerun');
     }
 
     await browser.close();

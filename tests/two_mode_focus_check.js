@@ -2,6 +2,7 @@
 // exactly two play modes, durable training progress, correct next-mission
 // flow, and reduced-motion-safe presentation effects.
 'use strict';
+const watchPageErrors = require('./support/page_errors');
 
 const path = require('path');
 const { chromium } = require('playwright');
@@ -29,13 +30,7 @@ async function openGame(context) {
   const normal = await browser.newContext({ viewport: { width: 1280, height: 900 } });
   const page = await openGame(normal);
   const consoleErrors = [];
-  page.on('console', msg => { if (msg.type() === 'error') {
-    const at = msg.location();
-    // Firefox logs this around a reload with no script location. Source not
-    // identified. Anything else, or this text from a real location, still fails.
-    if (!at.url && msg.text().includes('Navigated away from page')) return;
-    consoleErrors.push(`${msg.text()} @ ${at.url.split('/').pop()}:${at.lineNumber}:${at.columnNumber}`);
-  } });
+  watchPageErrors(page, consoleErrors);
 
   const hub = await page.evaluate(() => ({
     modes: [...document.querySelectorAll('[data-play-mode]')].map(el => ({
@@ -118,7 +113,9 @@ async function openGame(context) {
   // Everything above calls startDuel()/openDuelMissions() directly, so a dead
   // hub button would pass. These go through the button a player actually clicks.
   const clicks = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const watch = p => watchPageErrors(p, consoleErrors);
   const duelClickPage = await openGame(clicks);
+  watch(duelClickPage);
   await duelClickPage.click('[data-play-mode="photon-duel"]');
   const clickedDuel = await duelClickPage.evaluate(() => ({
     duelMode: document.body.classList.contains('duel-mode'),
@@ -126,11 +123,61 @@ async function openGame(context) {
   }));
   check('clicking the Photon Duel card starts a duel',
     clickedDuel.duelMode && !clickedDuel.modalOpen, JSON.stringify(clickedDuel));
-  const hud = await duelClickPage.evaluate(() => DUEL.hudLayout());
-  check('charge bar and its end label stop short of the control strip',
-    hud.barRight + 15 < hud.stripLeft, JSON.stringify(hud));
+  // Measures the text the HUD really draws, in the states that add or move labels.
+  const hudStates = {
+    default: () => {},
+    charging: () => { DUEL.state.charging = true; DUEL.state.chargeT = 0.5; },
+    'entangle cooldown': () => { DUEL.state.ships[0].entCd = 12; },
+    'bell link': () => {
+      const s = DUEL.state;
+      s.bell = DuelCore.bellPair(); s.ships[0].bellIdx = 0; s.ships[1].bellIdx = 1;
+    },
+    'gamepad + T beam': () => {
+      const buttons = Array(17).fill({ value:0, pressed:false });
+      DUEL.setGamepadProvider(() => [{ id:'x', index:0, connected:true, mapping:'standard', axes:[0,0,0,0], buttons }]);
+      DUEL.state.beam = 'T';
+    },
+    hotspot: () => { DUEL.state.ships[0].inHot = true; },
+  };
+  for (const [state, setup] of Object.entries(hudStates)) {
+    await duelClickPage.evaluate(() => { DUEL.setGamepadProvider(() => []); startDuel(7); });
+    await duelClickPage.evaluate(setup);
+    const drawn = await duelClickPage.evaluate(() => new Promise(resolve => {
+      const P = CanvasRenderingContext2D.prototype, fillText = P.fillText, rows = [];
+      P.fillText = function (text, x, y, ...rest) {
+        if (this.canvas.id === 'game-canvas' && y > 650) {
+          const w = this.measureText(text).width;
+          const left = this.textAlign === 'center' ? x - w / 2 : this.textAlign === 'right' ? x - w : x;
+          rows.push({ text, left, right: left + w, top: y - 10, bottom: y + 3 });
+        }
+        return fillText.call(this, text, x, y, ...rest);
+      };
+      // Exactly one game frame runs between two consecutive animation frames.
+      requestAnimationFrame(() => {
+        rows.length = 0;
+        requestAnimationFrame(() => {
+          P.fillText = fillText;
+          const overlaps = [];
+          rows.forEach((a, i) => rows.slice(i + 1).forEach(b => {
+            if (Math.min(a.right, b.right) - Math.max(a.left, b.left) > 1
+              && Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > 1) overlaps.push(`${a.text} × ${b.text}`);
+          }));
+          resolve({
+            count: rows.length, overlaps,
+            clipped: rows.filter(r => r.left < 0 || r.right > BOARD).map(r => r.text),
+            hasBarEnd: rows.some(r => r.text === 'π'),
+            hasStrip: rows.some(r => r.text.startsWith('ACTIVE INPUT')),
+          });
+        });
+      });
+    }));
+    check(`HUD text does not overlap or clip: ${state}`,
+      drawn.count >= 8 && drawn.hasBarEnd && drawn.hasStrip && !drawn.overlaps.length && !drawn.clipped.length,
+      JSON.stringify(drawn));
+  }
 
   const trainingClickPage = await openGame(clicks);
+  watch(trainingClickPage);
   await trainingClickPage.click('[data-play-mode="duel-training"]');
   const clickedTraining = await trainingClickPage.evaluate(() => ({
     progress: !!document.querySelector('#modal-content .training-progress'),

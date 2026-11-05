@@ -1,5 +1,6 @@
 // C03-T1..T5 — records, mastery, keyboard-only combat, and virtual standard-gamepad I/O.
 'use strict';
+const watchPageErrors = require('./support/page_errors');
 
 const path = require('path');
 const { chromium } = require('playwright');
@@ -44,13 +45,7 @@ async function finishMeasureFixture(page) {
   const context = await browser.newContext({ viewport:{ width:1440, height:1000 } });
   const page = await context.newPage();
   const consoleErrors = [];
-  page.on('console', msg => { if (msg.type() === 'error') {
-    const at = msg.location();
-    // Firefox logs this around a reload with no script location. Source not
-    // identified. Anything else, or this text from a real location, still fails.
-    if (!at.url && msg.text().includes('Navigated away from page')) return;
-    consoleErrors.push(`${msg.text()} @ ${at.url.split('/').pop()}:${at.lineNumber}:${at.columnNumber}`);
-  } });
+  watchPageErrors(page, consoleErrors);
   await boot(page);
 
   const pure = await page.evaluate(() => {

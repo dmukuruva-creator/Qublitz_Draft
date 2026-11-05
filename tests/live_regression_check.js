@@ -26,6 +26,7 @@
 //
 // Run: node tests/live_regression_check.js
 'use strict';
+const watchPageErrors = require('./support/page_errors');
 const path = require('path');
 
 const GAME_URL = 'file://' + path.join(__dirname, '..', 'quantum_chess.html');
@@ -37,10 +38,13 @@ async function startMatch(page) {
   await page.waitForTimeout(200);
 }
 
+const pageErrors = [];
+
 async function checkFrameTiming(chromium) {
   async function runAtCadence(hz) {
     const browser = await chromium.launch();
     const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+    watchPageErrors(page, pageErrors);
     await page.addInitScript(() => {
       window.__rafCallbacks = new Map();
       window.__rafId = 0;
@@ -99,6 +103,7 @@ async function checkDprAndClick(chromium) {
     const browser = await chromium.launch();
     const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 }, deviceScaleFactor: dpr });
     const page = await ctx.newPage();
+    watchPageErrors(page, pageErrors);
     await startMatch(page);
     await page.evaluate(() => startDuel(7));
     await page.waitForTimeout(600);
@@ -114,6 +119,10 @@ async function checkDprAndClick(chromium) {
     // Pointer reach: hold on the canvas must start a charge. The duel's
     // mousedown/mouseup registrations were lost once during the board's
     // removal and only a live playthrough noticed — this pins them.
+    // A resize runs the game's resize handler; the page watcher reports any throw.
+    await page.setViewportSize({ width: 1180, height: 820 });
+    await page.waitForTimeout(150);
+
     const canvas = await page.$('#game-canvas');
     const box = await canvas.boundingBox();
     await page.mouse.move(box.x + box.width * 0.5, box.y + box.height * 0.5);
@@ -175,6 +184,7 @@ async function checkBgReducedMotionAndVisibility(chromium) {
   // (a) reduced motion — page context option, applies before any script runs.
   const rmCtx = await browser.newContext({ viewport: { width: 1280, height: 900 }, reducedMotion: 'reduce' });
   const rmPage = await rmCtx.newPage();
+  watchPageErrors(rmPage, pageErrors);
   await clearToBoard(rmPage);
   const xBefore = await rmPage.evaluate(() => bgParts[0].x);
   await rmPage.waitForTimeout(800);
@@ -186,6 +196,7 @@ async function checkBgReducedMotionAndVisibility(chromium) {
   // loop is genuinely running/stopping, not just permanently idle already.
   const browser2Ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
   const page = await browser2Ctx.newPage();
+  watchPageErrors(page, pageErrors);
   await clearToBoard(page);
 
   const setHidden = (hidden) => page.evaluate((h) => {
@@ -233,6 +244,7 @@ async function checkBgReducedMotionAndVisibility(chromium) {
     await checkDprAndClick(chromium),
     await checkBgReducedMotionAndVisibility(chromium),
   ];
+  results.push({ name: 'no uncaught page errors', pass: pageErrors.length === 0, detail: pageErrors.join(' | ') || 'none' });
   let anyFail = false;
   for (const r of results) {
     if (!r.pass) anyFail = true;

@@ -19,6 +19,7 @@
 //
 // Run: node tests/contrast_check.js
 'use strict';
+const watchPageErrors = require('./support/page_errors');
 const path = require('path');
 
 const GAME_URL = 'file://' + path.join(__dirname, '..', 'quantum_chess.html');
@@ -201,6 +202,8 @@ async function checkDom(page) {
 
   const browser = await chromium.launch();
   const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+  const pageErrors = [];
+  watchPageErrors(page, pageErrors);
   const setupErrors = [];
   await page.goto(GAME_URL, { waitUntil: 'load' });
   await page.waitForTimeout(500);
@@ -262,6 +265,7 @@ async function checkDom(page) {
     console.log(`${r.pass ? '✓' : '✗'} ${r.name} — ${r.ratio.toFixed(2)}:1 (need ${r.need}:1)`);
   }
 
+  setupErrors.push(...pageErrors);
   const anyFail = setupErrors.length > 0 || domFails.length > 0 || canvasFails.length > 0;
   console.log(`\n${anyFail ? 'FAIL' : 'PASS'} — ${setupErrors.length} setup failure(s),`
     + ` ${domFails.length} DOM failure(s), ${canvasFails.length} canvas failure(s)`);
