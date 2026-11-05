@@ -131,9 +131,13 @@ async function killProc(proc) {
     });
 
     await page.goto(`http://localhost:${PORT}/QuBlitz_Arena`, { waitUntil: 'networkidle' });
+    // Streamlit renders after the websocket connects, so "networkidle" can arrive
+    // before the iframe exists. Wait for it rather than guessing a delay.
+    const iframeLocator = page.locator('iframe[data-testid="stIFrame"]');
+    await iframeLocator.first().waitFor({ state: 'visible', timeout: 30000 })
+      .catch(() => {});
     await page.waitForTimeout(1500);
 
-    const iframeLocator = page.locator('iframe[data-testid="stIFrame"]');
     const iframeCount = await iframeLocator.count();
     if (iframeCount !== 1) errors.push(`expected exactly 1 embedded iframe, found ${iframeCount}`);
 

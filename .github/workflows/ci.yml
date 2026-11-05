@@ -33,9 +33,6 @@ jobs:
       fail-fast: false
       matrix:
         browser: [chromium, firefox, webkit]
-    env:
-      QB_BROWSER: ${{ matrix.browser }}
-      NODE_OPTIONS: -r ./tests/support/select_browser.js
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -43,13 +40,21 @@ jobs:
           node-version: 20
       - run: npm ci
       - run: npx playwright install --with-deps ${{ matrix.browser }}
-      - run: node tests/input_lifecycle_check.js
-      - run: node tests/two_mode_focus_check.js
-      - run: node tests/mastery_input_check.js
-      - run: node tests/contrast_check.js
-      - run: node tests/live_regression_check.js
-      - run: node tests/capture_responsive.js
-      # WebKit's driver cannot navigate to file:// in an offline context, so it
-      # cannot run this check. That is a driver limit, not a skip for convenience.
-      - if: matrix.browser != 'webkit'
-        run: node tests/offline_check.js
+      - name: Browser suites
+        env:
+          QB_BROWSER: ${{ matrix.browser }}
+          # Set here, not on the job: it would also load in actions/checkout,
+          # before this file exists.
+          NODE_OPTIONS: -r ./tests/support/select_browser.js
+        run: |
+          suites="input_lifecycle_check two_mode_focus_check mastery_input_check contrast_check live_regression_check capture_responsive"
+          # WebKit's driver cannot navigate to file:// in an offline context, so
+          # it cannot run this check. That is a driver limit, not a convenience.
+          if [ "$QB_BROWSER" != webkit ]; then suites="$suites offline_check"; fi
+          failed=""
+          for suite in $suites; do
+            echo "::group::$suite"
+            node "tests/$suite.js" || failed="$failed $suite"
+            echo "::endgroup::"
+          done
+          if [ -n "$failed" ]; then echo "FAILED:$failed"; exit 1; fi
