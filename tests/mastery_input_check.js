@@ -27,7 +27,9 @@ async function finishMeasureFixture(page) {
   await page.evaluate(() => {
     const s = DUEL.state;
     let ts = s.last == null ? performance.now() : s.last;
-    for (let i = 0; i < 120 && !s.over; i++) {
+    // 240 frames: 1 s wind-up + flight + the winning measurement reveal's
+    // hit-stop (REVEAL_WIN_STOP_S), after which the round ends.
+    for (let i = 0; i < 240 && !s.over; i++) {
       const me = s.ships[0], foe = s.ships[1];
       foe.x = me.x + 45; foe.y = me.y; foe.vx = foe.vy = 0;
       s.aim = {x:me.x + 1000, y:me.y};
