@@ -128,9 +128,12 @@ async function openGame(context) {
     default: () => {},
     charging: () => { DUEL.state.charging = true; DUEL.state.chargeT = 0.5; },
     'entangle cooldown': () => { DUEL.state.ships[0].entCd = 12; },
+    // Reached through the real E shot: the link is a two-qubit state the game builds.
     'bell link': () => {
       const s = DUEL.state;
-      s.bell = DuelCore.bellPair(); s.ships[0].bellIdx = 0; s.ships[1].bellIdx = 1;
+      s.ships[1].beamCd = s.ships[1].measCd = s.ships[1].entCd = 100;
+      s.ships[0].x = 300; s.ships[0].y = 400; s.ships[0].bloch = { x:1, y:0, z:0 };
+      s.ships[1].x = 370; s.ships[1].y = 400; s.aim = { x:1000, y:400 };
     },
     'gamepad + T beam': () => {
       const buttons = Array(17).fill({ value:0, pressed:false });
@@ -142,6 +145,10 @@ async function openGame(context) {
   for (const [state, setup] of Object.entries(hudStates)) {
     await duelClickPage.evaluate(() => { DUEL.setGamepadProvider(() => []); startDuel(7); });
     await duelClickPage.evaluate(setup);
+    if (state === 'bell link') {
+      await duelClickPage.keyboard.press('e');
+      await duelClickPage.waitForFunction(() => !!DUEL.state.bell, null, { timeout:8000 }).catch(() => {});
+    }
     const drawn = await duelClickPage.evaluate(() => new Promise(resolve => {
       const P = CanvasRenderingContext2D.prototype, fillText = P.fillText, rows = [];
       P.fillText = function (text, x, y, ...rest) {
@@ -164,6 +171,7 @@ async function openGame(context) {
           }));
           resolve({
             count: rows.length, overlaps,
+            linked: !!DUEL.state.bell,
             clipped: rows.filter(r => r.left < 0 || r.right > BOARD).map(r => r.text),
             hasBarEnd: rows.some(r => r.text === 'π'),
             hasStrip: rows.some(r => r.text.startsWith('ACTIVE INPUT')),
@@ -172,7 +180,7 @@ async function openGame(context) {
       });
     }));
     check(`HUD text does not overlap or clip: ${state}`,
-      drawn.count >= 8 && drawn.hasBarEnd && drawn.hasStrip && !drawn.overlaps.length && !drawn.clipped.length,
+      (state !== 'bell link' || drawn.linked) && drawn.count >= 8 && drawn.hasBarEnd && drawn.hasStrip && !drawn.overlaps.length && !drawn.clipped.length,
       JSON.stringify(drawn));
   }
 
