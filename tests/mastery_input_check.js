@@ -125,6 +125,7 @@ async function finishMeasureFixture(page) {
   await page.keyboard.up('ArrowUp');
   await page.keyboard.down('d');
   await page.waitForTimeout(180);
+  await page.waitForFunction(() => DUEL.state.ships[0].vx > 0, null, { timeout:5000 }).catch(() => {});
   await page.keyboard.up('d');
   await page.keyboard.down('Shift');
   await page.waitForTimeout(180);
@@ -287,7 +288,8 @@ async function finishMeasureFixture(page) {
     s.aim = {x:1000,y:400};
   });
   await page.keyboard.press('e');
-  await page.waitForTimeout(260);
+  await page.waitForFunction(() => !!DUEL.state.bell && DUEL.state.ev.entangled, null, { timeout:8000 })
+    .catch(() => {});
   const linked = await page.evaluate(() => !!DUEL.state.bell && DUEL.state.ev.entangled);
   await page.keyboard.press('Space');
   await finishMeasureFixture(page);
@@ -312,7 +314,8 @@ async function finishMeasureFixture(page) {
   await page.keyboard.down('Shift');
   await page.waitForTimeout(80);
   await page.keyboard.up('Shift');
-  await page.waitForTimeout(260);
+  await page.waitForFunction(() => DUEL.state.ev.tCampBroken && DUEL.state.ev.usedT, null, { timeout:8000 })
+    .catch(() => {});
   const phaseEvidence = await page.evaluate(() => DUEL.state.ev.tCampBroken && DUEL.state.ev.usedT);
   await page.keyboard.press('Space');
   await finishMeasureFixture(page);
@@ -334,6 +337,7 @@ async function finishMeasureFixture(page) {
     s.ships[0].bloch = {x:0,y:0,z:-1}; // exposed at P(|1>)=1
   });
   await page.waitForTimeout(700);
+  await page.waitForFunction(() => DUEL.state.ev.hotspotDefenseTime >= 0.5, null, { timeout:8000 }).catch(() => {});
   const hotspotEvidence = await page.evaluate(() => DUEL.state.ev.hotspotDefenseTime);
   await page.evaluate(() => {
     const s = DUEL.state, me = s.ships[0], foe = s.ships[1];
@@ -352,7 +356,7 @@ async function finishMeasureFixture(page) {
       && phaseEvidence && phaseBadge.evidence && phaseBadge.over && phaseBadge.earned && !!phaseBadge.missionRecord
       && hotspotEvidence >= 0.5 && hotspotBadge.evidence >= 0.5 && hotspotBadge.over
       && hotspotBadge.earned && hotspotBadge.all.length === 3 && hotspotBadge.next === null,
-    JSON.stringify({ bell:bellBadge, phase:phaseBadge, hotspot:hotspotBadge, hotspotEvidence }));
+    JSON.stringify({ linked, phaseEvidence, bell:bellBadge, phase:phaseBadge, hotspot:hotspotBadge, hotspotEvidence }));
 
   await page.reload({ waitUntil:'load' });
   const persisted = await page.evaluate(() => ({

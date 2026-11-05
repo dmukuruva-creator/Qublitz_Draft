@@ -70,6 +70,10 @@ async function enterDuel(page) {
 async function heldThenReleased(page, key, axis, release) {
   await page.keyboard.down(key);
   await page.waitForTimeout(HELD_MS);
+  // A slow software-rendered browser needs longer to ramp up. A key that truly
+  // does nothing still fails: the wait ends and heldSpd is reported below MIN.
+  await page.waitForFunction(([a, min]) => Math.abs(DUEL.state.ships[0][a]) > min,
+    [axis, MIN_HELD_SPD], { timeout: 5000 }).catch(() => {});
   const heldSpd = await page.evaluate(a => Math.abs(DUEL.state.ships[0][a]), axis);
 
   await release();
