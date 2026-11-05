@@ -13,6 +13,7 @@
     "live-check": "node tests/live_regression_check.js",
     "contrast": "node tests/contrast_check.js",
     "offline": "node tests/offline_check.js",
+    "test:app": "python3 tests/app_smoke.py",
     "playwright:install": "playwright install chromium"
   },
   "devDependencies": {

@@ -152,55 +152,27 @@ async function killProc(proc) {
     await page.mouse.click(box ? box.x + 10 : 10, box ? box.y + 10 : 10).catch(() => {});
     await page.waitForTimeout(300);
 
-    // QB-A02 (2026-08-22) — this used to click "PLAY vs BOT" and swallow the
-    // failure, so a run could go green having entered no play mode at all.
-    //
-    // But note WHICH game this file drives: the copy vendored into the
-    // platform at pages/_assets/quantum_chess.html, not the canonical file
-    // beside this test. Those two are currently different products
-    // (QB-P0-2 — 4,325 lines vs 4,500, different SHA-256). So simply
-    // retargeting this at Photon Duel would make the check fail for a reason
-    // that has nothing to do with this check. Detect the build instead, and
-    // let each outcome fail honestly on its own terms.
-    const boardBtn     = gameFrame.locator('button:has-text("PLAY vs BOT")');
-    const duelBtn      = gameFrame.locator('#modal-content button:has-text("PHOTON DUEL")');
-    const isBoardBuild = (await boardBtn.count().catch(() => 0)) > 0;
-    const isDuelBuild  = (await duelBtn.count().catch(() => 0)) > 0;
+    // Must enter Photon Duel through its real hub button; a missing button fails.
+    const duelBtn     = gameFrame.locator('#modal-content button:has-text("PHOTON DUEL")');
+    const isDuelBuild = (await duelBtn.count().catch(() => 0)) > 0;
 
     if (isDuelBuild) {
       await duelBtn.click({ timeout: 5000 })
         .catch(e => errors.push('could not enter Photon Duel inside embed: ' + e.message));
       await page.waitForTimeout(500);
-    } else if (isBoardBuild) {
-      // Vendor drift is the finding, not a passing run. Say so out loud —
-      // this is exactly QB-P0-2, and QB-A03 is the cycle that resolves it.
-      errors.push('vendored build is the RETIRED board (found "PLAY vs BOT", no Photon Duel hub)'
-        + ' — platform/pages/_assets/quantum_chess.html has drifted from canonical (QB-P0-2).'
-        + ' Re-vendor via QB-A03; this embed check cannot certify the current product until then.');
-      await boardBtn.click({ timeout: 5000 }).catch(() => {});
-      await page.waitForTimeout(500);
     } else {
-      errors.push('embedded game exposed neither a Photon Duel hub nor the retired board entry'
-        + ' point — the iframe did not reach a usable game surface.');
+      errors.push('embedded game exposed no Photon Duel hub button'
+        + ' — the iframe did not reach a usable game surface.');
     }
 
     const canvas = gameFrame.locator('#game-canvas');
     if (await canvas.count() > 0) {
       const cbox = await canvas.boundingBox();
       if (cbox) {
-        // Board-square coordinates. They select and move a unit on the
-        // retired board; on the duel build they are two clicks into empty
-        // space, so only issue them where they mean something. The clipping
-        // assertion below is geometry and holds for either build.
-        if (isBoardBuild) {
-          await page.mouse.click(cbox.x + cbox.width * 0.18, cbox.y + cbox.height * 0.94);
-          await page.waitForTimeout(200);
-          await page.mouse.click(cbox.x + cbox.width * 0.18, cbox.y + cbox.height * 0.72);
-        }
         await page.waitForTimeout(400);
 
         // BE-4/FE-10's own recurring concern, made a standing check: does
-        // real gameplay content (canvas + side panels) fit inside the
+        // real gameplay content (the canvas) fit inside the
         // fork's fixed embed height, or does the iframe clip it? A clipped
         // bottom edge means cbox's own bottom exceeds the iframe's box.
         if (box && cbox.y + cbox.height > box.y + box.height + 2) {

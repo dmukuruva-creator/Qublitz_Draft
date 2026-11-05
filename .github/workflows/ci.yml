@@ -5,12 +5,51 @@ on:
   pull_request:
 
 jobs:
-  qphysics-test:
+  engine:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - name: Run QPhysics regression tests
+      - name: Physics regression
         run: node tests/qphysics.test.js
+      - name: Duel rules regression
+        run: node tests/duel_harness.test.js
+
+  streamlit-wrapper:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - run: python tests/app_smoke.py
+
+  browsers:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, firefox, webkit]
+    env:
+      QB_BROWSER: ${{ matrix.browser }}
+      NODE_OPTIONS: -r ./tests/support/select_browser.js
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      - run: npx playwright install --with-deps ${{ matrix.browser }}
+      - run: node tests/input_lifecycle_check.js
+      - run: node tests/two_mode_focus_check.js
+      - run: node tests/mastery_input_check.js
+      - run: node tests/contrast_check.js
+      - run: node tests/live_regression_check.js
+      - run: node tests/capture_responsive.js
+      # WebKit's driver cannot navigate to file:// in an offline context, so it
+      # cannot run this check. That is a driver limit, not a skip for convenience.
+      - if: matrix.browser != 'webkit'
+        run: node tests/offline_check.js

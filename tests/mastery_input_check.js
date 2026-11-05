@@ -251,6 +251,23 @@ async function finishMeasureFixture(page) {
       && reconnect.afterReconnect.index === 0,
     JSON.stringify(reconnect));
 
+  // Polling (above) would mask a dead listener, so fire only the browser event.
+  const disconnectEvent = await page.evaluate(() => {
+    const B = DUEL_CONTROLS.gamepad.buttons;
+    window.__qbPad.buttons[B.attack] = { value:0, pressed:false };
+    DUEL.pollGamepad();
+    window.__qbPad.buttons[B.attack] = { value:1, pressed:true };
+    DUEL.pollGamepad();
+    const held = DUEL.state.charging;
+    const ev = new Event('gamepaddisconnected');
+    ev.gamepad = { index:0 };
+    window.dispatchEvent(ev);
+    return { held, charging:DUEL.state.charging, index:DUEL.state.gamepad.index };
+  });
+  check('the gamepaddisconnected event alone clears held input',
+    disconnectEvent.held && !disconnectEvent.charging && disconnectEvent.index === null,
+    JSON.stringify(disconnectEvent));
+
   // Earn every badge through the live shell: keyboard action → projectile →
   // collision/evidence → winning MEASURE → endRound → durable profile.
   await page.evaluate(() => {

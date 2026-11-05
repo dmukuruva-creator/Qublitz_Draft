@@ -66,8 +66,8 @@ Every PR against mvwf/qublitz must include:
 - Game runs standalone: open `quantum_chess.html` in Chrome
 - Game runs via Streamlit: `streamlit run app.py` (requires `pip install streamlit`)
 - Physics tests: `node tests/qphysics.test.js` (requires Node 20+)
-- Sage advisor is a local heuristic only (`analyzePosition` in `quantum_chess.html`) — no proxy
-  server, no LLM, no Anthropic API dependency anywhere in this project (removed 2026-07-08).
+- "Sage" is the duel opponent's in-game name. There is no advisor, proxy server, LLM or Anthropic
+  API dependency anywhere in this project (the advisor was retired with the board).
 - Playwright + Chromium are installed permanently (2026-07-08): `playwright` is a devDependency
   in `package.json` (`node_modules/` stays gitignored) and the Chromium binary is cached at
   `~/Library/Caches/ms-playwright/`. Live browser checks (`tests/capture_responsive.js`, any

@@ -109,6 +109,31 @@ async function openGame(context) {
       && reducedFx.cardTransition.split(',').every(v => parseFloat(v) <= 0.001), JSON.stringify(reducedFx));
   await reduced.close();
 
+  // Everything above calls startDuel()/openDuelMissions() directly, so a dead
+  // hub button would pass. These go through the button a player actually clicks.
+  const clicks = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const duelClickPage = await openGame(clicks);
+  await duelClickPage.click('[data-play-mode="photon-duel"]');
+  const clickedDuel = await duelClickPage.evaluate(() => ({
+    duelMode: document.body.classList.contains('duel-mode'),
+    modalOpen: !!document.querySelector('#modal-overlay.show'),
+  }));
+  check('clicking the Photon Duel card starts a duel',
+    clickedDuel.duelMode && !clickedDuel.modalOpen, JSON.stringify(clickedDuel));
+  const hud = await duelClickPage.evaluate(() => DUEL.hudLayout());
+  check('charge bar and its end label stop short of the control strip',
+    hud.barRight + 15 < hud.stripLeft, JSON.stringify(hud));
+
+  const trainingClickPage = await openGame(clicks);
+  await trainingClickPage.click('[data-play-mode="duel-training"]');
+  const clickedTraining = await trainingClickPage.evaluate(() => ({
+    progress: !!document.querySelector('#modal-content .training-progress'),
+    hubGone: !document.querySelector('[data-play-mode]'),
+  }));
+  check('clicking the Duel Training card opens the mission list',
+    clickedTraining.progress && clickedTraining.hubGone, JSON.stringify(clickedTraining));
+  await clicks.close();
+
   check('focused flow produces no console errors', consoleErrors.length === 0,
     consoleErrors.join(' | ') || 'clean');
   await browser.close();
