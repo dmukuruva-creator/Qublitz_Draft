@@ -2130,7 +2130,7 @@ function duelPickupsHTML() {
 function duelEntangleHTML() {
   const row = (k, v) => `<div class="lb-row"><span style="white-space:nowrap;margin-right:14px">${k}</span><span class="lb-val">${v}</span></div>`;
   return `<div class="lb-wrap" data-entangle="v1">
-    ${row('E is a CNOT', 'Your qubit is the control. At |0⟩ nothing happens; at |1⟩ it flips theirs; in superposition it entangles you (|+⟩|0⟩ → |Φ+⟩). Their odds become p + q − 2pq (p theirs, q yours): exactly 50% only when you are at 50%. From 20% against their |0⟩ they reach 20%.')}
+    ${row('E is a CNOT', 'Your qubit is the control. At |0⟩ nothing happens; at |1⟩ it flips theirs; in superposition it entangles you (|+⟩|0⟩ → |Φ+⟩). For unlinked qubits their odds become p + q − 2pq (p theirs, q yours): exactly 50% only when you are at 50%. From 20% against their |0⟩ they reach 20%.')}
     ${row('Match or opposite', 'A MEASURE on one half collapses both. If outcomes MATCH, a dud drops you to |0⟩ with them; if OPPOSITE, a dud leaves you at |1⟩.')}
     ${row('Flip it', 'An X or Y π-pulse on either half swaps MATCH and OPPOSITE. It cannot change the other side\'s odds (no signalling). Sage flips when it sees your MEASURE wind up.')}
     ${row('Keep it alive', 'Each qubit still decays: T₁/T₂ wear the link down, and a hotspot destroys it in about 2 s. Active reset breaks it instantly.')}
@@ -3558,7 +3558,7 @@ const DUEL = (() => {
       parkingAxis: (S.botParkingAxis &&
         !DuelCore.isEigenstate(foe.bloch, S.botParkingAxis)) ? S.botParkingAxis : null,
       myMeasStreak: (me.measStamps || []).length,
-      nearestZone, bell: !!S.bell, t: S.t,
+      nearestZone, bell: linkEntangled(), t: S.t,
     };
   }
 
@@ -4210,22 +4210,22 @@ const DUEL = (() => {
     const h = coachHint(); if (!h) return;
     const y = BAND + VIEW_H - 14;
     ctx.save();
-    let fs = hudPx(0.0163);
-    ctx.font = `600 ${fs}px ${CANVAS_BODY}`;
-    while (ctx.measureText(h[0]).width > BOARD - 64 && fs > 9) { fs--; ctx.font = `600 ${fs}px ${CANVAS_BODY}`; }
-    const w = Math.min(BOARD - 40, ctx.measureText(h[0]).width + 24);
+    // Long hints wrap upward at the HUD floor instead of shrinking below it.
+    ctx.font = `600 ${hudPx(0.0163)}px ${CANVAS_BODY}`;
+    const lines = wrapLines(h[0], BOARD - 64), LH = 18, extra = (lines.length - 1) * LH;
+    const w = Math.min(BOARD - 40, Math.max(...lines.map(l => ctx.measureText(l).width)) + 24);
     ctx.fillStyle = 'rgba(5,7,15,0.78)';
-    roundRect((BOARD - w) / 2, y - 15, w, 22, 6); ctx.fill();
+    roundRect((BOARD - w) / 2, y - 15 - extra, w, 22 + extra, 6); ctx.fill();
     ctx.textAlign = 'center';
     ctx.fillStyle = h[1];
-    ctx.fillText(h[0], BOARD / 2, y);
+    lines.forEach((l, i) => ctx.fillText(l, BOARD / 2, y - extra + i * LH));
     ctx.restore();
   }
 
   // Measurement reveal: the Born rule, drawn. The bar is split at P(|1⟩); the
   // marker slides to the uniform draw, and the outcome is |1⟩ iff it stops
-  // in the left (|1⟩) part. Entangled measures have no single draw to show,
-  // so they show the 50/50 split and the correlated result.
+  // in the left (|1⟩) part. A linked measure shows the same draw on the
+  // target's marginal, plus where the partner collapsed.
   function drawReveal() {
     const R = S.reveal; if (!R) return;
     const fadeIn = Math.min(1, R.t / 0.12);
@@ -4691,15 +4691,22 @@ const DUEL = (() => {
     if (S.briefing) { exitDuel(S.mission >= 0); return; }
     // A decided round is revealing its roll: pausing here let R restart and
     // erase the result (audit R6, 2026-11-05). The reveal lasts under 2 s.
-    if (S.pendingEnd) return;
+    // Something else (a quiz) can still pause it, so Escape must always unpause.
+    if (S.pendingEnd && !S.paused) return;
     S.paused = !S.paused;
     clearInput();
     qlContext(S.paused ? 'paused' : 'playing');
     announceA11y(S.paused ? 'Photon Duel paused. Escape resumes, R restarts, Q quits to the menu.' : 'Photon Duel resumed.');
   }
   function replayRound() { if (S.over) start(S.seed, S.mission); }
-  function quitToMenu() { S.paused = false; clearInput(); exitDuel(S.mission >= 0); }
-  function restartFromPause() { S.paused = false; clearInput(); start(undefined, S.mission); }
+  // A decided round is recorded before leaving it, so quitting cannot erase a loss.
+  function settlePending() {
+    if (!S.pendingEnd) return;
+    const pe = S.pendingEnd; S.pendingEnd = null; S.reveal = null; S.hitStop = 0;
+    endRound(pe[0], pe[1], pe[2]);
+  }
+  function quitToMenu() { S.paused = false; clearInput(); settlePending(); exitDuel(S.mission >= 0); }
+  function restartFromPause() { if (S.pendingEnd) return; S.paused = false; clearInput(); start(undefined, S.mission); }
   function beginFromBrief() { if (!S.briefing) return false; S.briefing = false; clearInput(); ac(); qlContext('playing'); return true; }
   // Pause-menu buttons, in canvas coordinates (drawn by drawPauseMenu).
   const PAUSE_BTNS = [

@@ -101,6 +101,29 @@ const lib = () => {
   });
   check('R6 a pending loss cannot be paused away', r6.pending && !r6.paused && r6.them === 1, JSON.stringify(r6));
 
+  // R6b: a quiz can pause a decided round. Then R must not erase it, Escape must
+  // unpause it, and Q must record the loss before leaving (red-team, 2026-11-05).
+  const r6b = await page.evaluate(() => {
+    const decide = () => {
+      GAME.duelProfile = DuelProgress.blank(); startRound(5); const S = DUEL.state; S.introT = 0;
+      S.rand = () => 0.01; S.ships[0].bloch = { x: 0, y: 0, z: -1 };
+      for (let f = 0; f < 4000 && !S.pendingEnd; f++) {
+        const foe = S.ships[1]; foe.x = S.ships[0].x + 60; foe.y = S.ships[0].y; foe.ang = Math.PI; foe.measCd = 0;
+        if (!foe.winding) foe.winding = 0.2; S.ships[0].bloch = { x: 0, y: 0, z: -1 }; tick();
+      }
+      S.paused = true; return S;
+    };
+    let S = decide(); const pending = !!S.pendingEnd;
+    key('r', true); key('r', false); const keptAfterR = !!DUEL.state.pendingEnd;
+    key('Escape', true); key('Escape', false); const unpaused = !DUEL.state.paused;
+    ticks(150); const them = DUEL.state.match.them;
+    // A single round only reaches the profile at match end, so read the round itself.
+    S = decide();
+    key('q', true); key('q', false);
+    return { pending, keptAfterR, unpaused, them, recorded: S.over === true && S.match.them === 1 && !S.pendingEnd };
+  });
+  check('R6b a quiz-paused pending loss survives R, Escape and Q', r6b.pending && r6b.keptAfterR && r6b.unpaused && r6b.them === 1 && r6b.recorded, JSON.stringify(r6b));
+
   // R7: a link with no entanglement left no longer blocks E, and the CNOT acts on the real pair.
   const r7 = await page.evaluate(() => {
     const P = DuelCore.Pair; startRound(3); const S = DUEL.state; S.introT = 0;
@@ -164,10 +187,14 @@ const lib = () => {
       return ft.call(this, t, ...a);
     };
     for (const m of [-1, 5]) { startRound(7, m < 0 ? undefined : m); DUEL.state.briefing = false; DUEL.state.introT = 0; tick(); }
+    // A long coach hint (Sage linked and decohered) must wrap, never shrink below the floor.
+    GAME.coach = true; startRound(7); { const S = DUEL.state, P = DuelCore.Pair; S.introT = 0;
+      S.bell = P.cnot(P.fromBloch({ x: 1, y: 0, z: 0 }, { x: 0, y: 0, z: -1 }), 0); S.ships[0].bellIdx = 0; S.ships[1].bellIdx = 1;
+      steps.coachLong = DUEL.coachHint()[0].length; tick(); }
     C.fillText = ft;
-    return { min: +min.toFixed(2), tail: steps.some(s => /near the top/.test(s)) };
+    return { min: +min.toFixed(2), tail: steps.some(s => /near the top/.test(s)), coachLong: steps.coachLong };
   });
-  check('T1 every canvas label is at least 12 CSS px at 1366×768', t1.min >= 11.95, `min=${t1.min}`);
+  check('T1 every canvas label is at least 12 CSS px at 1366×768 (incl. a long coach hint)', t1.min >= 11.95 && t1.coachLong > 60, `min=${t1.min} coach=${t1.coachLong}`);
   check('T2 mission 6 step 2 is shown in full', t1.tail);
 
   // T7: the boot layer is gone by the time the hub opens.
