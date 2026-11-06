@@ -2,7 +2,7 @@
   "name": "qublitz",
   "version": "1.1.0",
   "private": true,
-  "description": "QuBlitz — Photon Duel and its guided Duel Training campaign.",
+  "description": "QuBlitz \u2014 Photon Duel and its guided Duel Training campaign.",
   "scripts": {
     "test": "node tests/qphysics.test.js",
     "test:duel": "node tests/duel_harness.test.js",
@@ -15,7 +15,8 @@
     "offline": "node tests/offline_check.js",
     "test:embed": "node tests/capture_embedded.js",
     "test:app": "python3 tests/app_smoke.py",
-    "playwright:install": "playwright install chromium"
+    "playwright:install": "playwright install chromium",
+    "test:audit": "node tests/audit_fixes_check.js"
   },
   "devDependencies": {
     "playwright": "^1.61.1"
