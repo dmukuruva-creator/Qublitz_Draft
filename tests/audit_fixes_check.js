@@ -197,6 +197,28 @@ const lib = () => {
   check('T1 every canvas label is at least 12 CSS px at 1366×768 (incl. a long coach hint)', t1.min >= 11.95 && t1.coachLong > 60, `min=${t1.min} coach=${t1.coachLong}`);
   check('T2 mission 6 step 2 is shown in full', t1.tail);
 
+  // T1b (follow-up, 2026-11-06): the floor scales with the window, so a 1280×720
+  // laptop also gets no label under 12 CSS px.
+  await page.setViewportSize({ width: 1280, height: 720 }); await page.waitForTimeout(200);
+  const t1b = await page.evaluate(() => {
+    sizeCanvasBackingStore();
+    const canvas = document.getElementById('game-canvas'); let min = 99;
+    const C = CanvasRenderingContext2D.prototype, ft = C.fillText;
+    C.fillText = function (t, ...a) {
+      if (this.canvas === canvas && String(t).trim() && this.globalAlpha > 0.05) {
+        const px = parseFloat((this.font.match(/(\d+(?:\.\d+)?)px/) || [])[1]);
+        min = Math.min(min, px * this.getTransform().a * canvas.getBoundingClientRect().width / canvas.width);
+      }
+      return ft.call(this, t, ...a);
+    };
+    for (const m of [-1, 3, 5]) { startRound(7, m < 0 ? undefined : m); DUEL.state.briefing = false; DUEL.state.introT = 0; tick(); }
+    C.fillText = ft;
+    return { min: +min.toFixed(2), floor: HUD_MIN_PX };
+  });
+  check('T1b no canvas label under 12 CSS px at 1280×720', t1b.min >= 11.95, JSON.stringify(t1b));
+  await page.setViewportSize({ width: 1366, height: 768 }); await page.waitForTimeout(200);
+  await page.evaluate(() => sizeCanvasBackingStore());
+
   // T7: the boot layer is gone by the time the hub opens.
   const t7 = await page.evaluate(() => getComputedStyle(document.getElementById('boot')).display);
   check('T7 boot title does not show through the hub', t7 === 'none', t7);

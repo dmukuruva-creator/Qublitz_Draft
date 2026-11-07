@@ -2460,6 +2460,7 @@ function sizeCanvasBackingStore() {
   if (canvas.width !== px) { canvas.width = px; canvas.height = px; }
   const s = px / BOARD;                 // logical 0..BOARD -> physical pixels
   ctx.setTransform(s, 0, 0, s, 0, 0);
+  if (hudFloorReady) updateHudFloor(cssW);   // the floor's constants are declared further down
 }
 sizeCanvasBackingStore();
 window.addEventListener('resize', sizeCanvasBackingStore);
@@ -2491,10 +2492,20 @@ function canvasCssScale() {
 // only for banners (WIN/DRAW headlines), in-world unit glyphs, and FX
 // floats. Default floor stays 10 for legacy callers.
 const CANVAS_BODY = "'Space Grotesk',sans-serif";
-// Canvas text floor (audit T1, 2026-11-05): no in-game label below 14 board
-// px, which is 12 CSS px at the 0.86 scale a 1366×768 laptop shows. Ratios
-// above the floor are unchanged, so large titles keep their hierarchy.
-const HUD_MIN_PX = 14;
+// Canvas text floor (audit T1, 2026-11-05): no in-game label below 12 CSS px.
+// 14 board px meets it at the 0.86 scale a 1366×768 laptop shows; smaller
+// windows (1280×720 scales to 0.80) raise the floor with the scale, capped at
+// 17 board px so the HUD still fits (follow-up, 2026-11-06). Phones are gated
+// out of the duel, so the cap is not reached on a supported screen.
+// Ratios above the floor are unchanged, so large titles keep their hierarchy.
+const HUD_FLOOR_CSS = 12, HUD_MIN_BASE = 14, HUD_MIN_CAP = 17;
+let HUD_MIN_PX = HUD_MIN_BASE;
+function updateHudFloor(cssW) {
+  const scale = cssW > 0 ? cssW / BOARD : 1;
+  HUD_MIN_PX = Math.min(HUD_MIN_CAP, Math.max(HUD_MIN_BASE, Math.ceil(HUD_FLOOR_CSS / scale - 1e-6)));
+}
+var hudFloorReady = true;
+updateHudFloor(canvas.getBoundingClientRect().width);
 function hudPx(ratio) { return Math.max(HUD_MIN_PX, Math.round(BOARD * ratio)); }
 function canvasFontPx(basePx, floorCss = 10) {
   return basePx * Math.max(1, floorCss/(basePx*canvasCssScale()));
@@ -4006,9 +4017,12 @@ const DUEL = (() => {
     ctx.fillStyle = 'rgba(255,255,255,0.10)'; roundRect(hx, by + 24, hw, 12, 3); ctx.fill();
     ctx.fillStyle = myOdds > 0.6 ? '#ff5a72' : myOdds > 0.3 ? '#f5b73c' : '#3fe08a';
     roundRect(hx, by + 24, hw * Math.max(0.03, 1 - myOdds), 12, 3); ctx.fill();
-    hudText(`risk: ${(myOdds * 100).toFixed(0)}% if Sage measures you`
-            + (me.inHot ? ' · hotspot pulls you to |0⟩' : ''),
-            118, by + 54, me.inHot ? '#3fe08a' : myOdds > 0.6 ? '#ff5a72' : '#8f9ac4');
+    const riskPct = `${(myOdds * 100).toFixed(0)}%`;
+    hudFit(me.inHot ? [`risk: ${riskPct} if Sage measures you · hotspot pulls you to |0⟩`,
+                       `risk: ${riskPct} if Sage measures you · hotspot → |0⟩`,
+                       `risk: ${riskPct} if measured · hotspot → |0⟩`]
+                    : [`risk: ${riskPct} if Sage measures you`, `risk: ${riskPct} if measured`],
+           118, by + 54, me.inHot ? '#3fe08a' : myOdds > 0.6 ? '#ff5a72' : '#8f9ac4', BOARD - 292 - 16 - 118);
 
     // Charge bar with π-fraction ticks — the player reads pulse AREA.
     const kx = BOARD - 292;                       // control strip column (right)
@@ -4041,13 +4055,20 @@ const DUEL = (() => {
 
     // Resource row: fidelity + T-charges + selected beam.
     const rx = 118, ry = byy + bh + 34;
+    // Each item starts where the last one ends, at no less than its old fixed
+    // offset, so a raised text floor (small windows) cannot make them collide.
     hudText('PULSE FIDELITY', rx, ry, '#6f79a8');
+    const pctX = Math.max(rx + 105, rx + ctx.measureText('PULSE FIDELITY').width + 8);
+    const pct = `${(me.fidelity * 100) | 0}%`;
     ctx.font = `600 ${hudPx(0.020)}px 'Rajdhani','Space Grotesk',sans-serif`;
     ctx.fillStyle = me.fidelity > 0.85 ? '#3fe08a' : me.fidelity > 0.6 ? '#f5b73c' : '#ff5a72';
-    ctx.fillText(`${(me.fidelity * 100) | 0}%`, rx + 105, ry + 1);
-    hudText(`±${(DuelCore.sigmaFor(me.fidelity) * 180 / Math.PI).toFixed(0)}° aim`, rx + 150, ry, '#6f79a8');
-    hudText('T-CHARGES', rx + 230, ry, '#6f79a8');
-    const dotX = rx + 230 + ctx.measureText('T-CHARGES').width + 10;
+    ctx.fillText(pct, pctX, ry + 1);
+    const aimX = Math.max(rx + 150, pctX + ctx.measureText(pct).width + 10);
+    const aim = `±${(DuelCore.sigmaFor(me.fidelity) * 180 / Math.PI).toFixed(0)}° aim`;
+    hudText(aim, aimX, ry, '#6f79a8');
+    const tcX = Math.max(rx + 230, aimX + ctx.measureText(aim).width + 16);
+    hudText('T-CHARGES', tcX, ry, '#6f79a8');
+    const dotX = tcX + ctx.measureText('T-CHARGES').width + 10;
     for (let i = 0; i < 3; i++) {
       ctx.fillStyle = i < me.tCharges ? '#f5b73c' : 'rgba(255,255,255,0.12)';
       ctx.beginPath(); ctx.arc(dotX + i * 15, ry - 5, 5, 0, Math.PI * 2); ctx.fill();
@@ -4076,10 +4097,14 @@ const DUEL = (() => {
     const measReady = me.measCd === 0 && me.winding === 0;
     const entReady = !linkEntangled() && (me.entCd || 0) <= 0;
     const entTag = linkEntangled() ? ' (linked)' : entReady ? '' : ` (${(me.entCd||0).toFixed(0)}s)`;
-    hudText(`${DUEL_CONTROLS.keyboard.measure} measure ${measReady ? '(ready)' : '(' + me.measCd.toFixed(1) + 's)'} · ${DUEL_CONTROLS.keyboard.entangle} entangle${entTag}`,
-            kx, by + 102, measReady ? '#3fe08a' : '#6f79a8');
-    hudText(`${S.gamepad.index == null ? 'PAD' : 'PAD READY'} · LS/RS move/aim · RT/LT pulses`,
-            kx, by + 122, S.gamepad.index == null ? '#6f79a8' : '#2fe0d0');
+    const mK = DUEL_CONTROLS.keyboard.measure, eK = DUEL_CONTROLS.keyboard.entangle;
+    const measState = measReady ? '(ready)' : '(' + me.measCd.toFixed(1) + 's)';
+    hudFit([`${mK} measure ${measState} · ${eK} entangle${entTag}`,
+            `${mK} measure ${measState} · ${eK} ${linkEntangled() ? 'linked' : 'entangle' + entTag}`],
+           kx, by + 102, measReady ? '#3fe08a' : '#6f79a8', BOARD - 8 - kx);
+    const padTag = S.gamepad.index == null ? 'PAD' : 'PAD READY';
+    hudFit([`${padTag} · LS/RS move/aim · RT/LT pulses`, `${padTag} · LS/RS move · RT/LT pulse`, `${padTag} · sticks · triggers`],
+           kx, by + 122, S.gamepad.index == null ? '#6f79a8' : '#2fe0d0', BOARD - 8 - kx);
   }
 
   // Mission checklist (Qubit Copter / Rabi Rider style): every step of the
@@ -4159,7 +4184,9 @@ const DUEL = (() => {
       }
     });
     if (M.drone) { ctx.fillStyle = '#8f9ac4'; ctx.font = `500 ${hudPx(0.0128)}px ${CANVAS_BODY}`;
-      ctx.fillText('Training drone: Sage flies but never shoots back', x0 + 10, y0 + H - 6); }
+      const note = ['Training drone: Sage flies but never shoots back', 'Training drone: never shoots back', 'Drone: never shoots back']
+        .find(t => ctx.measureText(t).width <= W - 20) || 'Drone: never shoots';
+      ctx.fillText(note, x0 + 10, y0 + H - 6); }
     ctx.restore();
   }
 
@@ -4459,6 +4486,14 @@ const DUEL = (() => {
     ctx.font = `600 ${hudPx(0.0163)}px ${CANVAS_BODY}`;
     ctx.fillStyle = col || '#aeb8e6';
     ctx.fillText(txt, x, y);
+  }
+  // Draws the first wording that fits in maxW board px (the last one if none
+  // does): small windows raise the text floor, and a fixed column must not
+  // spill into its neighbour or off the canvas.
+  function hudFit(variants, x, y, col, maxW) {
+    ctx.font = `600 ${hudPx(0.0163)}px ${CANVAS_BODY}`;
+    const txt = variants.find(v => ctx.measureText(v).width <= maxW) || variants[variants.length - 1];
+    hudText(txt, x, y, col);
   }
 
   function drawAnnouncer() {
