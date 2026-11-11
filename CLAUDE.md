@@ -19,15 +19,13 @@ superseded predecessor is preserved verbatim at `docs/HANDOFF_v1_ARCHIVE_2026-07
 | Main simulator (mvwf/qublitz) | Clone separately after forking | https://github.com/mvwf/qublitz |
 
 **Game repo branch situation (re-measured 2026-11-10; re-run `git branch -vv` before trusting it):**
-- The live game is commit `0f77f42` on `cycle-05/photon-duel` (pushed to `QuBlitz`; the local tip adds only this
-  docs commit, unpushed). `mvwf/qublitz` #186 vendors exactly
-  this commit (sha256 `f775964d…`). It contains Cycles 04–05 and Mattias's `learn-arena` @ `d703800`.
-- `cycle-05/followups` is the same game plus one `.github/workflows/ci.yml` line (the audit suite in CI); it could
-  not be pushed without the gh `workflow` scope, so `cycle-05/photon-duel` is the copy without that line.
-- `main` (`3986ae4`) is behind the live game. PRs #3, #4, #5 on `dmukuruva-creator/Qublitz_Draft` are a stack
-  already contained in `0f77f42`. Bringing `main` up merges cleanly but needs the `workflow` scope and David's go-ahead.
-- Many older branches (`arena-*`, `duel-*`, `echo-siege-fix`, `c03-cleanup-final`, …) are ancestors of the live
-  line. Deleting them is David's call.
+- `main` holds the live game: #6 merged `cycle-05/photon-duel` into it on 2026-11-10. The game file equals
+  `0f77f42`, the commit `mvwf/qublitz` #186 vendors (sha256 `f775964d…`); it contains Cycles 04–05 and Mattias's
+  `learn-arena` @ `d703800`. No open PRs.
+- Remote branches kept: `main`, `cycle-04/duel-hardening`, `cycle-05/photon-duel` (named in the vendor provenance;
+  keep it). The 13 older branches, all contained in `main`, were deleted on 2026-11-10 at David's direction.
+- Local-only: `cycle-05/followups` = the same game plus one `.github/workflows/ci.yml` line (the audit suite in CI).
+  Pushing it needs the gh `workflow` scope (`gh auth refresh -h github.com -s workflow`).
 - Do not push from any branch without an explicit user go-ahead, per this file's hard constraints.
 
 ## Gate-1 assumptions already confirmed by the user
