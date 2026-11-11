@@ -18,24 +18,25 @@ superseded predecessor is preserved verbatim at `docs/HANDOFF_v1_ARCHIVE_2026-07
 | The game (Qublitz_Draft) | This folder (`QuBlitz Project/`) | https://github.com/dmukuruva-creator/Qublitz_Draft |
 | Main simulator (mvwf/qublitz) | Clone separately after forking | https://github.com/mvwf/qublitz |
 
-**Game repo branch situation (re-measured 2026-08-23; this section had gone stale twice — do
-not trust it without re-running `git branch -vv`):**
-- Currently on `echo-siege-fix` @ `71a12bf`, clean, tracking `QuBlitz/echo-siege-fix`. This is
-  the Cycle 01 line (QB-A01 input lifecycle + QB-A02 test honesty), and it is the branch that
-  carries the canonical 4,500-line game.
-- `arena-c03-fe` still exists and is still unmerged; it is one of **13 local branches**, none of
-  which is a named release line. That unresolved question is QB-P0-7 in `HANDOFF.md` and it is
-  David's to settle — do not pick a canonical branch on your own.
-- Every local branch has an upstream and all read in sync against the last-fetched refs. No
-  fetch was run in this pass, so that is a statement about local refs, not the server today.
-- Do not push from any branch without an explicit user go-ahead, per this file's hard
-  constraints.
+**Game repo branch situation (re-measured 2026-11-10; re-run `git branch -vv` before trusting it):**
+- The live game is commit `0f77f42` on `cycle-05/photon-duel` (pushed to `QuBlitz`; the local tip adds only this
+  docs commit, unpushed). `mvwf/qublitz` #186 vendors exactly
+  this commit (sha256 `f775964d…`). It contains Cycles 04–05 and Mattias's `learn-arena` @ `d703800`.
+- `cycle-05/followups` is the same game plus one `.github/workflows/ci.yml` line (the audit suite in CI); it could
+  not be pushed without the gh `workflow` scope, so `cycle-05/photon-duel` is the copy without that line.
+- `main` (`3986ae4`) is behind the live game. PRs #3, #4, #5 on `dmukuruva-creator/Qublitz_Draft` are a stack
+  already contained in `0f77f42`. Bringing `main` up merges cleanly but needs the `workflow` scope and David's go-ahead.
+- Many older branches (`arena-*`, `duel-*`, `echo-siege-fix`, `c03-cleanup-final`, …) are ancestors of the live
+  line. Deleting them is David's call.
+- Do not push from any branch without an explicit user go-ahead, per this file's hard constraints.
 
 ## Gate-1 assumptions already confirmed by the user
 
 - Push access to `dmukuruva-creator/Qublitz_Draft`: YES
 - Fork + PR approach for `mvwf/qublitz`: YES (public repo, fork to your account)
-- Deployment: Streamlit on `qublitz-qubit-lab.streamlit.app` — NOT GitHub Pages
+- Deployment (re-measured 2026-11-10): the game ships inside `mvwf/qublitz`'s static site (`web/`, GitHub Pages at
+  `mvwf.github.io/qublitz`), vendored at `pages/_assets/`. The original confirmation was Streamlit on
+  `qublitz-qubit-lab.streamlit.app`; a few legacy pages still redirect there.
 - QuBlitz Arena is David's assigned contribution page in the main repo
 - Scope includes latency + visualization improvements across all existing mvwf/qublitz pages
 
