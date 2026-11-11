@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git merge-base *)",
+      "Bash(source /opt/anaconda3/etc/profile.d/conda.sh)",
+      "Bash(conda activate qcrl)"
+    ]
+  }
+}
